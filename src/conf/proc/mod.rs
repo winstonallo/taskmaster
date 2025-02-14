@@ -1,3 +1,7 @@
+#[cfg(test)]
+pub mod defaults;
+
+#[cfg(not(test))]
 mod defaults;
 
 use serde::{Deserialize, Deserializer};
@@ -7,6 +11,17 @@ use serde::{Deserialize, Deserializer};
 pub struct AutoRestart {
     mode: String,
     max_retries: Option<u8>,
+}
+
+#[allow(unused)]
+impl AutoRestart {
+    pub fn mode(&self) -> &str {
+        &self.mode
+    }
+
+    pub fn max_retries(&self) -> Option<u8> {
+        self.max_retries
+    }
 }
 
 impl<'de> Deserialize<'de> for AutoRestart {
@@ -132,6 +147,10 @@ impl ProcessConfig {
 
     pub fn stderr(&self) -> &str {
         &self.stderr
+    }
+
+    pub fn env(&self) -> &Option<Vec<(String, String)>> {
+        &self.env
     }
 
     pub fn set_stdout(&mut self, path: &str) {
