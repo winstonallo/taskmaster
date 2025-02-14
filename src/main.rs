@@ -1,6 +1,6 @@
-mod config;
+mod conf;
 
 fn main() {
-    let conf = config::Config::new("./config/example.toml").expect("config construction failed");
+    let conf = conf::Config::new("./config/example.toml").expect("config construction failed");
     println!("{:?}", conf.get_processes()["nginx"]);
 }
