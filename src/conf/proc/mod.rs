@@ -4,7 +4,7 @@ use serde::Deserialize;
 
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
-pub struct Process {
+pub struct ProcessConfig {
     cmd: String,
 
     #[serde(default = "defaults::dflt_processes")]
@@ -46,56 +46,56 @@ pub struct Process {
 }
 
 #[allow(unused)]
-impl Process {
-    pub fn get_cmd(&self) -> &str {
+impl ProcessConfig {
+    pub fn cmd(&self) -> &str {
         &self.cmd
     }
 
-    pub fn get_processes(&self) -> u8 {
+    pub fn processes(&self) -> u8 {
         self.processes
     }
 
-    pub fn get_umask(&self) -> &str {
+    pub fn umask(&self) -> &str {
         &self.umask
     }
 
-    pub fn get_workingdir(&self) -> &str {
+    pub fn workingdir(&self) -> &str {
         &self.workingdir
     }
 
-    pub fn get_autostart(&self) -> bool {
+    pub fn autostart(&self) -> bool {
         self.autostart
     }
 
-    pub fn get_autorestart(&self) -> &str {
+    pub fn autorestart(&self) -> &str {
         &self.autorestart
     }
 
-    pub fn get_exitcodes(&self) -> &Vec<u8> {
+    pub fn exitcodes(&self) -> &Vec<u8> {
         &self.exitcodes
     }
 
-    pub fn get_startretries(&self) -> u8 {
+    pub fn startretries(&self) -> u8 {
         self.startretries
     }
 
-    pub fn get_starttime(&self) -> u16 {
+    pub fn starttime(&self) -> u16 {
         self.starttime
     }
 
-    pub fn get_stopsignals(&self) -> &Vec<String> {
+    pub fn stopsignals(&self) -> &Vec<String> {
         &self.stopsignals
     }
 
-    pub fn get_stoptime(&self) -> u8 {
+    pub fn stoptime(&self) -> u8 {
         self.stoptime
     }
 
-    pub fn get_stdout(&self) -> &str {
+    pub fn stdout(&self) -> &str {
         &self.stdout
     }
 
-    pub fn get_stderr(&self) -> &str {
+    pub fn stderr(&self) -> &str {
         &self.stderr
     }
 
