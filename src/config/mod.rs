@@ -114,8 +114,7 @@ impl Config {
         Ok(Config { processes: procs })
     }
 
-    // TODO: better solution than clone
-    pub fn get_processes(&self) -> HashMap<String, Process> {
-        self.processes.clone()
+    pub fn get_processes(&self) -> &HashMap<String, Process> {
+        &self.processes
     }
 }
