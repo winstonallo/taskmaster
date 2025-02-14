@@ -93,10 +93,15 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn new(config_path: &str) -> Self {
+    pub fn new(config_path: &str) -> Result<Self, String> {
         let conf_str = fs::read_to_string(config_path).expect("could not open config");
 
-        let mut procs: HashMap<String, Process> = toml::from_str(&conf_str).expect("could not serialize config");
+        let mut procs: HashMap<String, Process> = match toml::from_str(&conf_str) {
+            Ok(procs) => procs,
+            Err(err) => {
+                return Err(format!("could not parse config at '{config_path}': {err}"));
+            }
+        };
         for (proc_name, proc) in &mut procs {
             if proc.stdout.is_empty() {
                 proc.stdout = format!("/tmp/{proc_name}.stdout");
@@ -106,7 +111,7 @@ impl Config {
             }
         }
 
-        Config { processes: procs }
+        Ok(Config { processes: procs })
     }
 
     // TODO: better solution than clone
