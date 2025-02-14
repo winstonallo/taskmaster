@@ -45,12 +45,57 @@ pub struct Process {
     env: Option<Vec<(String, String)>>,
 }
 
+#[allow(unused)]
 impl Process {
-    pub fn get_stdout(&mut self) -> &str {
+    pub fn get_cmd(&self) -> &str {
+        &self.cmd
+    }
+
+    pub fn get_processes(&self) -> u8 {
+        self.processes
+    }
+
+    pub fn get_umask(&self) -> &str {
+        &self.umask
+    }
+
+    pub fn get_workingdir(&self) -> &str {
+        &self.workingdir
+    }
+
+    pub fn get_autostart(&self) -> bool {
+        self.autostart
+    }
+
+    pub fn get_autorestart(&self) -> &str {
+        &self.autorestart
+    }
+
+    pub fn get_exitcodes(&self) -> &Vec<u8> {
+        &self.exitcodes
+    }
+
+    pub fn get_startretries(&self) -> u8 {
+        self.startretries
+    }
+
+    pub fn get_starttime(&self) -> u16 {
+        self.starttime
+    }
+
+    pub fn get_stopsignals(&self) -> &Vec<String> {
+        &self.stopsignals
+    }
+
+    pub fn get_stoptime(&self) -> u8 {
+        self.stoptime
+    }
+
+    pub fn get_stdout(&self) -> &str {
         &self.stdout
     }
 
-    pub fn get_stderr(&mut self) -> &str {
+    pub fn get_stderr(&self) -> &str {
         &self.stderr
     }
 
