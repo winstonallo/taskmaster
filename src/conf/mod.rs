@@ -92,7 +92,13 @@ mod test {
         assert_eq!(conf.get_processes()["nginx"].exitcodes(), &vec![0, 2]);
         assert_eq!(conf.get_processes()["nginx"].startretries(), 3);
         assert_eq!(conf.get_processes()["nginx"].starttime(), 5);
-        assert_eq!(conf.get_processes()["nginx"].stopsignals(), &vec![String::from("TERM"), String::from("USR1")]);
+        assert_eq!(
+            conf.get_processes()["nginx"].stopsignals(),
+            &vec![
+                proc::deserializers::stopsignal::StopSignal::SigTerm,
+                proc::deserializers::stopsignal::StopSignal::SigUsr1
+            ]
+        );
         assert_eq!(conf.get_processes()["nginx"].stoptime(), 5);
         assert_eq!(conf.get_processes()["nginx"].stdout(), String::from("/tmp/nginx.stdout"));
         assert_eq!(conf.get_processes()["nginx"].stderr(), String::from("/tmp/nginx.stderr"));

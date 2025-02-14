@@ -1,4 +1,6 @@
-use super::AutoRestart;
+use crate::conf::proc::deserializers::stopsignal::StopSignal;
+
+use super::deserializers::autorestart::AutoRestart;
 
 pub fn dflt_processes() -> u8 {
     1
@@ -13,10 +15,7 @@ pub fn dflt_autostart() -> bool {
 }
 
 pub fn dflt_autorestart() -> AutoRestart {
-    AutoRestart {
-        mode: String::from("no"),
-        max_retries: None,
-    }
+    AutoRestart::default()
 }
 
 pub fn dflt_exitcodes() -> Vec<u8> {
@@ -31,8 +30,8 @@ pub fn dflt_startttime() -> u16 {
     5
 }
 
-pub fn dflt_stopsignals() -> Vec<String> {
-    vec![String::from("TERM")]
+pub fn dflt_stopsignals() -> Vec<crate::conf::proc::deserializers::stopsignal::StopSignal> {
+    vec![StopSignal::SigTerm]
 }
 
 pub fn dflt_stoptime() -> u8 {

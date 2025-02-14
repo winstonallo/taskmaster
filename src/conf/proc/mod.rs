@@ -4,53 +4,9 @@ pub mod defaults;
 #[cfg(not(test))]
 mod defaults;
 
-use serde::{Deserialize, Deserializer};
+pub mod deserializers;
 
-#[allow(unused)]
-#[derive(Debug, Clone)]
-pub struct AutoRestart {
-    mode: String,
-    max_retries: Option<u8>,
-}
-
-#[allow(unused)]
-impl AutoRestart {
-    pub fn mode(&self) -> &str {
-        &self.mode
-    }
-
-    pub fn max_retries(&self) -> Option<u8> {
-        self.max_retries
-    }
-}
-
-impl<'de> Deserialize<'de> for AutoRestart {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        match s.as_str() {
-            "no" | "always" => Ok(Self { mode: s, max_retries: None }),
-            _ if s.starts_with("on-failure[:") && s.ends_with("]") => {
-                let max_retries_str = &s[12..s.len() - 1];
-                let max_retries = match max_retries_str.parse::<u8>() {
-                    Ok(n) => n,
-                    Err(e) => {
-                        return Err(serde::de::Error::custom(format!(
-                            "invalid max-retries value for on-failure: {max_retries_str}: {e} (expected u8)"
-                        )));
-                    }
-                };
-                Ok(Self {
-                    mode: String::from("on-failure"),
-                    max_retries: Some(max_retries),
-                })
-            }
-            _ => Err(serde::de::Error::custom(format!("invalid value for field 'autorestart': '{s}'"))),
-        }
-    }
-}
+use serde::Deserialize;
 
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
@@ -69,7 +25,7 @@ pub struct ProcessConfig {
     autostart: bool,
 
     #[serde(default = "defaults::dflt_autorestart")]
-    autorestart: AutoRestart,
+    autorestart: deserializers::autorestart::AutoRestart,
 
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<u8>,
@@ -81,7 +37,7 @@ pub struct ProcessConfig {
     starttime: u16,
 
     #[serde(default = "defaults::dflt_stopsignals")]
-    stopsignals: Vec<String>,
+    stopsignals: Vec<deserializers::stopsignal::StopSignal>,
 
     #[serde(default = "defaults::dflt_stoptime")]
     stoptime: u8,
@@ -117,7 +73,7 @@ impl ProcessConfig {
         self.autostart
     }
 
-    pub fn autorestart(&self) -> &AutoRestart {
+    pub fn autorestart(&self) -> &deserializers::autorestart::AutoRestart {
         &self.autorestart
     }
 
@@ -133,7 +89,7 @@ impl ProcessConfig {
         self.starttime
     }
 
-    pub fn stopsignals(&self) -> &Vec<String> {
+    pub fn stopsignals(&self) -> &Vec<deserializers::stopsignal::StopSignal> {
         &self.stopsignals
     }
 
@@ -169,14 +125,11 @@ impl ProcessConfig {
             umask: String::from("022"),
             workingdir: String::from("/tmp"),
             autostart: true,
-            autorestart: AutoRestart {
-                mode: String::from("no"),
-                max_retries: None,
-            },
+            autorestart: deserializers::autorestart::AutoRestart::test_autorestart(),
             exitcodes: vec![0],
             startretries: 1,
             starttime: 5,
-            stopsignals: vec![String::from("TERM")],
+            stopsignals: vec![deserializers::stopsignal::StopSignal::SigTerm],
             stoptime: 5,
             stdout: String::from("/tmp/taskmaster_test.stdout"),
             stderr: String::from("/tmp/taskmaster_test.stderr"),
