@@ -1,3 +1,6 @@
+mod config;
+
 fn main() {
-    println!("Hello, world!");
+    let conf = config::Config::new("./config/example.toml");
+    println!("{:?}", conf.get_processes()["nginx"]);
 }
