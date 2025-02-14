@@ -9,13 +9,13 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_file(config_path: &str) -> Result<Self, String> {
-        let conf_str = fs::read_to_string(config_path).expect("could not open config");
+    pub fn from_file(path: &str) -> Result<Self, String> {
+        let conf_str = fs::read_to_string(path).expect("could not open config");
 
         let mut procs: HashMap<String, Process> = match toml::from_str(&conf_str) {
             Ok(procs) => procs,
             Err(err) => {
-                return Err(format!("could not parse config at '{config_path}': {err}"));
+                return Err(format!("could not parse config at '{path}': {err}"));
             }
         };
 
