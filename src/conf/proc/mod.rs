@@ -11,7 +11,7 @@ use serde::Deserialize;
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
 pub struct ProcessConfig {
-    cmd: String,
+    cmd: deserializers::path::ExecutableFile,
 
     #[serde(default = "defaults::dflt_processes")]
     processes: u8,
@@ -19,7 +19,7 @@ pub struct ProcessConfig {
     #[serde(default = "defaults::dflt_umask")]
     umask: String,
 
-    workingdir: String,
+    workingdir: deserializers::path::AccessibleDirectory,
 
     #[serde(default = "defaults::dflt_autostart")]
     autostart: bool,
@@ -43,17 +43,17 @@ pub struct ProcessConfig {
     stoptime: u8,
 
     #[serde(default = "defaults::dflt_stdout")]
-    stdout: String,
+    stdout: deserializers::path::WritableFile,
 
     #[serde(default = "defaults::dflt_stderr")]
-    stderr: String,
+    stderr: deserializers::path::WritableFile,
 
     env: Option<Vec<(String, String)>>,
 }
 
 #[allow(unused)]
 impl ProcessConfig {
-    pub fn cmd(&self) -> &str {
+    pub fn cmd(&self) -> &deserializers::path::ExecutableFile {
         &self.cmd
     }
 
@@ -65,7 +65,7 @@ impl ProcessConfig {
         &self.umask
     }
 
-    pub fn workingdir(&self) -> &str {
+    pub fn workingdir(&self) -> &deserializers::path::AccessibleDirectory {
         &self.workingdir
     }
 
@@ -98,11 +98,11 @@ impl ProcessConfig {
     }
 
     pub fn stdout(&self) -> &str {
-        &self.stdout
+        &self.stdout.path()
     }
 
     pub fn stderr(&self) -> &str {
-        &self.stderr
+        &self.stderr.path()
     }
 
     pub fn env(&self) -> &Option<Vec<(String, String)>> {
@@ -110,20 +110,20 @@ impl ProcessConfig {
     }
 
     pub fn set_stdout(&mut self, path: &str) {
-        self.stdout = path.to_string();
+        self.stdout = deserializers::path::WritableFile::default();
     }
 
     pub fn set_stderr(&mut self, path: &str) {
-        self.stderr = path.to_string();
+        self.stderr = deserializers::path::WritableFile::default();
     }
 
     #[cfg(test)]
     pub fn testconfig() -> Self {
         Self {
-            cmd: String::from("echo"),
+            cmd: deserializers::path::ExecutableFile::default(),
             processes: 1,
             umask: String::from("022"),
-            workingdir: String::from("/tmp"),
+            workingdir: deserializers::path::AccessibleDirectory::default(),
             autostart: true,
             autorestart: deserializers::autorestart::AutoRestart::test_autorestart(),
             exitcodes: vec![0],
@@ -131,8 +131,8 @@ impl ProcessConfig {
             starttime: 5,
             stopsignals: vec![deserializers::stopsignal::StopSignal::SigTerm],
             stoptime: 5,
-            stdout: String::from("/tmp/taskmaster_test.stdout"),
-            stderr: String::from("/tmp/taskmaster_test.stderr"),
+            stdout: deserializers::path::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
+            stderr: deserializers::path::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
             env: None,
         }
     }

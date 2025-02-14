@@ -82,10 +82,13 @@ mod test {
         let conf = Config::from_file("./tests/configs/example.toml").expect("could not parse config");
 
         assert_eq!(conf.get_processes().keys().cloned().collect::<Vec<String>>(), vec!["nginx".to_string()]);
-        assert_eq!(conf.get_processes()["nginx"].cmd(), "/usr/sbin/nginx");
+        assert_eq!(conf.get_processes()["nginx"].cmd().path(), "/usr/sbin/nginx");
         assert_eq!(conf.get_processes()["nginx"].processes(), 1);
         assert_eq!(conf.get_processes()["nginx"].umask(), "022");
-        assert_eq!(conf.get_processes()["nginx"].workingdir(), "/tmp");
+        assert_eq!(
+            conf.get_processes()["nginx"].workingdir(),
+            &proc::deserializers::path::AccessibleDirectory::default()
+        );
         assert_eq!(conf.get_processes()["nginx"].autostart(), true);
         assert_eq!(conf.get_processes()["nginx"].autorestart().mode(), "on-failure");
         assert_eq!(conf.get_processes()["nginx"].autorestart().max_retries(), Some(5));

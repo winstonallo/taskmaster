@@ -1,6 +1,6 @@
 use crate::conf::proc::deserializers::stopsignal::StopSignal;
 
-use super::deserializers::autorestart::AutoRestart;
+use super::deserializers::{autorestart::AutoRestart, path::WritableFile};
 
 pub fn dflt_processes() -> u8 {
     1
@@ -38,10 +38,10 @@ pub fn dflt_stoptime() -> u8 {
     5
 }
 
-pub fn dflt_stdout() -> String {
-    String::from("")
+pub fn dflt_stdout() -> crate::conf::proc::deserializers::path::WritableFile {
+    WritableFile::default()
 }
 
-pub fn dflt_stderr() -> String {
-    String::from("")
+pub fn dflt_stderr() -> crate::conf::proc::deserializers::path::WritableFile {
+    WritableFile::default()
 }
