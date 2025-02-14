@@ -1,6 +1,41 @@
 mod defaults;
 
-use serde::Deserialize;
+use serde::{Deserialize, Deserializer};
+
+#[allow(unused)]
+#[derive(Debug, Clone)]
+pub struct AutoRestart {
+    mode: String,
+    max_retries: Option<u8>,
+}
+
+impl<'de> Deserialize<'de> for AutoRestart {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let s = String::deserialize(deserializer)?;
+        match s.as_str() {
+            "no" | "always" => Ok(Self { mode: s, max_retries: None }),
+            _ if s.starts_with("on-failure[:") && s.ends_with("]") => {
+                let max_retries_str = &s[12..s.len() - 1];
+                let max_retries = match max_retries_str.parse::<u8>() {
+                    Ok(n) => n,
+                    Err(e) => {
+                        return Err(serde::de::Error::custom(format!(
+                            "invalid max-retries value for on-failure: {max_retries_str}: {e} (expected u8)"
+                        )));
+                    }
+                };
+                Ok(Self {
+                    mode: String::from("on-failure"),
+                    max_retries: Some(max_retries),
+                })
+            }
+            _ => Err(serde::de::Error::custom(format!("invalid value for field 'autorestart': '{s}'"))),
+        }
+    }
+}
 
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
@@ -19,7 +54,7 @@ pub struct ProcessConfig {
     autostart: bool,
 
     #[serde(default = "defaults::dflt_autorestart")]
-    autorestart: String,
+    autorestart: AutoRestart,
 
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<u8>,
@@ -67,7 +102,7 @@ impl ProcessConfig {
         self.autostart
     }
 
-    pub fn autorestart(&self) -> &str {
+    pub fn autorestart(&self) -> &AutoRestart {
         &self.autorestart
     }
 
@@ -105,5 +140,28 @@ impl ProcessConfig {
 
     pub fn set_stderr(&mut self, path: &str) {
         self.stderr = path.to_string();
+    }
+
+    #[cfg(test)]
+    pub fn testconfig() -> Self {
+        Self {
+            cmd: String::from("echo"),
+            processes: 1,
+            umask: String::from("022"),
+            workingdir: String::from("/tmp"),
+            autostart: true,
+            autorestart: AutoRestart {
+                mode: String::from("no"),
+                max_retries: None,
+            },
+            exitcodes: vec![0],
+            startretries: 1,
+            starttime: 5,
+            stopsignals: vec![String::from("TERM")],
+            stoptime: 5,
+            stdout: String::from("/tmp/taskmaster_test.stdout"),
+            stderr: String::from("/tmp/taskmaster_test.stderr"),
+            env: None,
+        }
     }
 }

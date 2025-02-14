@@ -1,3 +1,5 @@
+use super::AutoRestart;
+
 pub fn dflt_processes() -> u8 {
     1
 }
@@ -10,8 +12,11 @@ pub fn dflt_autostart() -> bool {
     false
 }
 
-pub fn dflt_autorestart() -> String {
-    String::from("no")
+pub fn dflt_autorestart() -> AutoRestart {
+    AutoRestart {
+        mode: String::from("no"),
+        max_retries: None,
+    }
 }
 
 pub fn dflt_exitcodes() -> Vec<u8> {

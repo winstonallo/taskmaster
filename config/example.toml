@@ -28,7 +28,8 @@ autostart = true
 # Restart the process when it quits, options are:
 # - "no" (default): Never restart the process automatically.
 # - "on-failure[:max-retries]": Try to restart the process 
-#   <max-retries> times when it exits unexpectedly.
+#   <max-retries> times when it exits unexpectedly. Maximum value for 
+#   max-retries is 255.
 # - "always": Always restart when exiting, no matter the status.
 autorestart = "on-failure[:5]"
 
