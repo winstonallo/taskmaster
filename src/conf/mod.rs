@@ -24,27 +24,16 @@ impl Config {
             }
         };
 
-        let mut conf: Config = match toml::from_str(&conf_str) {
-            Ok(procs) => procs,
-            Err(err) => {
-                return Err(format!("could not parse config at '{path}': {err}"));
-            }
-        };
-
-        for (proc_name, proc) in &mut conf.processes {
-            if proc.stdout().is_empty() {
-                proc.set_stdout(&format!("/tmp/{proc_name}.stdout"));
-            }
-            if proc.stderr().is_empty() {
-                proc.set_stderr(&format!("/tmp/{proc_name}.stderr"));
-            }
-        }
-        Ok(conf)
+        Config::parse(&conf_str)
     }
 
     #[cfg(test)]
     pub fn from_str(config: &str) -> Result<Self, String> {
-        let mut conf: Config = match toml::from_str(&config) {
+        Config::parse(config)
+    }
+
+    fn parse(config_str: &str) -> Result<Self, String> {
+        let mut conf: Config = match toml::from_str(&config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
                 return Err(format!("could not parse config string: {err}"));
