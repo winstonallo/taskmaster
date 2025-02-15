@@ -1,5 +1,9 @@
 use serde::{Deserialize, Deserializer};
 
+/// # `Umask`
+/// `src/conf/proc/types/umask.rs`
+///
+/// Implements the `serde::Deserializer` trait for the `umask` field of the configuration.
 #[allow(unused)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct Umask {

@@ -1,5 +1,9 @@
 use serde::{Deserialize, Deserializer};
 
+/// # `StopSignal`
+/// `src/conf/proc/types/stopsignal.rs`
+///
+/// Implements the `serde::Deserializer` trait for the `stopsignals` field of the configuration.
 #[allow(unused)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum StopSignal {

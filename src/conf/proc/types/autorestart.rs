@@ -1,5 +1,9 @@
 use serde::{Deserialize, Deserializer};
 
+/// # `AutoRestart`
+/// `src/conf/proc/types/path.rs`
+///
+/// Implements the `serde::Deserializer` trait for the `autorestart` field of the configuration.
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct AutoRestart {

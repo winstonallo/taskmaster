@@ -1,13 +1,37 @@
 #[cfg(test)]
+/// # defaults
+/// `src/conf/proc/defaults.ts`
+///
+/// Contains functions returning the configuration fields' default values, passed to
+/// `serde` in case a non-required field is empty.  
 pub mod defaults;
 
 #[cfg(not(test))]
+/// # defaults
+/// `src/conf/proc/defaults.ts`
+///
+/// Contains functions returning the configuration fields' default values, passed to
+/// `serde` in case a non-required field is empty.  
 mod defaults;
 
+/// # types
+/// `src/conf/proc/types`
+///
+/// Contains types used for loading non-primitively typed configuration fields,
+/// which may required custom validation rules such as path validation or value checking
+/// going beyond simple overflow checks (which are handled by `serde`).
+///
+/// Each of those types enforces its custom rules by implementing the `Deserializer` trait,
+/// allowing them to be directly deserialized into `ProcessConfig`.
 pub mod types;
 
 use serde::Deserialize;
 
+/// # ProcessConfig
+/// `src/conf/proc/mod.rs`
+///
+/// Rust representation of the `taskmaster` config. All its types implement
+/// the `Deserializer` trait.
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
 pub struct ProcessConfig {

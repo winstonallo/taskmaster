@@ -18,8 +18,10 @@ fn get_random_string(len: usize) -> String {
     })
 }
 
-/// `serde` Deserializer checking whether the path is a directory,
-/// accessible for writing by the process.
+/// # `AccessibleDirectory`
+/// `src/conf/proc/types/path.rs`
+///
+/// Implements the `serde::Deserializer` trait for the `workingdir` field of the configuration.
 #[allow(unused)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccessibleDirectory {
@@ -73,8 +75,10 @@ impl<'de> Deserialize<'de> for AccessibleDirectory {
     }
 }
 
-/// `serde` Deserializer checking whether the path is an executable,
-/// accessible for executing by the process.
+/// # `ExecutableFile`
+/// `src/conf/proc/types/path.rs`
+///
+/// Implements the `serde::Deserializer` trait for the `cmd` field of the configuration.
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct ExecutableFile {
@@ -123,7 +127,10 @@ impl<'de> Deserialize<'de> for ExecutableFile {
     }
 }
 
-/// `serde` Deserializer checking whether the path is writable by the process.
+/// # `WritableFile`
+/// `src/conf/proc/types/path.rs`
+///
+/// Implements the `serde::Deserializer` trait for the `stdout` and `stderr` fields of the configuration.
 #[allow(unused)]
 #[derive(Debug, Clone, Default)]
 pub struct WritableFile {
