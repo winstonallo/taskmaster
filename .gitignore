@@ -1,1 +1,3 @@
 target/
+writetofile.sh
+file.txt

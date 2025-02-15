@@ -78,9 +78,9 @@ impl<'tm> Daemon<'tm> {
     }
 
     fn init(&mut self) -> std::io::Result<()> {
-        for (_, proc) in &mut self.processes {
+        for proc in self.processes.values_mut() {
             if proc.config().autostart() {
-                proc.start();
+                proc.start()?;
             }
         }
         Ok(())

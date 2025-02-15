@@ -53,6 +53,8 @@ impl<'tm> Process<'tm> {
 
         self.id = Some(self.child.as_ref().unwrap().id());
 
+        println!("process id: {}", self.id.unwrap());
+
         Ok(())
     }
 
@@ -87,7 +89,7 @@ mod tests {
     fn running_has_id() {
         let proc = Process {
             id: Some(1),
-            child: None,
+            child: Some(Command::new("/bin/ls").spawn().expect("could not run command")),
             conf: &conf::proc::ProcessConfig::testconfig(),
         };
 
