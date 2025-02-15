@@ -241,7 +241,7 @@ mod from_str {
         let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
         assert_eq!(
             *Config::from_str(&conf_str).expect("could not parse config").get_processes()["nginx"].stopsignals(),
-            vec![deserializers::stopsignal::StopSignal::SigTerm]
+            vec![deserializers::StopSignal::SigTerm]
         );
     }
 
@@ -353,7 +353,7 @@ mod from_str {
 #[cfg(test)]
 mod from_file {
     use crate::conf::{
-        proc::deserializers::{path::AccessibleDirectory, stopsignal::StopSignal},
+        proc::deserializers::{AccessibleDirectory, StopSignal},
         Config,
     };
 

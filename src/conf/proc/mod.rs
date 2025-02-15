@@ -11,21 +11,21 @@ use serde::Deserialize;
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
 pub struct ProcessConfig {
-    cmd: deserializers::path::ExecutableFile,
+    cmd: deserializers::ExecutableFile,
 
     #[serde(default = "defaults::dflt_processes")]
     processes: u8,
 
     #[serde(default = "defaults::dflt_umask")]
-    umask: deserializers::umask::Umask,
+    umask: deserializers::Umask,
 
-    workingdir: deserializers::path::AccessibleDirectory,
+    workingdir: deserializers::AccessibleDirectory,
 
     #[serde(default = "defaults::dflt_autostart")]
     autostart: bool,
 
     #[serde(default = "defaults::dflt_autorestart")]
-    autorestart: deserializers::autorestart::AutoRestart,
+    autorestart: deserializers::AutoRestart,
 
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<u8>,
@@ -37,23 +37,23 @@ pub struct ProcessConfig {
     starttime: u16,
 
     #[serde(default = "defaults::dflt_stopsignals")]
-    stopsignals: Vec<deserializers::stopsignal::StopSignal>,
+    stopsignals: Vec<deserializers::StopSignal>,
 
     #[serde(default = "defaults::dflt_stoptime")]
     stoptime: u8,
 
     #[serde(default = "defaults::dflt_stdout")]
-    stdout: deserializers::path::WritableFile,
+    stdout: deserializers::WritableFile,
 
     #[serde(default = "defaults::dflt_stderr")]
-    stderr: deserializers::path::WritableFile,
+    stderr: deserializers::WritableFile,
 
     env: Option<Vec<(String, String)>>,
 }
 
 #[allow(unused)]
 impl ProcessConfig {
-    pub fn cmd(&self) -> &deserializers::path::ExecutableFile {
+    pub fn cmd(&self) -> &deserializers::ExecutableFile {
         &self.cmd
     }
 
@@ -65,7 +65,7 @@ impl ProcessConfig {
         self.umask.mask()
     }
 
-    pub fn workingdir(&self) -> &deserializers::path::AccessibleDirectory {
+    pub fn workingdir(&self) -> &deserializers::AccessibleDirectory {
         &self.workingdir
     }
 
@@ -73,7 +73,7 @@ impl ProcessConfig {
         self.autostart
     }
 
-    pub fn autorestart(&self) -> &deserializers::autorestart::AutoRestart {
+    pub fn autorestart(&self) -> &deserializers::AutoRestart {
         &self.autorestart
     }
 
@@ -89,7 +89,7 @@ impl ProcessConfig {
         self.starttime
     }
 
-    pub fn stopsignals(&self) -> &Vec<deserializers::stopsignal::StopSignal> {
+    pub fn stopsignals(&self) -> &Vec<deserializers::StopSignal> {
         &self.stopsignals
     }
 
@@ -110,29 +110,29 @@ impl ProcessConfig {
     }
 
     pub fn set_stdout(&mut self, path: &str) {
-        self.stdout = deserializers::path::WritableFile::from_path(path);
+        self.stdout = deserializers::WritableFile::from_path(path);
     }
 
     pub fn set_stderr(&mut self, path: &str) {
-        self.stderr = deserializers::path::WritableFile::from_path(path);
+        self.stderr = deserializers::WritableFile::from_path(path);
     }
 
     #[cfg(test)]
     pub fn testconfig() -> Self {
         Self {
-            cmd: deserializers::path::ExecutableFile::default(),
+            cmd: deserializers::ExecutableFile::default(),
             processes: 1,
-            umask: deserializers::umask::Umask::default(),
-            workingdir: deserializers::path::AccessibleDirectory::default(),
+            umask: deserializers::Umask::default(),
+            workingdir: deserializers::AccessibleDirectory::default(),
             autostart: true,
-            autorestart: deserializers::autorestart::AutoRestart::test_autorestart(),
+            autorestart: deserializers::AutoRestart::test_autorestart(),
             exitcodes: vec![0],
             startretries: 1,
             starttime: 5,
-            stopsignals: vec![deserializers::stopsignal::StopSignal::SigTerm],
+            stopsignals: vec![deserializers::StopSignal::SigTerm],
             stoptime: 5,
-            stdout: deserializers::path::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
-            stderr: deserializers::path::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
+            stdout: deserializers::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
+            stderr: deserializers::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
             env: None,
         }
     }

@@ -1,4 +1,11 @@
-pub mod autorestart;
-pub mod path;
-pub mod stopsignal;
-pub mod umask;
+mod autorestart;
+mod path;
+mod stopsignal;
+mod umask;
+
+pub use self::{
+    autorestart::AutoRestart,
+    path::{AccessibleDirectory, ExecutableFile, WritableFile},
+    stopsignal::StopSignal,
+    umask::Umask,
+};
