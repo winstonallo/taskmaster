@@ -98,11 +98,11 @@ impl ProcessConfig {
     }
 
     pub fn stdout(&self) -> &str {
-        &self.stdout.path()
+        self.stdout.path()
     }
 
     pub fn stderr(&self) -> &str {
-        &self.stderr.path()
+        self.stderr.path()
     }
 
     pub fn env(&self) -> &Option<Vec<(String, String)>> {
@@ -110,11 +110,11 @@ impl ProcessConfig {
     }
 
     pub fn set_stdout(&mut self, path: &str) {
-        self.stdout = deserializers::path::WritableFile::default();
+        self.stdout = deserializers::path::WritableFile::from_path(path);
     }
 
     pub fn set_stderr(&mut self, path: &str) {
-        self.stderr = deserializers::path::WritableFile::default();
+        self.stderr = deserializers::path::WritableFile::from_path(path);
     }
 
     #[cfg(test)]

@@ -1,10 +1,22 @@
 use std::{
-    fs::{self, OpenOptions},
+    fmt::Write,
+    fs::{self, File, OpenOptions},
+    io::Read,
     os::unix::fs::PermissionsExt,
     path::Path,
 };
 
 use serde::{Deserialize, Deserializer};
+
+fn get_random_string(len: usize) -> String {
+    let mut buf = vec![0u8; len];
+    let mut file = File::open("/dev/urandom").expect("could not open /dev/urandom");
+    file.read_exact(&mut buf).expect("could not read from /dev/urandom");
+    buf.iter().fold(String::from(""), |mut acc, byte| {
+        write!(&mut acc, "{:02x}", byte).expect("failed to write");
+        acc
+    })
+}
 
 /// `serde` Deserializer checking whether the path is a directory,
 /// accessible for writing by the process.
@@ -43,16 +55,18 @@ impl<'de> Deserialize<'de> for AccessibleDirectory {
             return Err(serde::de::Error::custom(format!("'{s}' is not a directory")));
         }
 
-        let test_path = Path::new(&s).join(".write_test");
+        let test_path = Path::new(&s).join(get_random_string(10));
         if !test_path.is_absolute() {
-            return Err(serde::de::Error::custom(format!("expected absolute path")));
+            return Err(serde::de::Error::custom("expected absolute path".to_string()));
         }
         match OpenOptions::new().write(true).create_new(true).open(&test_path) {
             Ok(file) => {
                 drop(file);
                 let _ = fs::remove_file(&test_path);
             }
-            Err(err) => return Err(serde::de::Error::custom(format!("'{s}' is not writable: {err}"))),
+            Err(err) => {
+                return Err(serde::de::Error::custom(format!("'{s}' is not writable: {err}")));
+            }
         }
 
         Ok(Self { path: s })
@@ -102,7 +116,7 @@ impl<'de> Deserialize<'de> for ExecutableFile {
 
         let test_path = Path::new(&s).join(".write_test");
         if !test_path.is_absolute() {
-            return Err(serde::de::Error::custom(format!("expected absolute path")));
+            return Err(serde::de::Error::custom("expected absolute path".to_string()));
         }
 
         Ok(Self { path: s })
@@ -111,7 +125,7 @@ impl<'de> Deserialize<'de> for ExecutableFile {
 
 /// `serde` Deserializer checking whether the path is writable by the process.
 #[allow(unused)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct WritableFile {
     path: String,
 }
@@ -124,12 +138,6 @@ impl WritableFile {
 
     pub fn from_path(path: &str) -> Self {
         Self { path: String::from(path) }
-    }
-}
-
-impl Default for WritableFile {
-    fn default() -> Self {
-        Self { path: String::from("") }
     }
 }
 
@@ -151,7 +159,7 @@ impl<'de> Deserialize<'de> for WritableFile {
             }
         }
 
-        match OpenOptions::new().write(true).create(true).open(&s) {
+        match OpenOptions::new().write(true).create(true).truncate(false).open(&s) {
             Ok(file) => {
                 drop(file);
                 let _ = fs::remove_file(path);

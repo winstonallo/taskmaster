@@ -231,8 +231,8 @@ mod test {
             workingdir = "/tmp"
 
             [apache]
-            cmd = "/usr/sbin/apache2"
-            workingdir = "/var/www"
+            cmd = "/usr/bin/cat"
+            workingdir = "/tmp"
         "#;
         let conf = Config::from_str(&conf_str).expect("could not parse config");
         assert_eq!(conf.get_processes().len(), 2);
