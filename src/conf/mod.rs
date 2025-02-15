@@ -372,6 +372,18 @@ mod test {
     }
 
     #[test]
+    fn from_str_stdout_is_directory() {
+        let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nstdout = /tmp";
+        assert!(Config::from_str(&conf_str).is_err());
+    }
+
+    #[test]
+    fn from_str_stderr_is_directory() {
+        let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nstderr = /tmp";
+        assert!(Config::from_str(&conf_str).is_err());
+    }
+
+    #[test]
     fn from_str_env_malformed() {
         let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nenv = [\"hello\",\"world\"]";
         assert!(Config::from_str(&conf_str).is_err());
