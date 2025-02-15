@@ -7,6 +7,7 @@ trait ClientStream {
     fn poll(&self) -> Option<Vec<u8>>;
 }
 
+#[allow(unused)]
 struct UnixSocketStream {
     path: String,
     listener: UnixListener,
@@ -16,6 +17,9 @@ impl UnixSocketStream {
     fn new(path: &str) -> Result<Self, String> {
         let _ = std::fs::remove_file(path);
         let listener = UnixListener::bind(path).map_err(|err| format!("could not bind to socket at path: {path}: {err}"))?;
+        listener
+            .set_nonblocking(true)
+            .map_err(|err| format!("failed to set non-blocking mode: {err}"))?;
         Ok(Self {
             path: path.to_string(),
             listener,
@@ -43,10 +47,7 @@ impl ClientStream for UnixSocketStream {
                     }
                 }
             }
-            Err(err) => {
-                eprintln!("could not accept: {err}");
-                None
-            }
+            Err(_) => None,
         }
     }
 }
@@ -59,12 +60,12 @@ pub struct Daemon<'tm> {
 impl<'tm> Daemon<'tm> {
     pub fn from_config(conf: &'tm conf::Config) -> Self {
         let procs: HashMap<String, proc::Process<'tm>> = conf
-            .get_processes()
+            .processes()
             .iter()
             .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc)))
             .collect::<HashMap<String, proc::Process<'tm>>>();
 
-        let client_stream = UnixSocketStream::new("/tmp/.taskmaster.sock").expect("could not create client stream for communication with daemon");
+        let client_stream = UnixSocketStream::new(conf.socketpath()).expect("could not create client stream for communication with daemon");
 
         Self {
             processes: procs,
@@ -76,9 +77,17 @@ impl<'tm> Daemon<'tm> {
         &self.processes
     }
 
-    pub fn poll(&self) {
-        if let Some(data) = self.client_stream.poll() {
-            println!("received data: {:?}", data)
+    fn init(&self) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    pub fn run(&self) -> std::io::Result<()> {
+        self.init()?;
+        // Poll for client events and run checks to see if some processes need to be restarted/killed, etc.
+        loop {
+            if let Some(data) = self.client_stream.poll() {
+                println!("received data: {:?}", String::from_utf8(data));
+            }
         }
     }
 }

@@ -1,11 +1,17 @@
 use std::{collections::HashMap, fs};
 
 use proc::ProcessConfig;
+use serde::Deserialize;
 
+mod defaults;
 pub mod proc;
 mod tests;
 
+#[derive(Deserialize)]
 pub struct Config {
+    #[serde(default = "defaults::dflt_socketpath")]
+    socketpath: String,
+    #[serde(flatten)]
     processes: HashMap<String, ProcessConfig>,
 }
 
@@ -18,14 +24,14 @@ impl Config {
             }
         };
 
-        let mut procs: HashMap<String, ProcessConfig> = match toml::from_str(&conf_str) {
+        let mut conf: Config = match toml::from_str(&conf_str) {
             Ok(procs) => procs,
             Err(err) => {
                 return Err(format!("could not parse config at '{path}': {err}"));
             }
         };
 
-        for (proc_name, proc) in &mut procs {
+        for (proc_name, proc) in &mut conf.processes {
             if proc.stdout().is_empty() {
                 proc.set_stdout(&format!("/tmp/{proc_name}.stdout"));
             }
@@ -33,20 +39,19 @@ impl Config {
                 proc.set_stderr(&format!("/tmp/{proc_name}.stderr"));
             }
         }
-
-        Ok(Config { processes: procs })
+        Ok(conf)
     }
 
     #[cfg(test)]
     pub fn from_str(config: &str) -> Result<Self, String> {
-        let mut procs: HashMap<String, ProcessConfig> = match toml::from_str(&config) {
-            Ok(procs) => procs,
+        let mut conf: Config = match toml::from_str(&config) {
+            Ok(cnf) => cnf,
             Err(err) => {
                 return Err(format!("could not parse config string: {err}"));
             }
         };
 
-        for (proc_name, proc) in &mut procs {
+        for (proc_name, proc) in &mut conf.processes {
             if proc.stdout().is_empty() {
                 proc.set_stdout(&format!("/tmp/{proc_name}.stdout"));
             }
@@ -55,10 +60,14 @@ impl Config {
             }
         }
 
-        Ok(Config { processes: procs })
+        Ok(conf)
     }
 
-    pub fn get_processes(&self) -> &HashMap<String, ProcessConfig> {
+    pub fn processes(&self) -> &HashMap<String, ProcessConfig> {
         &self.processes
+    }
+
+    pub fn socketpath(&self) -> &str {
+        &self.socketpath
     }
 }
