@@ -17,7 +17,7 @@ pub struct ProcessConfig {
     processes: u8,
 
     #[serde(default = "defaults::dflt_umask")]
-    umask: String,
+    umask: deserializers::umask::Umask,
 
     workingdir: deserializers::path::AccessibleDirectory,
 
@@ -62,7 +62,7 @@ impl ProcessConfig {
     }
 
     pub fn umask(&self) -> &str {
-        &self.umask
+        &self.umask.mask()
     }
 
     pub fn workingdir(&self) -> &deserializers::path::AccessibleDirectory {
@@ -122,7 +122,7 @@ impl ProcessConfig {
         Self {
             cmd: deserializers::path::ExecutableFile::default(),
             processes: 1,
-            umask: String::from("022"),
+            umask: deserializers::umask::Umask::default(),
             workingdir: deserializers::path::AccessibleDirectory::default(),
             autostart: true,
             autorestart: deserializers::autorestart::AutoRestart::test_autorestart(),

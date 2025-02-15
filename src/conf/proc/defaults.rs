@@ -1,13 +1,13 @@
 use crate::conf::proc::deserializers::stopsignal::StopSignal;
 
-use super::deserializers::{autorestart::AutoRestart, path::WritableFile};
+use super::deserializers::{self, autorestart::AutoRestart, path::WritableFile};
 
 pub fn dflt_processes() -> u8 {
     1
 }
 
-pub fn dflt_umask() -> String {
-    String::from("022")
+pub fn dflt_umask() -> deserializers::umask::Umask {
+    deserializers::umask::Umask::default()
 }
 
 pub fn dflt_autostart() -> bool {
