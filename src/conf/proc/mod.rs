@@ -4,28 +4,28 @@ pub mod defaults;
 #[cfg(not(test))]
 mod defaults;
 
-pub mod deserializers;
+pub mod types;
 
 use serde::Deserialize;
 
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
 pub struct ProcessConfig {
-    cmd: deserializers::ExecutableFile,
+    cmd: types::ExecutableFile,
 
     #[serde(default = "defaults::dflt_processes")]
     processes: u8,
 
     #[serde(default = "defaults::dflt_umask")]
-    umask: deserializers::Umask,
+    umask: types::Umask,
 
-    workingdir: deserializers::AccessibleDirectory,
+    workingdir: types::AccessibleDirectory,
 
     #[serde(default = "defaults::dflt_autostart")]
     autostart: bool,
 
     #[serde(default = "defaults::dflt_autorestart")]
-    autorestart: deserializers::AutoRestart,
+    autorestart: types::AutoRestart,
 
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<u8>,
@@ -37,23 +37,23 @@ pub struct ProcessConfig {
     starttime: u16,
 
     #[serde(default = "defaults::dflt_stopsignals")]
-    stopsignals: Vec<deserializers::StopSignal>,
+    stopsignals: Vec<types::StopSignal>,
 
     #[serde(default = "defaults::dflt_stoptime")]
     stoptime: u8,
 
     #[serde(default = "defaults::dflt_stdout")]
-    stdout: deserializers::WritableFile,
+    stdout: types::WritableFile,
 
     #[serde(default = "defaults::dflt_stderr")]
-    stderr: deserializers::WritableFile,
+    stderr: types::WritableFile,
 
     env: Option<Vec<(String, String)>>,
 }
 
 #[allow(unused)]
 impl ProcessConfig {
-    pub fn cmd(&self) -> &deserializers::ExecutableFile {
+    pub fn cmd(&self) -> &types::ExecutableFile {
         &self.cmd
     }
 
@@ -65,7 +65,7 @@ impl ProcessConfig {
         self.umask.mask()
     }
 
-    pub fn workingdir(&self) -> &deserializers::AccessibleDirectory {
+    pub fn workingdir(&self) -> &types::AccessibleDirectory {
         &self.workingdir
     }
 
@@ -73,7 +73,7 @@ impl ProcessConfig {
         self.autostart
     }
 
-    pub fn autorestart(&self) -> &deserializers::AutoRestart {
+    pub fn autorestart(&self) -> &types::AutoRestart {
         &self.autorestart
     }
 
@@ -89,7 +89,7 @@ impl ProcessConfig {
         self.starttime
     }
 
-    pub fn stopsignals(&self) -> &Vec<deserializers::StopSignal> {
+    pub fn stopsignals(&self) -> &Vec<types::StopSignal> {
         &self.stopsignals
     }
 
@@ -110,29 +110,29 @@ impl ProcessConfig {
     }
 
     pub fn set_stdout(&mut self, path: &str) {
-        self.stdout = deserializers::WritableFile::from_path(path);
+        self.stdout = types::WritableFile::from_path(path);
     }
 
     pub fn set_stderr(&mut self, path: &str) {
-        self.stderr = deserializers::WritableFile::from_path(path);
+        self.stderr = types::WritableFile::from_path(path);
     }
 
     #[cfg(test)]
     pub fn testconfig() -> Self {
         Self {
-            cmd: deserializers::ExecutableFile::default(),
+            cmd: types::ExecutableFile::default(),
             processes: 1,
-            umask: deserializers::Umask::default(),
-            workingdir: deserializers::AccessibleDirectory::default(),
+            umask: types::Umask::default(),
+            workingdir: types::AccessibleDirectory::default(),
             autostart: true,
-            autorestart: deserializers::AutoRestart::test_autorestart(),
+            autorestart: types::AutoRestart::test_autorestart(),
             exitcodes: vec![0],
             startretries: 1,
             starttime: 5,
-            stopsignals: vec![deserializers::StopSignal::SigTerm],
+            stopsignals: vec![types::StopSignal::SigTerm],
             stoptime: 5,
-            stdout: deserializers::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
-            stderr: deserializers::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
+            stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
+            stderr: types::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
             env: None,
         }
     }
