@@ -62,7 +62,7 @@ impl ProcessConfig {
     }
 
     pub fn umask(&self) -> &str {
-        &self.umask.mask()
+        self.umask.mask()
     }
 
     pub fn workingdir(&self) -> &deserializers::path::AccessibleDirectory {
