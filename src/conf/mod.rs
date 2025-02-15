@@ -33,13 +33,14 @@ impl Config {
     }
 
     fn parse(config_str: &str) -> Result<Self, String> {
-        let mut conf: Config = match toml::from_str(&config_str) {
+        let mut conf: Config = match toml::from_str(config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
                 return Err(format!("could not parse config string: {err}"));
             }
         };
 
+        // Did not find a way to have serde defaults depend on other field's values.
         for (proc_name, proc) in &mut conf.processes {
             if proc.stdout().is_empty() {
                 proc.set_stdout(&format!("/tmp/{proc_name}.stdout"));

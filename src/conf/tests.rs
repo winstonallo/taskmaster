@@ -32,7 +32,10 @@ mod from_str {
     #[test]
     fn socketpath_default() {
         let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(Config::from_str(conf_str).expect("could not parse config").socketpath(), String::from("/tmp/.taskmaster.sock"))
+        assert_eq!(
+            Config::from_str(conf_str).expect("could not parse config").socketpath(),
+            String::from("/tmp/.taskmaster.sock")
+        )
     }
 
     #[test]
