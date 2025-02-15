@@ -15,4 +15,7 @@ fn main() {
 
     let daemon = Daemon::from_config(&conf);
     println!("{:?}", daemon.get_processes()["nginx"]);
+    loop {
+        daemon.poll();
+    }
 }
