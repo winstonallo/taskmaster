@@ -352,7 +352,10 @@ mod from_str {
 
 #[cfg(test)]
 mod from_file {
-    use crate::conf::{proc::deserializers, Config};
+    use crate::conf::{
+        proc::deserializers::{path::AccessibleDirectory, stopsignal::StopSignal},
+        Config,
+    };
 
     #[test]
     fn invalid_path() {
@@ -373,17 +376,14 @@ mod from_file {
         assert_eq!(conf.get_processes()["nginx"].cmd().path(), "/usr/sbin/nginx");
         assert_eq!(conf.get_processes()["nginx"].processes(), 1);
         assert_eq!(conf.get_processes()["nginx"].umask(), "022");
-        assert_eq!(conf.get_processes()["nginx"].workingdir(), &deserializers::path::AccessibleDirectory::default());
+        assert_eq!(conf.get_processes()["nginx"].workingdir(), &AccessibleDirectory::default());
         assert_eq!(conf.get_processes()["nginx"].autostart(), true);
         assert_eq!(conf.get_processes()["nginx"].autorestart().mode(), "on-failure");
         assert_eq!(conf.get_processes()["nginx"].autorestart().max_retries(), Some(5));
         assert_eq!(conf.get_processes()["nginx"].exitcodes(), &vec![0, 2]);
         assert_eq!(conf.get_processes()["nginx"].startretries(), 3);
         assert_eq!(conf.get_processes()["nginx"].starttime(), 5);
-        assert_eq!(
-            conf.get_processes()["nginx"].stopsignals(),
-            &vec![deserializers::stopsignal::StopSignal::SigTerm, deserializers::stopsignal::StopSignal::SigUsr1]
-        );
+        assert_eq!(conf.get_processes()["nginx"].stopsignals(), &vec![StopSignal::SigTerm, StopSignal::SigUsr1]);
         assert_eq!(conf.get_processes()["nginx"].stoptime(), 5);
         assert_eq!(conf.get_processes()["nginx"].stdout(), String::from("/tmp/nginx.stdout"));
         assert_eq!(conf.get_processes()["nginx"].stderr(), String::from("/tmp/nginx.stderr"));
