@@ -98,7 +98,7 @@ mod from_str {
     #[test]
     fn umask_default() {
         let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"";
-        assert_eq!(Config::from_str(&conf_str).expect("could not parse config").processes()["nginx"].umask(), "022");
+        assert_eq!(Config::from_str(&conf_str).expect("could not parse config").processes()["nginx"].umask(), 0o022);
     }
 
     #[test]
@@ -375,7 +375,7 @@ mod from_file {
         assert_eq!(conf.processes().keys().cloned().collect::<Vec<String>>(), vec!["nginx".to_string()]);
         assert_eq!(conf.processes()["nginx"].cmd().path(), "/usr/sbin/nginx");
         assert_eq!(conf.processes()["nginx"].processes(), 1);
-        assert_eq!(conf.processes()["nginx"].umask(), "022");
+        assert_eq!(conf.processes()["nginx"].umask(), 0o022);
         assert_eq!(conf.processes()["nginx"].workingdir(), &AccessibleDirectory::default());
         assert_eq!(conf.processes()["nginx"].autostart(), true);
         assert_eq!(conf.processes()["nginx"].autorestart().mode(), "on-failure");

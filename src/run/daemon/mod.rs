@@ -77,11 +77,16 @@ impl<'tm> Daemon<'tm> {
         &self.processes
     }
 
-    fn init(&self) -> std::io::Result<()> {
+    fn init(&mut self) -> std::io::Result<()> {
+        for (_, proc) in &mut self.processes {
+            if proc.config().autostart() {
+                proc.start();
+            }
+        }
         Ok(())
     }
 
-    pub fn run(&self) -> std::io::Result<()> {
+    pub fn run(&mut self) -> std::io::Result<()> {
         self.init()?;
         // Poll for client events and run checks to see if some processes need to be restarted/killed, etc.
         loop {

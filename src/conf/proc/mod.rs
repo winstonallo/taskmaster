@@ -85,7 +85,7 @@ impl ProcessConfig {
         self.processes
     }
 
-    pub fn umask(&self) -> &str {
+    pub fn umask(&self) -> u32 {
         self.umask.mask()
     }
 

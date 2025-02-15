@@ -13,7 +13,7 @@ fn main() {
         }
     };
 
-    let daemon = Daemon::from_config(&conf);
+    let mut daemon = Daemon::from_config(&conf);
     println!("{:?}", daemon.get_processes());
     let _ = daemon.run();
 }

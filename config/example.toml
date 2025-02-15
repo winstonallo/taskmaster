@@ -5,12 +5,12 @@
 socketpath = "/tmp/.taskmaster.sock"
 
 # Process name.
-[nginx]
+[ls]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/usr/sbin/nginx"
+cmd = "/bin/ls"
 
 # Number of processes to start.
 # Defaults to 1, max 255.
@@ -62,11 +62,11 @@ stoptime = 5
 
 # File the standard output of the process should be redirected to.
 # Defaults to "/tmp/<process name>.stdout".
-stdout = "/tmp/nginx.stdout"
+stdout = "/tmp/ls.stdout"
 
 # File the standard error of the process should be redirected to.
 # Defaults to "/tmp/<process name>.stderr".
-stderr = "/tmp/nginx.stderr"
+stderr = "/tmp/ls.stderr"
 
 # Key value pairs of environment variables to be injected into the process
 # at startup.
