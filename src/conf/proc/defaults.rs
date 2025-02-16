@@ -1,5 +1,9 @@
 use super::types;
 
+pub fn dflt_args() -> Vec<String> {
+    vec![]
+}
+
 pub fn dflt_processes() -> u8 {
     1
 }

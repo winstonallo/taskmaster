@@ -62,6 +62,7 @@ impl<'tm> Process<'tm> {
         self.child = match Command::new(self.conf.cmd().path())
             .stdout(stdout_file)
             .stderr(stderr_file)
+            .args(self.conf.args())
             .current_dir(self.conf.workingdir().path())
             .spawn()
         {
@@ -91,6 +92,8 @@ impl<'tm> Process<'tm> {
 
 #[cfg(test)]
 mod tests {
+    use std::process::Stdio;
+
     use super::*;
 
     #[test]
@@ -110,7 +113,7 @@ mod tests {
     fn running_has_id() {
         let proc = Process {
             id: Some(1),
-            child: Some(Command::new("/bin/ls").spawn().expect("could not run command")),
+            child: Some(Command::new("/bin/ls").stdout(Stdio::null()).spawn().expect("could not run command")),
             conf: &conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
             startup_tries: 0,

@@ -12,6 +12,10 @@ socketpath = "/tmp/.taskmaster.sock"
 # Required.
 cmd = "/bin/ls"
 
+# Arguments to pass to 'cmd'.
+# Defaults to [].
+args = ["-la"]
+
 # Number of processes to start.
 # Defaults to 1, max 255.
 processes = 1

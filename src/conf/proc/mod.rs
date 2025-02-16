@@ -37,6 +37,9 @@ use serde::Deserialize;
 pub struct ProcessConfig {
     cmd: types::ExecutableFile,
 
+    #[serde(default = "defaults::dflt_args")]
+    args: Vec<String>,
+
     #[serde(default = "defaults::dflt_processes")]
     processes: u8,
 
@@ -79,6 +82,10 @@ pub struct ProcessConfig {
 impl ProcessConfig {
     pub fn cmd(&self) -> &types::ExecutableFile {
         &self.cmd
+    }
+
+    pub fn args(&self) -> &Vec<String> {
+        &self.args
     }
 
     pub fn processes(&self) -> u8 {
@@ -145,6 +152,7 @@ impl ProcessConfig {
     pub fn testconfig() -> Self {
         Self {
             cmd: types::ExecutableFile::default(),
+            args: defaults::dflt_args(),
             processes: 1,
             umask: types::Umask::default(),
             workingdir: types::AccessibleDirectory::default(),

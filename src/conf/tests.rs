@@ -69,6 +69,16 @@ mod from_str {
     }
 
     #[test]
+    fn args_default() {
+        let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
+        let expected_vec: Vec<String> = vec![];
+        assert_eq!(
+            Config::from_str(&conf_str).expect("could not parse config").processes()["nginx"].args(),
+            &expected_vec
+        )
+    }
+
+    #[test]
     fn processes_out_of_range() {
         let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nprocesses = 256";
         assert!(Config::from_str(&conf_str).is_err());
