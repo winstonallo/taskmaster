@@ -5,7 +5,10 @@ use std::{
 };
 
 use crate::conf::{self, proc::ProcessConfig};
+pub use error::ProcessError;
 use libc::umask;
+
+mod error;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -47,7 +50,10 @@ impl<'tm> Process<'tm> {
         self.last_startup
     }
 
-    pub fn start(&mut self) -> std::io::Result<()> {
+    pub fn start(&mut self) -> Result<(), ProcessError> {
+        if self.startup_tries == self.config().startretries() {
+            return Err(ProcessError::MaxRetriesReached(format!("tried {} times", self.startup_tries)));
+        }
         if self.running() {
             return Ok(());
         }
@@ -56,8 +62,8 @@ impl<'tm> Process<'tm> {
 
         unsafe { umask(self.conf.umask()) };
 
-        let stdout_file = File::create(self.conf.stdout())?;
-        let stderr_file = File::create(self.conf.stderr())?;
+        let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
+        let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
 
         self.child = match Command::new(self.conf.cmd().path())
             .stdout(stdout_file)
@@ -67,7 +73,10 @@ impl<'tm> Process<'tm> {
             .spawn()
         {
             Ok(child) => Some(child),
-            Err(err) => return Err(err),
+            Err(err) => {
+                self.startup_tries += 1;
+                return Err(ProcessError::CouldNotStartUp(err.to_string()));
+            }
         };
 
         self.id = Some(self.child.as_ref().unwrap().id());

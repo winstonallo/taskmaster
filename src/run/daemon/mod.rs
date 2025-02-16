@@ -1,7 +1,10 @@
 use std::{collections::HashMap, io::Read, os::unix::net::UnixListener};
 
-use super::proc;
+use error::DaemonError;
+
+use super::{proc, proc::ProcessError};
 use crate::conf;
+mod error;
 
 trait ClientStream {
     fn poll(&self) -> Option<Vec<u8>>;
@@ -77,17 +80,27 @@ impl<'tm> Daemon<'tm> {
         &self.processes
     }
 
-    fn init(&mut self) -> std::io::Result<()> {
-        for proc in self.processes.values_mut() {
+    fn init(&mut self) -> Result<(), ProcessError> {
+        for (proc_name, proc) in &mut self.processes {
             if proc.config().autostart() {
-                proc.start()?;
+                match proc.start() {
+                    Ok(()) => {}
+                    Err(err) => {
+                        eprintln!("could not start process {proc_name}: {err}");
+                    }
+                };
             }
         }
         Ok(())
     }
 
-    pub fn run(&mut self) -> std::io::Result<()> {
-        self.init()?;
+    pub fn run(&mut self) -> Result<(), DaemonError> {
+        match self.init() {
+            Ok(()) => {}
+            Err(err) => {
+                eprintln!("could not initialize processes: {err}");
+            }
+        }
         // Poll for client events and run checks to see if some processes need to be restarted/killed, etc.
         loop {
             if let Some(data) = self.client_stream.poll() {
