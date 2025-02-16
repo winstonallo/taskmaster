@@ -1,9 +1,10 @@
-use std::{collections::HashMap, io::Read, os::unix::net::UnixListener};
+use core::time;
+use std::{collections::HashMap, io::Read, os::unix::net::UnixListener, time::Instant};
 
 use error::DaemonError;
 
-use super::{proc, proc::ProcessError};
-use crate::conf;
+use super::proc::{self, Process, ProcessError, ProcessStatus};
+use crate::conf::{self};
 mod error;
 
 trait ClientStream {
@@ -65,7 +66,7 @@ impl<'tm> Daemon<'tm> {
         let procs: HashMap<String, proc::Process<'tm>> = conf
             .processes()
             .iter()
-            .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc)))
+            .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc, &proc_name)))
             .collect::<HashMap<String, proc::Process<'tm>>>();
 
         let client_stream = UnixSocketStream::new(conf.socketpath()).expect("could not create client stream for communication with daemon");
@@ -76,19 +77,37 @@ impl<'tm> Daemon<'tm> {
         }
     }
 
-    pub fn get_processes(&self) -> &HashMap<String, proc::Process<'tm>> {
+    #[allow(unused)]
+    pub fn processes(&self) -> &HashMap<String, proc::Process<'tm>> {
         &self.processes
     }
 
+    fn start_process(proc: &mut Process) {
+        match proc.start() {
+            Ok(()) => {
+                assert!(proc.running());
+                println!(
+                    "process '{}', PID: {}, command: '{}' spawned",
+                    proc.name(),
+                    proc.id().unwrap(),
+                    format!("{}", {
+                        let mut cmd = vec![proc.config().cmd().path()];
+                        cmd.extend(proc.config().args().iter().map(|s| s.as_str()));
+                        cmd.join(" ")
+                    }),
+                )
+            }
+            Err(err) => {
+                assert!(!proc.running());
+                eprintln!("could not start process {}: {}", proc.name(), err);
+            }
+        };
+    }
+
     fn init(&mut self) -> Result<(), ProcessError> {
-        for (proc_name, proc) in &mut self.processes {
+        for proc in self.processes.values_mut() {
             if proc.config().autostart() {
-                match proc.start() {
-                    Ok(()) => {}
-                    Err(err) => {
-                        eprintln!("could not start process {proc_name}: {err}");
-                    }
-                };
+                Daemon::start_process(proc);
             }
         }
         Ok(())
@@ -105,6 +124,30 @@ impl<'tm> Daemon<'tm> {
         loop {
             if let Some(data) = self.client_stream.poll() {
                 println!("received data: {:?}", String::from_utf8(data));
+            }
+            for proc in self.processes.values_mut() {
+                if proc.failed() {
+                    continue;
+                }
+
+                let exited = match proc.exited() {
+                    Ok(status) => status,
+                    Err(err) => {
+                        eprintln!("{err}");
+                        continue;
+                    }
+                };
+
+                match exited {
+                    ProcessStatus::Exited(code) => {}
+                    ProcessStatus::NotStarted => {}
+                    ProcessStatus::Running => {}
+                    ProcessStatus::Restarting(in_secs) => {
+                        if in_secs == 0 {
+                            let _ = proc.start().map_err(|err| println!("could not start process: {err}"));
+                        }
+                    }
+                }
             }
         }
     }

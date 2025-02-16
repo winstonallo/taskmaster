@@ -55,10 +55,13 @@ pub struct ProcessConfig {
     autorestart: types::AutoRestart,
 
     #[serde(default = "defaults::dflt_exitcodes")]
-    exitcodes: Vec<u8>,
+    exitcodes: Vec<i32>,
 
     #[serde(default = "defaults::dflt_startretries")]
     startretries: u8,
+
+    #[serde(default = "defaults::dflt_backoff")]
+    backoff: u8,
 
     #[serde(default = "defaults::dflt_startttime")]
     starttime: u16,
@@ -108,12 +111,16 @@ impl ProcessConfig {
         &self.autorestart
     }
 
-    pub fn exitcodes(&self) -> &Vec<u8> {
+    pub fn exitcodes(&self) -> &Vec<i32> {
         &self.exitcodes
     }
 
     pub fn startretries(&self) -> u8 {
         self.startretries
+    }
+
+    pub fn backoff(&self) -> u8 {
+        self.backoff
     }
 
     pub fn starttime(&self) -> u16 {
@@ -160,6 +167,7 @@ impl ProcessConfig {
             autorestart: types::AutoRestart::test_autorestart(),
             exitcodes: vec![0],
             startretries: 1,
+            backoff: 5,
             starttime: 5,
             stopsignals: vec![types::StopSignal::SigTerm],
             stoptime: 5,

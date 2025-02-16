@@ -14,6 +14,5 @@ fn main() {
     };
 
     let mut daemon = Daemon::from_config(&conf);
-    println!("{:?}", daemon.get_processes());
     let _ = daemon.run();
 }

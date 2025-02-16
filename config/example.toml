@@ -10,11 +10,11 @@ socketpath = "/tmp/.taskmaster.sock"
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/bin/ls"
+cmd = "/home/winstonallo/mastery/taskmaster/writetofile.sh"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
-args = ["-la"]
+args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
@@ -38,10 +38,12 @@ autostart = true
 # - "on-failure[:max-retries]": Try to restart the process 
 #   <max-retries> times when it exits unexpectedly. Maximum value for 
 #   max-retries is 255.
-# - "always": Always restart when exiting, no matter the status.
+# - "always": Always restart when exiting, no matter the status, except 
+#   when stopped by one of the configured stopsignals.
 autorestart = "on-failure[:5]"
 
 # List of exit codes to be interpreted as success.
+# Must be in i32 range.
 # Defaults to [0].
 exitcodes = [0, 2]
 
@@ -49,8 +51,12 @@ exitcodes = [0, 2]
 # Defaults to 3, max 255.
 startretries = 3
 
-# Time (in seconds) given for the program to startup - if the program 
-# does not start within this time, it will be considered a failure.
+# Time (in seconds) taskmaster will wait between 2 startretries.
+# Defaults to 5, max 255.
+backoff = 3
+
+# Healthcheck: if the process runs for this long (in seconds), it is considered 
+# successfully started.
 # Defaults to 5, max 65536.
 starttime = 5
 
