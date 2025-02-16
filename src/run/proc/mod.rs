@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     process::{Child, Command},
+    time,
 };
 
 use crate::conf::{self, proc::ProcessConfig};
@@ -12,11 +13,19 @@ pub struct Process<'tm> {
     id: Option<u32>,
     child: Option<Child>,
     conf: &'tm ProcessConfig,
+    last_startup: Option<time::Instant>,
+    startup_tries: u8,
 }
 
 impl<'tm> Process<'tm> {
     pub fn from_process_config(conf: &'tm conf::proc::ProcessConfig) -> Self {
-        Self { id: None, child: None, conf }
+        Self {
+            id: None,
+            child: None,
+            conf,
+            last_startup: None,
+            startup_tries: 0,
+        }
     }
 }
 
@@ -34,6 +43,10 @@ impl<'tm> Process<'tm> {
         self.conf
     }
 
+    pub fn last_startup(&self) -> Option<time::Instant> {
+        self.last_startup
+    }
+
     pub fn start(&mut self) -> std::io::Result<()> {
         if self.running() {
             return Ok(());
@@ -46,12 +59,18 @@ impl<'tm> Process<'tm> {
         let stdout_file = File::create(self.conf.stdout())?;
         let stderr_file = File::create(self.conf.stderr())?;
 
-        self.child = match Command::new(self.conf.cmd().path()).stdout(stdout_file).stderr(stderr_file).spawn() {
+        self.child = match Command::new(self.conf.cmd().path())
+            .stdout(stdout_file)
+            .stderr(stderr_file)
+            .current_dir(self.conf.workingdir().path())
+            .spawn()
+        {
             Ok(child) => Some(child),
             Err(err) => return Err(err),
         };
 
         self.id = Some(self.child.as_ref().unwrap().id());
+        self.last_startup = Some(time::Instant::now());
 
         println!("process id: {}", self.id.unwrap());
 
@@ -80,6 +99,8 @@ mod tests {
             id: None,
             child: None,
             conf: &conf::proc::ProcessConfig::testconfig(),
+            last_startup: None,
+            startup_tries: 0,
         };
 
         assert!(!proc.running())
@@ -91,6 +112,8 @@ mod tests {
             id: Some(1),
             child: Some(Command::new("/bin/ls").spawn().expect("could not run command")),
             conf: &conf::proc::ProcessConfig::testconfig(),
+            last_startup: None,
+            startup_tries: 0,
         };
 
         assert!(proc.running())
