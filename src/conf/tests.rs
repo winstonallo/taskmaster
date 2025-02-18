@@ -193,7 +193,7 @@ mod from_str {
 
     #[test]
     fn exitcodes_out_of_range() {
-        let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nexitcodes = [256]";
+        let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nexitcodes = [2147483649]";
         assert!(Config::from_str(&conf_str).is_err());
     }
 
