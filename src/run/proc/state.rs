@@ -3,7 +3,7 @@ use std::time;
 #[derive(Debug)]
 pub enum ProcessState {
     Idle,
-    Booting,
+    HealthCheck,
     Running,
     Failed,
     /// Retrying at `retry_at`.
