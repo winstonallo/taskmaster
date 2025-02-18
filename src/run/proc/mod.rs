@@ -9,10 +9,10 @@ use std::{
 use crate::conf::{self, proc::ProcessConfig};
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
-use state::ProcessState;
+pub use state::ProcessState;
 
 mod error;
-mod state;
+pub mod state;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -47,7 +47,7 @@ extern "C" fn kill(_signum: c_int) {
 #[allow(unused)]
 impl<'tm> Process<'tm> {
     pub fn state(&self) -> ProcessState {
-        *self.state.lock().expect("something went terribly wrong")
+        self.state.lock().expect("something went terribly wrong").clone()
     }
 
     pub fn update_state(&mut self, new_state: ProcessState) {
@@ -213,7 +213,7 @@ mod tests {
             startup_tries: 0,
             state: Mutex::new(ProcessState::Idle),
         };
-        proc.update_state(ProcessState::HealthCheck);
-        assert_eq!(proc.state(), ProcessState::HealthCheck)
+        proc.update_state(ProcessState::Running);
+        assert_eq!(proc.state(), ProcessState::Running)
     }
 }

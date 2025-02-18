@@ -1,12 +1,12 @@
 use std::time;
 
 #[allow(unused)]
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum ProcessState {
     Idle,
-    HealthCheck,
+    HealthCheck(time::Instant),
     Running,
-    Failed,
+    Failed(Box<ProcessState>),
     /// Retrying at `retry_at`.
     WaitingForRetry(time::Instant),
     Completed,

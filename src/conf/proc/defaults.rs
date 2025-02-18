@@ -22,8 +22,8 @@ pub fn dflt_autorestart() -> types::AutoRestart {
     types::AutoRestart::default()
 }
 
-pub fn dflt_exitcodes() -> Vec<u8> {
-    vec![0u8]
+pub fn dflt_exitcodes() -> Vec<i32> {
+    vec![0i32]
 }
 
 pub fn dflt_startretries() -> u8 {

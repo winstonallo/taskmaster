@@ -55,7 +55,7 @@ pub struct ProcessConfig {
     autorestart: types::AutoRestart,
 
     #[serde(default = "defaults::dflt_exitcodes")]
-    exitcodes: Vec<u8>,
+    exitcodes: Vec<i32>,
 
     #[serde(default = "defaults::dflt_startretries")]
     startretries: u8,
@@ -108,7 +108,7 @@ impl ProcessConfig {
         &self.autorestart
     }
 
-    pub fn exitcodes(&self) -> &Vec<u8> {
+    pub fn exitcodes(&self) -> &Vec<i32> {
         &self.exitcodes
     }
 
