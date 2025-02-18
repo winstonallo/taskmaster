@@ -1,9 +1,14 @@
-use std::{collections::HashMap, io::Read, os::unix::net::UnixListener};
+use std::{
+    collections::HashMap,
+    fmt::Write,
+    io::{stderr, stdout, Read},
+    os::unix::net::UnixListener,
+};
 
 use error::DaemonError;
 
 use super::proc;
-use crate::conf;
+use crate::{conf, log::Logger};
 mod error;
 mod monitor;
 
@@ -56,12 +61,13 @@ impl ClientStream for UnixSocketStream {
     }
 }
 
-pub struct Daemon<'tm> {
+pub struct Daemon<'tm, W: Write + Send> {
     processes: HashMap<String, proc::Process<'tm>>,
+    logger: Logger<W>,
     client_stream: Box<dyn ClientStream>,
 }
 
-impl<'tm> Daemon<'tm> {
+impl<'tm, W: Write + Send> Daemon<'tm, W> {
     pub fn from_config(conf: &'tm conf::Config) -> Self {
         let procs: HashMap<String, proc::Process<'tm>> = conf
             .processes()
@@ -73,6 +79,7 @@ impl<'tm> Daemon<'tm> {
 
         Self {
             processes: procs,
+            logger: Logger::new(stdout(), stderr()),
             client_stream: Box::new(client_stream),
         }
     }

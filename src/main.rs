@@ -2,6 +2,7 @@ use conf::Config;
 use run::daemon::Daemon;
 
 mod conf;
+mod log;
 mod run;
 
 fn main() {
