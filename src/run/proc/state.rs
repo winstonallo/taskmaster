@@ -10,4 +10,5 @@ pub enum ProcessState {
     /// Retrying at `retry_at`.
     WaitingForRetry(time::Instant),
     Completed,
+    Stopped,
 }

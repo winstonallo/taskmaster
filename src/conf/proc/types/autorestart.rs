@@ -21,6 +21,13 @@ impl AutoRestart {
         self.max_retries
     }
 
+    pub fn decrement_max_retries(&mut self) {
+        assert_eq!(self.mode, "on-failure");
+
+        let max_retries = self.max_retries.take().unwrap();
+        self.max_retries = Some(max_retries.saturating_sub(1));
+    }
+
     #[cfg(test)]
     pub fn test_autorestart() -> Self {
         Self {

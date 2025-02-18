@@ -1,9 +1,6 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
-use crate::run::{
-    self,
-    proc::{Process, ProcessState},
-};
+use crate::run::proc::{Process, ProcessState};
 
 fn idle(proc: &mut Process) {
     if proc.config().autostart() {
@@ -33,15 +30,57 @@ fn running(proc: &mut Process) {
     }
 }
 
-fn failed(proc: &mut Process) {}
+fn failed(proc: &mut Process, prev_state: ProcessState) {
+    match prev_state {
+        ProcessState::Running => match proc.config().autorestart().mode() {
+            "always" => proc.update_state(ProcessState::HealthCheck(Instant::now())),
+            "on-failure" => {
+                if proc.runtime_failures() == proc.config().autorestart().max_retries().expect("something went very wrong") {
+                    proc.update_state(ProcessState::Stopped);
+                } else {
+                    proc.increment_runtime_failures();
+                    proc.update_state(ProcessState::WaitingForRetry(
+                        Instant::now() + Duration::from_secs(proc.config().backoff() as u64),
+                    ));
+                }
+            }
+            _ => {}
+        },
+        ProcessState::HealthCheck(_) => {
+            if proc.startup_failures() == proc.config().startretries() {
+                proc.update_state(ProcessState::Stopped);
+            } else {
+                proc.update_state(ProcessState::WaitingForRetry(
+                    Instant::now() + Duration::from_secs(proc.config().backoff() as u64),
+                ));
+            }
+        }
+        _ => {}
+    }
+}
+
+fn waiting_for_retry(proc: &mut Process, retry_at: Instant) {
+    if retry_at > Instant::now() {
+        return;
+    }
+
+    proc.update_state(ProcessState::HealthCheck(Instant::now()));
+}
+
+fn completed(proc: &mut Process) {
+    if proc.config().autorestart().mode() == "always" {
+        proc.update_state(ProcessState::HealthCheck(Instant::now()));
+    }
+}
 
 pub fn monitor_state(proc: &mut Process) {
     match proc.state() {
         ProcessState::Idle => idle(proc),
         ProcessState::HealthCheck(started_at) => healthcheck(proc, started_at),
         ProcessState::Running => running(proc),
-        ProcessState::Failed(previous_state) => {}
-        ProcessState::WaitingForRetry(retry_at) => {}
-        ProcessState::Completed => {}
+        ProcessState::Failed(prev_state) => failed(proc, *prev_state),
+        ProcessState::WaitingForRetry(retry_at) => waiting_for_retry(proc, retry_at),
+        ProcessState::Completed => completed(proc),
+        ProcessState::Stopped => {}
     }
 }

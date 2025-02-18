@@ -54,6 +54,9 @@ pub struct ProcessConfig {
     #[serde(default = "defaults::dflt_autorestart")]
     autorestart: types::AutoRestart,
 
+    #[serde(default = "defaults::dflt_backoff")]
+    backoff: u8,
+
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
@@ -108,12 +111,28 @@ impl ProcessConfig {
         &self.autorestart
     }
 
+    pub fn backoff(&self) -> u8 {
+        assert_eq!(self.autorestart.mode(), "on-failure");
+
+        self.backoff
+    }
+
+    pub fn decrement_max_retries(&mut self) {
+        assert_eq!(self.autorestart().mode(), "on-failure");
+
+        self.autorestart.decrement_max_retries();
+    }
+
     pub fn exitcodes(&self) -> &Vec<i32> {
         &self.exitcodes
     }
 
     pub fn startretries(&self) -> u8 {
         self.startretries
+    }
+
+    pub fn decrement_startretries(&mut self) {
+        self.startretries.saturating_sub(1);
     }
 
     pub fn starttime(&self) -> u16 {
@@ -160,6 +179,7 @@ impl ProcessConfig {
             workingdir: types::AccessibleDirectory::default(),
             autostart: true,
             autorestart: types::AutoRestart::test_autorestart(),
+            backoff: 5,
             exitcodes: vec![0],
             startretries: 1,
             starttime: 5,

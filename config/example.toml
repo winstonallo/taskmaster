@@ -41,6 +41,10 @@ autostart = true
 # - "always": Always restart when exiting, no matter the status.
 autorestart = "on-failure[:5]"
 
+# Backoff time (in seconds) for retries.
+# Defaults to 5, max 255.
+backoff = 3
+
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
 exitcodes = [0, 2]

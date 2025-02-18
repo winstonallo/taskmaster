@@ -19,20 +19,22 @@ pub mod state;
 pub struct Process<'tm> {
     id: Option<u32>,
     child: Option<Child>,
-    conf: &'tm ProcessConfig,
+    conf: &'tm mut ProcessConfig,
     last_startup: Option<time::Instant>,
-    startup_tries: u8,
+    startup_failures: u8,
+    runtime_failures: u8,
     state: Mutex<ProcessState>,
 }
 
 impl<'tm> Process<'tm> {
-    pub fn from_process_config(conf: &'tm conf::proc::ProcessConfig) -> Self {
+    pub fn from_process_config(conf: &'tm mut conf::proc::ProcessConfig) -> Self {
         Self {
             id: None,
             child: None,
             conf,
             last_startup: None,
-            startup_tries: 0,
+            startup_failures: 0,
+            runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
         }
     }
@@ -63,7 +65,7 @@ impl<'tm> Process<'tm> {
         self.id.is_some() && self.child.is_some()
     }
 
-    pub fn config(&self) -> &'tm ProcessConfig {
+    pub fn config(&self) -> &ProcessConfig {
         self.conf
     }
 
@@ -71,9 +73,25 @@ impl<'tm> Process<'tm> {
         self.last_startup
     }
 
+    pub fn runtime_failures(&self) -> u8 {
+        self.runtime_failures
+    }
+
+    pub fn increment_runtime_failures(&mut self) {
+        self.runtime_failures.saturating_add(1);
+    }
+
+    pub fn startup_failures(&self) -> u8 {
+        self.startup_failures
+    }
+
+    pub fn increment_startup_failures(&mut self) {
+        self.startup_failures.saturating_add(1);
+    }
+
     pub fn start(&mut self) -> Result<(), ProcessError> {
-        if self.startup_tries == self.config().startretries() {
-            return Err(ProcessError::MaxRetriesReached(format!("tried {} times", self.startup_tries)));
+        if self.startup_failures == self.config().startretries() {
+            return Err(ProcessError::MaxRetriesReached(format!("tried {} times", self.startup_failures)));
         }
         if self.running() {
             return Ok(());
@@ -105,7 +123,7 @@ impl<'tm> Process<'tm> {
         } {
             Ok(child) => Some(child),
             Err(err) => {
-                self.startup_tries += 1;
+                self.startup_failures += 1;
                 return Err(ProcessError::CouldNotStartUp(err.to_string()));
             }
         };
@@ -167,9 +185,10 @@ mod tests {
         let proc = Process {
             id: None,
             child: None,
-            conf: &conf::proc::ProcessConfig::testconfig(),
+            conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
-            startup_tries: 0,
+            startup_failures: 0,
+            runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
         };
 
@@ -181,9 +200,10 @@ mod tests {
         let proc = Process {
             id: Some(1),
             child: Some(Command::new("/bin/ls").stdout(Stdio::null()).spawn().expect("could not run command")),
-            conf: &conf::proc::ProcessConfig::testconfig(),
+            conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
-            startup_tries: 0,
+            startup_failures: 0,
+            runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
         };
 
@@ -195,9 +215,10 @@ mod tests {
         let proc = Process {
             id: Some(1),
             child: None,
-            conf: &conf::proc::ProcessConfig::testconfig(),
+            conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
-            startup_tries: 0,
+            startup_failures: 0,
+            runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
         };
         assert_eq!(proc.state(), ProcessState::Idle)
@@ -208,9 +229,10 @@ mod tests {
         let mut proc = Process {
             id: Some(1),
             child: None,
-            conf: &conf::proc::ProcessConfig::testconfig(),
+            conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
-            startup_tries: 0,
+            startup_failures: 0,
+            runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
         };
         proc.update_state(ProcessState::Running);
