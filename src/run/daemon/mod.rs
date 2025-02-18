@@ -66,7 +66,7 @@ impl<'tm> Daemon<'tm> {
         let procs: HashMap<String, proc::Process<'tm>> = conf
             .processes()
             .iter()
-            .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc)))
+            .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc, &proc_name)))
             .collect::<HashMap<String, proc::Process<'tm>>>();
 
         let client_stream = UnixSocketStream::new(conf.socketpath()).expect("could not create client stream for communication with daemon");
@@ -96,16 +96,20 @@ impl<'tm> Daemon<'tm> {
     }
 
     pub fn run(&mut self) -> Result<(), DaemonError> {
-        match self.init() {
-            Ok(()) => {}
-            Err(err) => {
-                eprintln!("could not initialize processes: {err}");
-            }
-        }
+        // match self.init() {
+        //     Ok(()) => {}
+        //     Err(err) => {
+        //         eprintln!("could not initialize processes: {err}");
+        //     }
+        // }
         // Poll for client events and run checks to see if some processes need to be restarted/killed, etc.
         loop {
             if let Some(data) = self.client_stream.poll() {
                 println!("received data: {:?}", String::from_utf8(data));
+            }
+
+            for proc in self.processes.values_mut() {
+                monitor::monitor_state(proc);
             }
         }
     }

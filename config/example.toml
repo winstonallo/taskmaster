@@ -10,11 +10,11 @@ socketpath = "/tmp/.taskmaster.sock"
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/bin/ls"
+cmd = "/home/winstonallo/mastery/taskmaster/writetofile.sh"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
-args = ["-la"]
+args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
@@ -43,7 +43,7 @@ autorestart = "on-failure[:5]"
 
 # Backoff time (in seconds) for retries.
 # Defaults to 5, max 255.
-backoff = 3
+backoff = 5
 
 # List of exit codes to be interpreted as success.
 # Defaults to [0].

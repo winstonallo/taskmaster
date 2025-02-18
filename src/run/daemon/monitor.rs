@@ -3,8 +3,16 @@ use std::time::{Duration, Instant};
 use crate::run::proc::{Process, ProcessState};
 
 fn idle(proc: &mut Process) {
-    if proc.config().autostart() {
-        // start process
+    if !proc.config().autostart() {
+        return;
+    }
+
+    match proc.start() {
+        Ok(()) => proc.update_state(ProcessState::HealthCheck(Instant::now())),
+        Err(err) => {
+            eprintln!("failed to start process {}: {}", proc.name(), err);
+            proc.update_state(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))));
+        }
     }
 }
 
@@ -64,12 +72,26 @@ fn waiting_for_retry(proc: &mut Process, retry_at: Instant) {
         return;
     }
 
-    proc.update_state(ProcessState::HealthCheck(Instant::now()));
+    match proc.start() {
+        Ok(()) => proc.update_state(ProcessState::HealthCheck(Instant::now())),
+        Err(err) => {
+            eprintln!("failed to start process {}: {}", proc.name(), err);
+            proc.update_state(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))));
+        }
+    }
 }
 
 fn completed(proc: &mut Process) {
-    if proc.config().autorestart().mode() == "always" {
-        proc.update_state(ProcessState::HealthCheck(Instant::now()));
+    if proc.config().autorestart().mode() != "always" {
+        return;
+    }
+
+    match proc.start() {
+        Ok(()) => proc.update_state(ProcessState::HealthCheck(Instant::now())),
+        Err(err) => {
+            eprintln!("failed to start process {}: {}", proc.name(), err);
+            proc.update_state(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))));
+        }
     }
 }
 

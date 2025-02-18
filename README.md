@@ -14,11 +14,15 @@ The first challenge I faced was managing the state of the processes efficiently.
 ```rust
 pub enum ProcessState {
     Idle,
-    HealthCheck,
+    // Started attempt at <...>
+    HealthCheck(time::Instant),
     Running,
-    Failed,
+    // Previous state: <...>
+    Failed(Box<ProcessState>),
+    // Retry at <...>
     WaitingForRetry(time::Instant),
     Completed,
+    Stopped,
 }
 ```
 ---

@@ -18,8 +18,9 @@ pub mod state;
 #[derive(Debug)]
 pub struct Process<'tm> {
     id: Option<u32>,
+    name: String,
     child: Option<Child>,
-    conf: &'tm mut ProcessConfig,
+    conf: &'tm ProcessConfig,
     last_startup: Option<time::Instant>,
     startup_failures: u8,
     runtime_failures: u8,
@@ -27,9 +28,10 @@ pub struct Process<'tm> {
 }
 
 impl<'tm> Process<'tm> {
-    pub fn from_process_config(conf: &'tm mut conf::proc::ProcessConfig) -> Self {
+    pub fn from_process_config(conf: &'tm conf::proc::ProcessConfig, proc_name: &str) -> Self {
         Self {
             id: None,
+            name: proc_name.to_string(),
             child: None,
             conf,
             last_startup: None,
@@ -61,6 +63,10 @@ impl<'tm> Process<'tm> {
         self.id
     }
 
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn running(&self) -> bool {
         self.id.is_some() && self.child.is_some()
     }
@@ -90,12 +96,7 @@ impl<'tm> Process<'tm> {
     }
 
     pub fn start(&mut self) -> Result<(), ProcessError> {
-        if self.startup_failures == self.config().startretries() {
-            return Err(ProcessError::MaxRetriesReached(format!("tried {} times", self.startup_failures)));
-        }
-        if self.running() {
-            return Ok(());
-        }
+        assert_ne!(self.state(), ProcessState::Running);
 
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
@@ -184,6 +185,7 @@ mod tests {
     fn running_no_id() {
         let proc = Process {
             id: None,
+            name: String::from(""),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
@@ -199,6 +201,7 @@ mod tests {
     fn running_has_id() {
         let proc = Process {
             id: Some(1),
+            name: String::from(""),
             child: Some(Command::new("/bin/ls").stdout(Stdio::null()).spawn().expect("could not run command")),
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
@@ -214,6 +217,7 @@ mod tests {
     fn state() {
         let proc = Process {
             id: Some(1),
+            name: String::from(""),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
@@ -228,6 +232,7 @@ mod tests {
     fn update_state() {
         let mut proc = Process {
             id: Some(1),
+            name: String::from(""),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
