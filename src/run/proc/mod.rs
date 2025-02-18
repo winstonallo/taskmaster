@@ -1,6 +1,7 @@
 use std::{
     fs::File,
     process::{Child, Command},
+    sync::Mutex,
     time,
 };
 
@@ -20,7 +21,7 @@ pub struct Process<'tm> {
     conf: &'tm ProcessConfig,
     last_startup: Option<time::Instant>,
     startup_tries: u8,
-    state: ProcessState,
+    state: Mutex<ProcessState>,
 }
 
 impl<'tm> Process<'tm> {
@@ -31,13 +32,22 @@ impl<'tm> Process<'tm> {
             conf,
             last_startup: None,
             startup_tries: 0,
-            state: ProcessState::Idle,
+            state: Mutex::new(ProcessState::Idle),
         }
     }
 }
 
 #[allow(unused)]
 impl<'tm> Process<'tm> {
+    pub fn state(&self) -> ProcessState {
+        *self.state.lock().expect("something went terribly wrong")
+    }
+
+    pub fn update_state(&mut self, new_state: ProcessState) {
+        let mut handle = self.state.lock().expect("something went terribly wrong");
+        *handle = new_state;
+    }
+
     pub fn id(&self) -> Option<u32> {
         self.id
     }
@@ -117,7 +127,7 @@ mod tests {
             conf: &conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
             startup_tries: 0,
-            state: ProcessState::Idle,
+            state: Mutex::new(ProcessState::Idle),
         };
 
         assert!(!proc.running())
@@ -131,9 +141,36 @@ mod tests {
             conf: &conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
             startup_tries: 0,
-            state: ProcessState::Idle,
+            state: Mutex::new(ProcessState::Idle),
         };
 
         assert!(proc.running())
+    }
+
+    #[test]
+    fn state() {
+        let proc = Process {
+            id: Some(1),
+            child: None,
+            conf: &conf::proc::ProcessConfig::testconfig(),
+            last_startup: None,
+            startup_tries: 0,
+            state: Mutex::new(ProcessState::Idle),
+        };
+        assert_eq!(proc.state(), ProcessState::Idle)
+    }
+
+    #[test]
+    fn update_state() {
+        let mut proc = Process {
+            id: Some(1),
+            child: None,
+            conf: &conf::proc::ProcessConfig::testconfig(),
+            last_startup: None,
+            startup_tries: 0,
+            state: Mutex::new(ProcessState::Idle),
+        };
+        proc.update_state(ProcessState::HealthCheck);
+        assert_eq!(proc.state(), ProcessState::HealthCheck)
     }
 }

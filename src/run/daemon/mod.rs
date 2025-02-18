@@ -5,6 +5,7 @@ use error::DaemonError;
 use super::{proc, proc::ProcessError};
 use crate::conf;
 mod error;
+mod monitor;
 
 trait ClientStream {
     fn poll(&self) -> Option<Vec<u8>>;

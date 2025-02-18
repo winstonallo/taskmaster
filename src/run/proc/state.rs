@@ -1,6 +1,6 @@
 use std::time;
 
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ProcessState {
     Idle,
     HealthCheck,
