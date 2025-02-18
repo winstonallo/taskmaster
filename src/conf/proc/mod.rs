@@ -150,6 +150,8 @@ impl ProcessConfig {
 
     #[cfg(test)]
     pub fn testconfig() -> Self {
+        use libc::SIGTERM;
+
         Self {
             cmd: types::ExecutableFile::default(),
             args: defaults::dflt_args(),
@@ -161,7 +163,7 @@ impl ProcessConfig {
             exitcodes: vec![0],
             startretries: 1,
             starttime: 5,
-            stopsignals: vec![types::StopSignal::SigTerm],
+            stopsignals: vec![types::StopSignal(SIGTERM)],
             stoptime: 5,
             stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
             stderr: types::WritableFile::from_path("/tmp/taskmaster_test.stderr"),

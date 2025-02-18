@@ -119,9 +119,7 @@ impl<'tm> Process<'tm> {
     }
 
     pub fn exited(&mut self) -> Option<i32> {
-        if self.child.is_none() {
-            return None;
-        }
+        self.child.as_ref()?;
 
         match self.child.as_mut().unwrap().try_wait() {
             Ok(Some(status)) => match status.code() {

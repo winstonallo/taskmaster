@@ -1,3 +1,5 @@
+use libc::SIGTERM;
+
 use super::types;
 
 pub fn dflt_args() -> Vec<String> {
@@ -33,7 +35,7 @@ pub fn dflt_startttime() -> u16 {
 }
 
 pub fn dflt_stopsignals() -> Vec<types::StopSignal> {
-    vec![types::StopSignal::SigTerm]
+    vec![types::StopSignal(SIGTERM)]
 }
 
 pub fn dflt_stoptime() -> u8 {
