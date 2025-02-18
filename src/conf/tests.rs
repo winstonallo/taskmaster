@@ -1,5 +1,7 @@
 #[cfg(test)]
 mod from_str {
+    use libc::SIGTERM;
+
     use crate::conf::{
         proc::{defaults, types},
         Config,
@@ -191,7 +193,7 @@ mod from_str {
 
     #[test]
     fn exitcodes_out_of_range() {
-        let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nexitcodes = [256]";
+        let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nexitcodes = [2147483649]";
         assert!(Config::from_str(&conf_str).is_err());
     }
 
@@ -254,7 +256,7 @@ mod from_str {
         let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
         assert_eq!(
             *Config::from_str(&conf_str).expect("could not parse config").processes()["nginx"].stopsignals(),
-            vec![types::StopSignal::SigTerm]
+            vec![types::StopSignal(SIGTERM)]
         );
     }
 
@@ -362,6 +364,8 @@ mod from_str {
 
 #[cfg(test)]
 mod from_file {
+    use libc::{SIGTERM, SIGUSR1};
+
     use crate::conf::{
         proc::types::{AccessibleDirectory, StopSignal},
         Config,
@@ -393,7 +397,7 @@ mod from_file {
         assert_eq!(conf.processes()["nginx"].exitcodes(), &vec![0, 2]);
         assert_eq!(conf.processes()["nginx"].startretries(), 3);
         assert_eq!(conf.processes()["nginx"].starttime(), 5);
-        assert_eq!(conf.processes()["nginx"].stopsignals(), &vec![StopSignal::SigTerm, StopSignal::SigUsr1]);
+        assert_eq!(conf.processes()["nginx"].stopsignals(), &vec![StopSignal(SIGTERM), StopSignal(SIGUSR1)]);
         assert_eq!(conf.processes()["nginx"].stoptime(), 5);
         assert_eq!(conf.processes()["nginx"].stdout(), String::from("/tmp/nginx.stdout"));
         assert_eq!(conf.processes()["nginx"].stderr(), String::from("/tmp/nginx.stderr"));

@@ -2,9 +2,10 @@ use std::{collections::HashMap, io::Read, os::unix::net::UnixListener};
 
 use error::DaemonError;
 
-use super::{proc, proc::ProcessError};
+use super::proc;
 use crate::conf;
 mod error;
+mod monitor;
 
 trait ClientStream {
     fn poll(&self) -> Option<Vec<u8>>;
@@ -65,7 +66,7 @@ impl<'tm> Daemon<'tm> {
         let procs: HashMap<String, proc::Process<'tm>> = conf
             .processes()
             .iter()
-            .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc)))
+            .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc, proc_name)))
             .collect::<HashMap<String, proc::Process<'tm>>>();
 
         let client_stream = UnixSocketStream::new(conf.socketpath()).expect("could not create client stream for communication with daemon");
@@ -80,31 +81,14 @@ impl<'tm> Daemon<'tm> {
         &self.processes
     }
 
-    fn init(&mut self) -> Result<(), ProcessError> {
-        for (proc_name, proc) in &mut self.processes {
-            if proc.config().autostart() {
-                match proc.start() {
-                    Ok(()) => {}
-                    Err(err) => {
-                        eprintln!("could not start process {proc_name}: {err}");
-                    }
-                };
-            }
-        }
-        Ok(())
-    }
-
     pub fn run(&mut self) -> Result<(), DaemonError> {
-        match self.init() {
-            Ok(()) => {}
-            Err(err) => {
-                eprintln!("could not initialize processes: {err}");
-            }
-        }
-        // Poll for client events and run checks to see if some processes need to be restarted/killed, etc.
         loop {
             if let Some(data) = self.client_stream.poll() {
                 println!("received data: {:?}", String::from_utf8(data));
+            }
+
+            for proc in self.processes.values_mut() {
+                monitor::monitor_state(proc);
             }
         }
     }

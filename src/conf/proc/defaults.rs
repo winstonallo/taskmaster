@@ -1,3 +1,5 @@
+use libc::SIGTERM;
+
 use super::types;
 
 pub fn dflt_args() -> Vec<String> {
@@ -20,8 +22,12 @@ pub fn dflt_autorestart() -> types::AutoRestart {
     types::AutoRestart::default()
 }
 
-pub fn dflt_exitcodes() -> Vec<u8> {
-    vec![0u8]
+pub fn dflt_backoff() -> u8 {
+    5
+}
+
+pub fn dflt_exitcodes() -> Vec<i32> {
+    vec![0i32]
 }
 
 pub fn dflt_startretries() -> u8 {
@@ -33,7 +39,7 @@ pub fn dflt_startttime() -> u16 {
 }
 
 pub fn dflt_stopsignals() -> Vec<types::StopSignal> {
-    vec![types::StopSignal::SigTerm]
+    vec![types::StopSignal(SIGTERM)]
 }
 
 pub fn dflt_stoptime() -> u8 {
