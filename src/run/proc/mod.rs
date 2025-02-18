@@ -7,8 +7,10 @@ use std::{
 use crate::conf::{self, proc::ProcessConfig};
 pub use error::ProcessError;
 use libc::umask;
+use state::ProcessState;
 
 mod error;
+mod state;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -18,6 +20,7 @@ pub struct Process<'tm> {
     conf: &'tm ProcessConfig,
     last_startup: Option<time::Instant>,
     startup_tries: u8,
+    state: ProcessState,
 }
 
 impl<'tm> Process<'tm> {
@@ -28,6 +31,7 @@ impl<'tm> Process<'tm> {
             conf,
             last_startup: None,
             startup_tries: 0,
+            state: ProcessState::Idle,
         }
     }
 }
@@ -113,6 +117,7 @@ mod tests {
             conf: &conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
             startup_tries: 0,
+            state: ProcessState::Idle,
         };
 
         assert!(!proc.running())
@@ -126,6 +131,7 @@ mod tests {
             conf: &conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
             startup_tries: 0,
+            state: ProcessState::Idle,
         };
 
         assert!(proc.running())
