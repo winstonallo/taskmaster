@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    os::unix::process::ExitStatusExt,
+    os::unix::process::{CommandExt, ExitStatusExt},
     process::{Child, Command},
     sync::Mutex,
     time,
@@ -8,7 +8,7 @@ use std::{
 
 use crate::conf::{self, proc::ProcessConfig};
 pub use error::ProcessError;
-use libc::umask;
+use libc::{c_int, signal, umask};
 use state::ProcessState;
 
 mod error;
@@ -35,6 +35,12 @@ impl<'tm> Process<'tm> {
             startup_tries: 0,
             state: Mutex::new(ProcessState::Idle),
         }
+    }
+}
+
+extern "C" fn kill(_signum: c_int) {
+    unsafe {
+        libc::_exit(1);
     }
 }
 
@@ -73,20 +79,30 @@ impl<'tm> Process<'tm> {
             return Ok(());
         }
 
-        let current_umask = unsafe { umask(0) };
-
-        unsafe { umask(self.conf.umask()) };
-
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
 
-        self.child = match Command::new(self.conf.cmd().path())
-            .stdout(stdout_file)
-            .stderr(stderr_file)
-            .args(self.conf.args())
-            .current_dir(self.conf.workingdir().path())
-            .spawn()
-        {
+        let cmd_path = self.conf.cmd().path().to_owned();
+        let args = self.conf.args().to_owned();
+        let working_dir = self.conf.workingdir().path().to_owned();
+        let stop_signals = self.config().stopsignals().to_owned();
+        let umask_val = self.conf.umask();
+
+        self.child = match unsafe {
+            Command::new(cmd_path)
+                .stdout(stdout_file)
+                .stderr(stderr_file)
+                .args(args)
+                .current_dir(working_dir)
+                .pre_exec(move || {
+                    for sig in &stop_signals {
+                        signal(sig.signal(), kill as usize);
+                    }
+                    unsafe { umask(umask_val) };
+                    Ok(())
+                })
+                .spawn()
+        } {
             Ok(child) => Some(child),
             Err(err) => {
                 self.startup_tries += 1;
@@ -115,7 +131,7 @@ impl<'tm> Process<'tm> {
                         eprintln!("PID {} terminated by signal {}", self.id().expect("something went very wrong"), signal);
                     } else {
                         eprintln!(
-                            "PID {} terminated without exit of signal information",
+                            "PID {} terminated without exit or signal information",
                             self.id().expect("something went very wrong")
                         )
                     }

@@ -9,8 +9,14 @@ use serde::{Deserialize, Deserializer};
 ///
 /// Implements the `serde::Deserializer` trait for the `stopsignals` field of the configuration.
 #[allow(unused)]
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct StopSignal(c_int);
+
+impl StopSignal {
+    pub fn signal(&self) -> i32 {
+        self.0
+    }
+}
 
 impl<'de> Deserialize<'de> for StopSignal {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
