@@ -1,5 +1,6 @@
 use std::{
     fs::File,
+    os::unix::process::ExitStatusExt,
     process::{Child, Command},
     sync::Mutex,
     time,
@@ -99,6 +100,34 @@ impl<'tm> Process<'tm> {
         println!("process id: {}", self.id.unwrap());
 
         Ok(())
+    }
+
+    pub fn exited(&mut self) -> Option<i32> {
+        if self.child.is_none() {
+            return None;
+        }
+
+        match self.child.as_mut().unwrap().try_wait() {
+            Ok(Some(status)) => match status.code() {
+                Some(code) => Some(code),
+                None => {
+                    if let Some(signal) = status.signal() {
+                        eprintln!("PID {} terminated by signal {}", self.id().expect("something went very wrong"), signal);
+                    } else {
+                        eprintln!(
+                            "PID {} terminated without exit of signal information",
+                            self.id().expect("something went very wrong")
+                        )
+                    }
+                    None
+                }
+            },
+            Ok(None) => None,
+            Err(err) => {
+                eprintln!("could not get status for PID {}: {}", self.id().expect("something went very wrong"), err);
+                None
+            }
+        }
     }
 
     pub fn stop(&mut self) -> std::io::Result<()> {
