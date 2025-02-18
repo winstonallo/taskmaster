@@ -49,7 +49,7 @@ extern "C" fn kill(_signum: c_int) {
 }
 
 #[allow(unused)]
-impl<'tm> Process<'tm> {
+impl Process<'_> {
     pub fn state(&self) -> ProcessState {
         self.state.lock().expect("something went terribly wrong").clone()
     }
@@ -84,7 +84,7 @@ impl<'tm> Process<'tm> {
     }
 
     pub fn increment_runtime_failures(&mut self) {
-        self.runtime_failures.saturating_add(1);
+        self.runtime_failures = self.runtime_failures.saturating_add(1);
     }
 
     pub fn startup_failures(&self) -> u8 {
@@ -92,7 +92,7 @@ impl<'tm> Process<'tm> {
     }
 
     pub fn increment_startup_failures(&mut self) {
-        self.startup_failures.saturating_add(1);
+        self.startup_failures = self.startup_failures.saturating_add(1);
     }
 
     pub fn start(&mut self) -> Result<(), ProcessError> {
@@ -132,7 +132,7 @@ impl<'tm> Process<'tm> {
         self.id = Some(self.child.as_ref().unwrap().id());
         self.last_startup = Some(time::Instant::now());
 
-        println!("process id: {}", self.id.unwrap());
+        println!("process '{}' started, PID: {}", self.name, self.id.unwrap());
 
         Ok(())
     }
