@@ -145,6 +145,8 @@ fn completed(proc: &mut Process) {
     }
 }
 
+/// Monitors the state of `proc` based on the rules defined in taskmaster's process
+/// state diagram (`assets/statediagram.png`).
 pub fn monitor_state(proc: &mut Process) {
     match proc.state() {
         ProcessState::Idle => idle(proc),

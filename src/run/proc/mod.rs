@@ -3,7 +3,6 @@ use std::{
     os::unix::process::{CommandExt, ExitStatusExt},
     process::{Child, Command},
     sync::Mutex,
-    time,
 };
 
 use crate::{
@@ -24,7 +23,6 @@ pub struct Process<'tm> {
     name: String,
     child: Option<Child>,
     conf: &'tm ProcessConfig,
-    last_startup: Option<time::Instant>,
     startup_failures: u8,
     runtime_failures: u8,
     state: Mutex<ProcessState>,
@@ -37,7 +35,6 @@ impl<'tm> Process<'tm> {
             name: proc_name.to_string(),
             child: None,
             conf,
-            last_startup: None,
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
@@ -70,16 +67,8 @@ impl Process<'_> {
         &self.name
     }
 
-    pub fn running(&self) -> bool {
-        self.id.is_some() && self.child.is_some()
-    }
-
     pub fn config(&self) -> &ProcessConfig {
         self.conf
-    }
-
-    pub fn last_startup(&self) -> Option<time::Instant> {
-        self.last_startup
     }
 
     pub fn runtime_failures(&self) -> u8 {
@@ -133,7 +122,6 @@ impl Process<'_> {
         };
 
         self.id = Some(self.child.as_ref().unwrap().id());
-        self.last_startup = Some(time::Instant::now());
 
         Ok(())
     }
@@ -165,10 +153,6 @@ impl Process<'_> {
     }
 
     pub fn stop(&mut self) -> std::io::Result<()> {
-        if !self.running() {
-            return Ok(());
-        }
-
         self.child.take().unwrap().kill();
         self.id.take();
 
@@ -178,41 +162,7 @@ impl Process<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::process::Stdio;
-
     use super::*;
-
-    #[test]
-    fn running_no_id() {
-        let proc = Process {
-            id: None,
-            name: ("".to_string()),
-            child: None,
-            conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
-            startup_failures: 0,
-            runtime_failures: 0,
-            state: Mutex::new(ProcessState::Idle),
-        };
-
-        assert!(!proc.running())
-    }
-
-    #[test]
-    fn running_has_id() {
-        let proc = Process {
-            id: Some(1),
-            name: ("".to_string()),
-            child: Some(Command::new("/bin/ls").stdout(Stdio::null()).spawn().expect("could not run command")),
-            conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
-            startup_failures: 0,
-            runtime_failures: 0,
-            state: Mutex::new(ProcessState::Idle),
-        };
-
-        assert!(proc.running())
-    }
 
     #[test]
     fn state() {
@@ -221,7 +171,6 @@ mod tests {
             name: ("".to_string()),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
@@ -236,7 +185,6 @@ mod tests {
             name: ("".to_string()),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
