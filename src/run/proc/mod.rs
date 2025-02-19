@@ -15,7 +15,6 @@ use libc::{c_int, signal, umask};
 
 use super::statemachine::state::ProcessState;
 
-
 mod error;
 
 #[allow(unused)]
