@@ -2,10 +2,9 @@ use std::{collections::HashMap, io::Read, os::unix::net::UnixListener};
 
 use error::DaemonError;
 
-use super::proc;
+use super::{proc, statemachine};
 use crate::conf;
 mod error;
-mod statemachine;
 
 trait ClientStream {
     fn poll(&self) -> Option<Vec<u8>>;

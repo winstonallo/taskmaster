@@ -12,10 +12,11 @@ use crate::{
 };
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
-pub use state::ProcessState;
+
+use super::statemachine::state::ProcessState;
+
 
 mod error;
-pub mod state;
 
 #[allow(unused)]
 #[derive(Debug)]
