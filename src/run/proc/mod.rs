@@ -3,6 +3,7 @@ use std::{
     os::unix::process::{CommandExt, ExitStatusExt},
     process::{Child, Command},
     sync::Mutex,
+    time::{self, Duration, Instant},
 };
 
 use crate::{
@@ -87,8 +88,21 @@ impl Process<'_> {
         self.startup_failures = self.startup_failures.saturating_add(1);
     }
 
+    /// Returns a `time::Instant` representing the next time the process should
+    /// be retried according to its configured backoff, assuming the failure
+    /// happened at the time of calling this method.
+    pub fn retry_at(&self) -> time::Instant {
+        Instant::now() + Duration::from_secs(self.conf.backoff() as u64)
+    }
+
+    /// Checks whether the process is healthy, according to `started_at` and its
+    /// configured healthcheck time.
+    pub fn healthy(&self, started_at: time::Instant) -> bool {
+        Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
+    }
+
     pub fn start(&mut self) -> Result<(), ProcessError> {
-        assert_ne!(self.state(), ProcessState::Running);
+        assert_ne!(self.state(), ProcessState::Healthy);
 
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
@@ -189,7 +203,7 @@ mod tests {
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
         };
-        proc.update_state(ProcessState::Running);
-        assert_eq!(proc.state(), ProcessState::Running)
+        proc.update_state(ProcessState::Healthy);
+        assert_eq!(proc.state(), ProcessState::Healthy)
     }
 }

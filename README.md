@@ -16,7 +16,7 @@ pub enum ProcessState {
     Idle,
     // Started attempt at <...>
     HealthCheck(time::Instant),
-    Running,
+    Healthy,
     // Previous state: <...>
     Failed(Box<ProcessState>),
     // Retry at <...>

@@ -5,7 +5,7 @@ use std::time;
 pub enum ProcessState {
     Idle,
     HealthCheck(time::Instant),
-    Running,
+    Healthy,
     Failed(Box<ProcessState>),
     /// Retrying at `retry_at`.
     WaitingForRetry(time::Instant),
