@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     os::unix::process::{CommandExt, ExitStatusExt},
-    process::{Child, Command},
+    process::{Child, Command, ExitStatus},
     sync::Mutex,
     time::{self, Duration, Instant},
 };
@@ -144,22 +144,29 @@ impl Process<'_> {
         Ok(())
     }
 
+    fn check_signal(&self, status: ExitStatus, pid: u32) -> Option<i32> {
+        if let Some(signal) = status.signal() {
+            log_info!("PID {} terminated by signal {}", pid, signal);
+        } else {
+            log_info!("PID {} terminated without exit or signal information", pid)
+        }
+        None
+    }
+
     pub fn exited(&mut self) -> Option<i32> {
         self.child.as_ref()?;
 
+        let pid = self.id().expect("id should always be set if the program is running");
+
         match self.child.as_mut().unwrap().try_wait() {
             Ok(Some(status)) => match status.code() {
-                Some(code) => Some(code),
+                Some(code) => {
+                    self.child = None;
+                    Some(code)
+                }
                 None => {
-                    if let Some(signal) = status.signal() {
-                        log_info!("PID {} terminated by signal {}", self.id().expect("something went very wrong"), signal);
-                    } else {
-                        log_info!(
-                            "PID {} terminated without exit or signal information",
-                            self.id().expect("something went very wrong")
-                        )
-                    }
-                    None
+                    self.child = None;
+                    self.check_signal(status, pid)
                 }
             },
             Ok(None) => None,
