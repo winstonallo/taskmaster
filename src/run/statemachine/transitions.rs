@@ -21,6 +21,7 @@ impl State for Idle {
             }
             Err(err) => {
                 log_info!("failed to start process {}: {}", proc.name(), err);
+                proc.increment_startup_failures();
                 Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))))
             }
         }

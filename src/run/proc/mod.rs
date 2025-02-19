@@ -101,38 +101,42 @@ impl Process<'_> {
         Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
     }
 
-    pub fn start(&mut self) -> Result<(), ProcessError> {
-        assert_ne!(self.state(), ProcessState::Healthy);
-
+    fn spawn(&self) -> Result<Child, ProcessError> {
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
 
         let cmd_path = self.conf.cmd().path().to_owned();
         let args = self.conf.args().to_owned();
-        let working_dir = self.conf.workingdir().path().to_owned();
-        let stop_signals = self.config().stopsignals().to_owned();
+        let working_dir = self.conf.workingdir().path();
+        let stop_signals = self.conf.stopsignals().to_owned();
         let umask_val = self.conf.umask();
 
-        self.child = match unsafe {
+        match unsafe {
             Command::new(cmd_path)
+                .args(args)
                 .stdout(stdout_file)
                 .stderr(stderr_file)
-                .args(args)
                 .current_dir(working_dir)
                 .pre_exec(move || {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    unsafe { umask(umask_val) };
+                    umask(umask_val);
                     Ok(())
                 })
                 .spawn()
         } {
+            Ok(child) => Ok(child),
+            Err(err) => Err(ProcessError::CouldNotSpawn(err.to_string())),
+        }
+    }
+
+    pub fn start(&mut self) -> Result<(), ProcessError> {
+        assert_ne!(self.state(), ProcessState::Healthy);
+
+        self.child = match self.spawn() {
             Ok(child) => Some(child),
-            Err(err) => {
-                self.startup_failures += 1;
-                return Err(ProcessError::CouldNotStartUp(err.to_string()));
-            }
+            Err(err) => return Err(err),
         };
 
         self.id = Some(self.child.as_ref().unwrap().id());
