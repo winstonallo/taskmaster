@@ -55,6 +55,15 @@ impl Logger {
         let _ = guard.write_fmt(args);
         let _ = guard.write_all(b"\n");
     }
+
+    pub fn fatal(&self, args: fmt::Arguments) {
+        let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
+        let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
+        let _ = guard.write_all(b" [fatal]: ");
+        let _ = guard.write_fmt(args);
+        let _ = guard.write_all(b"\n");
+        panic!();
+    }
 }
 
 static mut INSTANCE: Option<Logger> = None;
@@ -79,6 +88,13 @@ macro_rules! log_error {
 macro_rules! log_info {
     ($($arg:tt)*) => {
         $crate::log::info(format_args!($($arg)*))
+    };
+}
+
+#[macro_export]
+macro_rules! log_fatal {
+    ($($arg:tt)*) => {
+        $crate::log::fatal(format_args!($($arg)*))
     };
 }
 

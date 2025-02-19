@@ -5,7 +5,10 @@ use crate::{
     run::{proc::Process, statemachine::state::ProcessState},
 };
 
-use super::state::{Completed, Failed, HealthCheck, Healthy, Idle, State, Stopped, WaitingForRetry};
+use super::{
+    log::log_state_transition,
+    state::{Completed, Failed, HealthCheck, Healthy, Idle, State, Stopped, WaitingForRetry},
+};
 
 impl State for Idle {
     fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
@@ -15,8 +18,7 @@ impl State for Idle {
 
         match proc.start() {
             Ok(()) => {
-                let pid = proc.id().expect("if the process started, its id shuld be set");
-                log_info!("spawned process '{}', PID {}", proc.name(), pid);
+                log_state_transition(&ProcessState::Idle, &ProcessState::HealthCheck(Instant::now()), proc);
                 Some(ProcessState::HealthCheck(Instant::now()))
             }
             Err(err) => {
