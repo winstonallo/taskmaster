@@ -1,7 +1,7 @@
 use std::{
     fs::File,
     os::unix::process::{CommandExt, ExitStatusExt},
-    process::{Child, Command},
+    process::{Child, Command, ExitStatus},
     sync::Mutex,
     time::{self, Duration, Instant},
 };
@@ -101,38 +101,42 @@ impl Process<'_> {
         Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
     }
 
-    pub fn start(&mut self) -> Result<(), ProcessError> {
-        assert_ne!(self.state(), ProcessState::Healthy);
-
+    fn spawn(&self) -> Result<Child, ProcessError> {
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
 
         let cmd_path = self.conf.cmd().path().to_owned();
         let args = self.conf.args().to_owned();
-        let working_dir = self.conf.workingdir().path().to_owned();
-        let stop_signals = self.config().stopsignals().to_owned();
+        let working_dir = self.conf.workingdir().path();
+        let stop_signals = self.conf.stopsignals().to_owned();
         let umask_val = self.conf.umask();
 
-        self.child = match unsafe {
+        match unsafe {
             Command::new(cmd_path)
+                .args(args)
                 .stdout(stdout_file)
                 .stderr(stderr_file)
-                .args(args)
                 .current_dir(working_dir)
                 .pre_exec(move || {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    unsafe { umask(umask_val) };
+                    umask(umask_val);
                     Ok(())
                 })
                 .spawn()
         } {
+            Ok(child) => Ok(child),
+            Err(err) => Err(ProcessError::CouldNotSpawn(err.to_string())),
+        }
+    }
+
+    pub fn start(&mut self) -> Result<(), ProcessError> {
+        assert_ne!(self.state(), ProcessState::Healthy);
+
+        self.child = match self.spawn() {
             Ok(child) => Some(child),
-            Err(err) => {
-                self.startup_failures += 1;
-                return Err(ProcessError::CouldNotStartUp(err.to_string()));
-            }
+            Err(err) => return Err(err),
         };
 
         self.id = Some(self.child.as_ref().unwrap().id());
@@ -140,22 +144,29 @@ impl Process<'_> {
         Ok(())
     }
 
+    fn check_signal(&self, status: ExitStatus, pid: u32) -> Option<i32> {
+        if let Some(signal) = status.signal() {
+            log_info!("PID {} terminated by signal {}", pid, signal);
+        } else {
+            log_info!("PID {} terminated without exit or signal information", pid)
+        }
+        None
+    }
+
     pub fn exited(&mut self) -> Option<i32> {
         self.child.as_ref()?;
 
+        let pid = self.id().expect("id should always be set if the program is running");
+
         match self.child.as_mut().unwrap().try_wait() {
             Ok(Some(status)) => match status.code() {
-                Some(code) => Some(code),
+                Some(code) => {
+                    self.child = None;
+                    Some(code)
+                }
                 None => {
-                    if let Some(signal) = status.signal() {
-                        log_info!("PID {} terminated by signal {}", self.id().expect("something went very wrong"), signal);
-                    } else {
-                        log_info!(
-                            "PID {} terminated without exit or signal information",
-                            self.id().expect("something went very wrong")
-                        )
-                    }
-                    None
+                    self.child = None;
+                    self.check_signal(status, pid)
                 }
             },
             Ok(None) => None,

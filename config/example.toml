@@ -18,7 +18,7 @@ args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
-processes = 1
+processes = 5
 
 # Mask for files created by the process.
 # Defaults to "022".
@@ -101,7 +101,7 @@ args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
-processes = 1
+processes = 8
 
 # Mask for files created by the process.
 # Defaults to "022".
@@ -126,7 +126,7 @@ autorestart = "on-failure[:5]"
 
 # Backoff time (in seconds) for retries.
 # Defaults to 5, max 255.
-backoff = 1
+backoff = 2
 
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
@@ -139,7 +139,7 @@ startretries = 3
 # Time (in seconds) given for the program to startup - if the program 
 # does not start within this time, it will be considered a failure.
 # Defaults to 5, max 65536.
-starttime = 1
+starttime = 2
 
 # List of signals triggering a stop of the process, options are any 
 # FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).

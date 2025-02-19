@@ -21,6 +21,7 @@ impl State for Idle {
             }
             Err(err) => {
                 log_info!("failed to start process {}: {}", proc.name(), err);
+                proc.increment_startup_failures();
                 Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))))
             }
         }
@@ -45,7 +46,7 @@ impl State for HealthCheck {
                 log_info!("process '{}' exited during healthcheck with unexpected code: {}", proc.name(), code);
                 return Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(self.started_at()))));
             } else {
-                log_info!("process '{}' exited with healthy exit code, marking as completed", proc.name());
+                log_info!("process '{}' exited with healthy exit code {}, marking as completed", proc.name(), code);
                 return Some(ProcessState::Completed);
             }
         }

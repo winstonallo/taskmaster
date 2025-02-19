@@ -2,16 +2,14 @@ use std::{error::Error as StdError, fmt, io};
 
 pub enum ProcessError {
     Internal(String),
-    CouldNotStartUp(String),
-    MaxRetriesReached(String),
+    CouldNotSpawn(String),
 }
 
 impl fmt::Display for ProcessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ProcessError::Internal(msg) => write!(f, "internal error: {}", msg),
-            ProcessError::CouldNotStartUp(msg) => write!(f, "could not start up: {}", msg),
-            ProcessError::MaxRetriesReached(msg) => write!(f, "internal error: {}", msg),
+            ProcessError::CouldNotSpawn(msg) => write!(f, "could not spawn child process: {}", msg),
         }
     }
 }
