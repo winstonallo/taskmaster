@@ -2,7 +2,6 @@ use state::{Completed, Failed, HealthCheck, Healthy, Idle, ProcessState, State, 
 
 use super::proc::Process;
 
-mod log;
 pub mod state;
 mod transitions;
 

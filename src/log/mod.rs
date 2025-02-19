@@ -56,6 +56,7 @@ impl Logger {
         let _ = guard.write_all(b"\n");
     }
 
+    #[allow(unused)]
     pub fn fatal(&self, args: fmt::Arguments) {
         let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
         let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
@@ -75,6 +76,11 @@ pub fn error(args: fmt::Arguments) {
 
 pub fn info(args: fmt::Arguments) {
     get_logger().info(args);
+}
+
+#[allow(unused)]
+pub fn fatal(args: fmt::Arguments) {
+    get_logger().fatal(args);
 }
 
 #[macro_export]
