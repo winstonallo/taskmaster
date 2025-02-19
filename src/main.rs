@@ -2,6 +2,7 @@ use conf::Config;
 use run::daemon::Daemon;
 
 mod conf;
+mod log;
 mod run;
 
 fn main() {
@@ -14,6 +15,6 @@ fn main() {
     };
 
     let mut daemon = Daemon::from_config(&conf);
-    println!("{:?}", daemon.get_processes());
+    log::info(format_args!("starting taskmaster.."));
     let _ = daemon.run();
 }

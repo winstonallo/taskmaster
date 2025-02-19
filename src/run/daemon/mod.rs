@@ -5,7 +5,7 @@ use error::DaemonError;
 use super::proc;
 use crate::conf;
 mod error;
-mod monitor;
+mod statemachine;
 
 trait ClientStream {
     fn poll(&self) -> Option<Vec<u8>>;
@@ -77,10 +77,6 @@ impl<'tm> Daemon<'tm> {
         }
     }
 
-    pub fn get_processes(&self) -> &HashMap<String, proc::Process<'tm>> {
-        &self.processes
-    }
-
     pub fn run(&mut self) -> Result<(), DaemonError> {
         loop {
             if let Some(data) = self.client_stream.poll() {
@@ -88,7 +84,7 @@ impl<'tm> Daemon<'tm> {
             }
 
             for proc in self.processes.values_mut() {
-                monitor::monitor_state(proc);
+                statemachine::monitor_state(proc);
             }
         }
     }
