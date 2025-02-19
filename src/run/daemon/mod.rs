@@ -65,7 +65,16 @@ impl<'tm> Daemon<'tm> {
         let procs: HashMap<String, proc::Process<'tm>> = conf
             .processes()
             .iter()
-            .map(|(proc_name, proc)| (proc_name.clone(), proc::Process::from_process_config(proc, proc_name)))
+            .flat_map(|(proc_name, proc)| {
+                (0..proc.processes()).map(move |id| {
+                    let key = if proc.processes() > 1 {
+                        format!("{}_{}", proc_name, id)
+                    } else {
+                        proc_name.to_owned()
+                    };
+                    (key.clone(), proc::Process::from_process_config(proc, &key))
+                })
+            })
             .collect::<HashMap<String, proc::Process<'tm>>>();
 
         let client_stream = UnixSocketStream::new(conf.socketpath()).expect("could not create client stream for communication with daemon");
