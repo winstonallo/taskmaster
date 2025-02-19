@@ -17,8 +17,8 @@ impl AutoRestart {
         &self.mode
     }
 
-    pub fn max_retries(&self) -> Option<u8> {
-        self.max_retries
+    pub fn max_retries(&self) -> u8 {
+        self.max_retries.expect("this method should only be called after checking the autorestart mode")
     }
 
     #[cfg(test)]

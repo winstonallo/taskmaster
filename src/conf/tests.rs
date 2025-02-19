@@ -185,7 +185,7 @@ mod from_str {
         let conf = Config::from_str(conf_str).expect("could not parse config");
         let autores = conf.processes()["nginx"].autorestart();
         assert_eq!(autores.mode(), "on-failure");
-        assert_eq!(autores.max_retries(), Some(5));
+        assert_eq!(autores.max_retries(), 5);
     }
 
     #[test]
@@ -390,7 +390,7 @@ mod from_file {
         assert_eq!(conf.processes()["nginx"].workingdir(), &AccessibleDirectory::default());
         assert!(conf.processes()["nginx"].autostart());
         assert_eq!(conf.processes()["nginx"].autorestart().mode(), "on-failure");
-        assert_eq!(conf.processes()["nginx"].autorestart().max_retries(), Some(5));
+        assert_eq!(conf.processes()["nginx"].autorestart().max_retries(), 5);
         assert_eq!(conf.processes()["nginx"].exitcodes(), &vec![0, 2]);
         assert_eq!(conf.processes()["nginx"].startretries(), 3);
         assert_eq!(conf.processes()["nginx"].starttime(), 5);

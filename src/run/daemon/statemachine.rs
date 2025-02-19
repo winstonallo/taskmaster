@@ -55,37 +55,38 @@ fn running(proc: &mut Process) {
     }
 }
 
-fn failed(proc: &mut Process, prev_state: ProcessState) {
-    match prev_state {
-        ProcessState::Running => match proc.config().autorestart().mode() {
-            "always" => proc.update_state(ProcessState::HealthCheck(Instant::now())),
-            "on-failure" => {
-                let max_retries = proc
-                    .config()
-                    .autorestart()
-                    .max_retries()
-                    .expect("max retries should always be set if mode is 'on-failure'");
+fn failed_runtime(proc: &mut Process) {
+    match proc.config().autorestart().mode() {
+        "always" => proc.update_state(ProcessState::HealthCheck(Instant::now())),
+        "on-failure" => {
+            let max_retries = proc.config().autorestart().max_retries();
 
-                if proc.runtime_failures() == max_retries {
-                    log_info!("process '{}' exited unexpectedly {} times, giving up", proc.name(), proc.runtime_failures());
-                    proc.update_state(ProcessState::Stopped);
-                } else {
-                    proc.increment_runtime_failures();
-                    proc.update_state(ProcessState::WaitingForRetry(
-                        Instant::now() + Duration::from_secs(proc.config().backoff() as u64),
-                    ));
-                    log_info!(
-                        "process '{}' exited unexpectedly, retrying in {} second{} ({} {} left)",
-                        proc.name(),
-                        proc.config().backoff(),
-                        if proc.config().backoff() == 1 { "" } else { "s" },
-                        max_retries - proc.runtime_failures(),
-                        if max_retries - proc.runtime_failures() <= 1 { "try" } else { "tries" }
-                    );
-                }
+            if proc.runtime_failures() == max_retries {
+                log_info!("process '{}' exited unexpectedly {} times, giving up", proc.name(), proc.runtime_failures());
+                proc.update_state(ProcessState::Stopped);
+                return;
             }
-            _ => {}
-        },
+
+            proc.increment_runtime_failures();
+            proc.update_state(ProcessState::WaitingForRetry(
+                Instant::now() + Duration::from_secs(proc.config().backoff() as u64),
+            ));
+            log_info!(
+                "process '{}' exited unexpectedly, retrying in {} second(s) ({} attempt(s) left)",
+                proc.name(),
+                proc.config().backoff(),
+                max_retries - proc.runtime_failures(),
+            );
+        }
+        _ => {}
+    }
+}
+
+fn failed(proc: &mut Process, prev_state: ProcessState) {
+    assert!(matches!(prev_state, ProcessState::HealthCheck(_)) || prev_state == ProcessState::Running);
+
+    match prev_state {
+        ProcessState::Running => failed_runtime(proc),
         ProcessState::HealthCheck(_) => {
             if proc.startup_failures() == proc.config().startretries() {
                 log_info!("reached max startretries for process '{}', giving up", proc.name());
