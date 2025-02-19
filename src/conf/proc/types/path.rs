@@ -12,7 +12,7 @@ fn get_random_string(len: usize) -> String {
     let mut buf = vec![0u8; len];
     let mut file = File::open("/dev/urandom").expect("could not open /dev/urandom");
     file.read_exact(&mut buf).expect("could not read from /dev/urandom");
-    buf.iter().fold(String::from(""), |mut acc, byte| {
+    buf.iter().fold("".to_string(), |mut acc, byte| {
         write!(&mut acc, "{:02x}", byte).expect("failed to write");
         acc
     })
@@ -37,7 +37,7 @@ impl AccessibleDirectory {
 
 impl Default for AccessibleDirectory {
     fn default() -> Self {
-        Self { path: String::from("/tmp") }
+        Self { path: "/tmp".to_string() }
     }
 }
 
@@ -61,6 +61,7 @@ impl<'de> Deserialize<'de> for AccessibleDirectory {
         if !test_path.is_absolute() {
             return Err(serde::de::Error::custom("expected absolute path".to_string()));
         }
+
         match OpenOptions::new().write(true).create_new(true).open(&test_path) {
             Ok(file) => {
                 drop(file);
@@ -94,7 +95,7 @@ impl ExecutableFile {
 
 impl Default for ExecutableFile {
     fn default() -> Self {
-        Self { path: String::from("/tmp") }
+        Self { path: "/tmp".to_string() }
     }
 }
 
@@ -144,7 +145,7 @@ impl WritableFile {
     }
 
     pub fn from_path(path: &str) -> Self {
-        Self { path: String::from(path) }
+        Self { path: (path.to_string()) }
     }
 }
 

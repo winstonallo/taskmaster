@@ -3,7 +3,7 @@ use std::{
     os::unix::process::{CommandExt, ExitStatusExt},
     process::{Child, Command},
     sync::Mutex,
-    time,
+    time::{self, Duration, Instant},
 };
 
 use crate::{
@@ -12,10 +12,10 @@ use crate::{
 };
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
-pub use state::ProcessState;
+
+use super::statemachine::state::ProcessState;
 
 mod error;
-pub mod state;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -24,7 +24,6 @@ pub struct Process<'tm> {
     name: String,
     child: Option<Child>,
     conf: &'tm ProcessConfig,
-    last_startup: Option<time::Instant>,
     startup_failures: u8,
     runtime_failures: u8,
     state: Mutex<ProcessState>,
@@ -37,7 +36,6 @@ impl<'tm> Process<'tm> {
             name: proc_name.to_string(),
             child: None,
             conf,
-            last_startup: None,
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
@@ -70,16 +68,8 @@ impl Process<'_> {
         &self.name
     }
 
-    pub fn running(&self) -> bool {
-        self.id.is_some() && self.child.is_some()
-    }
-
     pub fn config(&self) -> &ProcessConfig {
         self.conf
-    }
-
-    pub fn last_startup(&self) -> Option<time::Instant> {
-        self.last_startup
     }
 
     pub fn runtime_failures(&self) -> u8 {
@@ -98,8 +88,21 @@ impl Process<'_> {
         self.startup_failures = self.startup_failures.saturating_add(1);
     }
 
+    /// Returns a `time::Instant` representing the next time the process should
+    /// be retried according to its configured backoff, assuming the failure
+    /// happened at the time of calling this method.
+    pub fn retry_at(&self) -> time::Instant {
+        Instant::now() + Duration::from_secs(self.conf.backoff() as u64)
+    }
+
+    /// Checks whether the process is healthy, according to `started_at` and its
+    /// configured healthcheck time.
+    pub fn healthy(&self, started_at: time::Instant) -> bool {
+        Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
+    }
+
     pub fn start(&mut self) -> Result<(), ProcessError> {
-        assert_ne!(self.state(), ProcessState::Running);
+        assert_ne!(self.state(), ProcessState::Healthy);
 
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
@@ -133,7 +136,6 @@ impl Process<'_> {
         };
 
         self.id = Some(self.child.as_ref().unwrap().id());
-        self.last_startup = Some(time::Instant::now());
 
         Ok(())
     }
@@ -165,10 +167,6 @@ impl Process<'_> {
     }
 
     pub fn stop(&mut self) -> std::io::Result<()> {
-        if !self.running() {
-            return Ok(());
-        }
-
         self.child.take().unwrap().kill();
         self.id.take();
 
@@ -178,50 +176,15 @@ impl Process<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::process::Stdio;
-
     use super::*;
-
-    #[test]
-    fn running_no_id() {
-        let proc = Process {
-            id: None,
-            name: String::from(""),
-            child: None,
-            conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
-            startup_failures: 0,
-            runtime_failures: 0,
-            state: Mutex::new(ProcessState::Idle),
-        };
-
-        assert!(!proc.running())
-    }
-
-    #[test]
-    fn running_has_id() {
-        let proc = Process {
-            id: Some(1),
-            name: String::from(""),
-            child: Some(Command::new("/bin/ls").stdout(Stdio::null()).spawn().expect("could not run command")),
-            conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
-            startup_failures: 0,
-            runtime_failures: 0,
-            state: Mutex::new(ProcessState::Idle),
-        };
-
-        assert!(proc.running())
-    }
 
     #[test]
     fn state() {
         let proc = Process {
             id: Some(1),
-            name: String::from(""),
+            name: ("".to_string()),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
@@ -233,15 +196,14 @@ mod tests {
     fn update_state() {
         let mut proc = Process {
             id: Some(1),
-            name: String::from(""),
+            name: ("".to_string()),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
-            last_startup: None,
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
         };
-        proc.update_state(ProcessState::Running);
-        assert_eq!(proc.state(), ProcessState::Running)
+        proc.update_state(ProcessState::Healthy);
+        assert_eq!(proc.state(), ProcessState::Healthy)
     }
 }

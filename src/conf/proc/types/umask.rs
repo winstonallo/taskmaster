@@ -32,17 +32,6 @@ impl<'de> Deserialize<'de> for Umask {
             return Err(serde::de::Error::custom(format!("invalid length for umask, expected 3, got {}", s.len())));
         }
 
-        // for c in s.chars() {
-        //     match c {
-        //         '0'..'7' => continue,
-        //         _ => {
-        //             return Err(serde::de::Error::custom(format!(
-        //                 "invalid value for umask: {s}, expected 3 characters between '0' and '7'"
-        //             )))
-        //         }
-        //     }
-        // }
-
         let mask = match u32::from_str_radix(&s, 8) {
             Ok(mask) => mask,
             Err(err) => {
