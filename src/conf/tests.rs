@@ -17,10 +17,6 @@ mod from_str {
         assert_eq!(conf.processes()["nginx"].umask(), defaults::dflt_umask().mask());
         assert_eq!(conf.processes()["nginx"].autostart(), defaults::dflt_autostart());
         assert_eq!(conf.processes()["nginx"].autorestart().mode(), defaults::dflt_autorestart().mode());
-        assert_eq!(
-            conf.processes()["nginx"].autorestart().max_retries(),
-            defaults::dflt_autorestart().max_retries()
-        );
         assert_eq!(conf.processes()["nginx"].exitcodes(), &defaults::dflt_exitcodes());
         assert_eq!(conf.processes()["nginx"].startretries(), defaults::dflt_startretries());
         assert_eq!(conf.processes()["nginx"].starttime(), defaults::dflt_startttime());

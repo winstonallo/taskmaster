@@ -168,7 +168,7 @@ impl ProcessConfig {
             umask: types::Umask::default(),
             workingdir: types::AccessibleDirectory::default(),
             autostart: true,
-            autorestart: types::AutoRestart::test_autorestart(),
+            autorestart: types::AutoRestart::default(),
             backoff: 5,
             exitcodes: vec![0],
             startretries: 1,

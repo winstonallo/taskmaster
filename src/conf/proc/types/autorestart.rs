@@ -13,20 +13,20 @@ pub struct AutoRestart {
 
 #[allow(unused)]
 impl AutoRestart {
+    /// Retrieves the value set in the config for `autorestart`.
+    ///
+    /// Possible values: `no`, `always`, `on-failure`.
     pub fn mode(&self) -> &str {
         &self.mode
     }
 
+    /// Retrieves the max-retries value set in the config for on-failure.
+    ///
+    /// ## Panics
+    /// Panics if the retry mode is anything else than `on-failure`,
+    /// due to it being the only case where `max-retries` is set.   
     pub fn max_retries(&self) -> u8 {
         self.max_retries.expect("this method should only be called after checking the autorestart mode")
-    }
-
-    #[cfg(test)]
-    pub fn test_autorestart() -> Self {
-        Self {
-            mode: "no".to_string(),
-            max_retries: None,
-        }
     }
 }
 
@@ -71,5 +71,20 @@ impl<'de> Deserialize<'de> for AutoRestart {
             mode: "on-failure".to_string(),
             max_retries: Some(max_retries),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[should_panic]
+    fn max_retries() {
+        let _ = AutoRestart {
+            mode: "no".to_string(),
+            max_retries: None,
+        }
+        .max_retries();
     }
 }
