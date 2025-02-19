@@ -29,12 +29,13 @@ fn idle(proc: &mut Process) {
 fn healthcheck(proc: &mut Process, started_at: Instant) {
     if proc.healthy(started_at) {
         log_info!(
-            "process '{}' has been running since {} seconds, marking as healthy",
+            "process '{}' has been running for {} seconds, marking as healthy",
             proc.name(),
             proc.config().starttime()
         );
 
         proc.update_state(ProcessState::Healthy);
+        return;
     }
 
     if let Some(code) = proc.exited() {
