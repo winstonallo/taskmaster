@@ -117,22 +117,12 @@ impl ProcessConfig {
         self.backoff
     }
 
-    pub fn decrement_max_retries(&mut self) {
-        assert_eq!(self.autorestart().mode(), "on-failure");
-
-        self.autorestart.decrement_max_retries();
-    }
-
     pub fn exitcodes(&self) -> &Vec<i32> {
         &self.exitcodes
     }
 
     pub fn startretries(&self) -> u8 {
         self.startretries
-    }
-
-    pub fn decrement_startretries(&mut self) {
-        self.startretries.saturating_sub(1);
     }
 
     pub fn starttime(&self) -> u16 {

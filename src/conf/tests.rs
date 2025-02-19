@@ -36,7 +36,7 @@ mod from_str {
         let conf_str = "[nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
         assert_eq!(
             Config::from_str(conf_str).expect("could not parse config").socketpath(),
-            String::from("/tmp/.taskmaster.sock")
+            ("/tmp/.taskmaster.sock".to_string())
         )
     }
 
@@ -399,13 +399,13 @@ mod from_file {
         assert_eq!(conf.processes()["nginx"].starttime(), 5);
         assert_eq!(conf.processes()["nginx"].stopsignals(), &vec![StopSignal(SIGTERM), StopSignal(SIGUSR1)]);
         assert_eq!(conf.processes()["nginx"].stoptime(), 5);
-        assert_eq!(conf.processes()["nginx"].stdout(), String::from("/tmp/nginx.stdout"));
-        assert_eq!(conf.processes()["nginx"].stderr(), String::from("/tmp/nginx.stderr"));
+        assert_eq!(conf.processes()["nginx"].stdout(), ("/tmp/nginx.stdout".to_string()));
+        assert_eq!(conf.processes()["nginx"].stderr(), ("/tmp/nginx.stderr".to_string()));
         assert_eq!(
             conf.processes()["nginx"].env(),
             &Some(vec![
-                (String::from("STARTED_BY"), String::from("abied-ch")),
-                (String::from("ANSWER"), String::from("42"))
+                (("STARTED_BY".to_string()), ("abied-ch".to_string())),
+                (("ANSWER".to_string()), ("42".to_string()))
             ])
         );
     }

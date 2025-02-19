@@ -186,7 +186,7 @@ mod tests {
     fn running_no_id() {
         let proc = Process {
             id: None,
-            name: String::from(""),
+            name: ("".to_string()),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
@@ -202,7 +202,7 @@ mod tests {
     fn running_has_id() {
         let proc = Process {
             id: Some(1),
-            name: String::from(""),
+            name: ("".to_string()),
             child: Some(Command::new("/bin/ls").stdout(Stdio::null()).spawn().expect("could not run command")),
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
@@ -218,7 +218,7 @@ mod tests {
     fn state() {
         let proc = Process {
             id: Some(1),
-            name: String::from(""),
+            name: ("".to_string()),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,
@@ -233,7 +233,7 @@ mod tests {
     fn update_state() {
         let mut proc = Process {
             id: Some(1),
-            name: String::from(""),
+            name: ("".to_string()),
             child: None,
             conf: &mut conf::proc::ProcessConfig::testconfig(),
             last_startup: None,

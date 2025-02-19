@@ -21,17 +21,10 @@ impl AutoRestart {
         self.max_retries
     }
 
-    pub fn decrement_max_retries(&mut self) {
-        assert_eq!(self.mode, "on-failure");
-
-        let max_retries = self.max_retries.take().unwrap();
-        self.max_retries = Some(max_retries.saturating_sub(1));
-    }
-
     #[cfg(test)]
     pub fn test_autorestart() -> Self {
         Self {
-            mode: String::from("no"),
+            mode: "no".to_string(),
             max_retries: None,
         }
     }
@@ -40,7 +33,7 @@ impl AutoRestart {
 impl Default for AutoRestart {
     fn default() -> Self {
         Self {
-            mode: String::from("no"),
+            mode: "no".to_string(),
             max_retries: None,
         }
     }
@@ -52,24 +45,31 @@ impl<'de> Deserialize<'de> for AutoRestart {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        match s.as_str() {
-            "no" | "always" => Ok(Self { mode: s, max_retries: None }),
-            _ if s.starts_with("on-failure[:") && s.ends_with("]") => {
-                let max_retries_str = &s[12..s.len() - 1];
-                let max_retries = match max_retries_str.parse::<u8>() {
-                    Ok(n) => n,
-                    Err(e) => {
-                        return Err(serde::de::Error::custom(format!(
-                            "invalid max-retries value for on-failure: {max_retries_str}: {e} (expected u8)"
-                        )));
-                    }
-                };
-                Ok(Self {
-                    mode: String::from("on-failure"),
-                    max_retries: Some(max_retries),
-                })
-            }
-            _ => Err(serde::de::Error::custom(format!("invalid value for field 'autorestart': '{s}'"))),
+
+        if s.as_str() == "no" || s.as_str() == "always" {
+            return Ok(Self { mode: s, max_retries: None });
         }
+
+        if !s.starts_with("on-failure[:") || !s.ends_with("]") {
+            return Err(serde::de::Error::custom(format!(
+                "invalid value for on-failure: {s}, expected 'on-failure[:max-retries]'"
+            )));
+        }
+
+        let max_retries_str = &s[12..s.len() - 1];
+
+        let max_retries = match max_retries_str.parse::<u8>() {
+            Ok(n) => n,
+            Err(e) => {
+                return Err(serde::de::Error::custom(format!(
+                    "invalid max-retries value for on-failure: {max_retries_str}: {e}, expected u8"
+                )));
+            }
+        };
+
+        Ok(Self {
+            mode: "on-failure".to_string(),
+            max_retries: Some(max_retries),
+        })
     }
 }

@@ -27,14 +27,14 @@ impl Logger {
 
         let time_ptr = unsafe { localtime(&raw_time) };
         if time_ptr.is_null() {
-            return String::from("unknown time");
+            return "unknown time".to_string();
         }
 
         let mut buf = [0u8; 64];
 
         let ret = unsafe { strftime(buf.as_mut_ptr() as *mut c_char, buf.len(), Logger::FORMAT.as_ptr() as *mut c_char, time_ptr) };
         if ret == 0 {
-            return String::from("unknown time");
+            return "unknown time".to_string();
         }
 
         String::from_utf8_lossy(&buf[..ret as usize]).into_owned()
