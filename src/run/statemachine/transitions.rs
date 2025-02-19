@@ -5,67 +5,76 @@ use crate::{
     run::{proc::Process, statemachine::state::ProcessState},
 };
 
-pub fn idle(proc: &mut Process) {
-    if !proc.config().autostart() {
-        return;
-    }
+use super::state::{Completed, Failed, HealthCheck, Healthy, Idle, State, Stopped, WaitingForRetry};
 
-    match proc.start() {
-        Ok(()) => {
-            let pid = proc.id().expect("if the process started, its id shuld be set");
-            log_info!("spawned process '{}', PID {}", proc.name(), pid);
-            proc.update_state(ProcessState::HealthCheck(Instant::now()))
+impl State for Idle {
+    fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
+        if !proc.config().autostart() {
+            return None;
         }
-        Err(err) => {
-            log_info!("failed to start process {}: {}", proc.name(), err);
-            proc.update_state(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))));
-        }
-    }
-}
 
-pub fn healthcheck(proc: &mut Process, started_at: Instant) {
-    if proc.healthy(started_at) {
-        log_info!(
-            "process '{}' has been running for {} seconds, marking as healthy",
-            proc.name(),
-            proc.config().starttime()
-        );
-
-        proc.update_state(ProcessState::Healthy);
-        return;
-    }
-
-    if let Some(code) = proc.exited() {
-        if !proc.config().exitcodes().contains(&code) {
-            log_info!("process '{}' exited during healthcheck with unexpected code: {}", proc.name(), code);
-            proc.update_state(ProcessState::Failed(Box::new(ProcessState::HealthCheck(started_at))));
-        } else {
-            log_info!("process '{}' exited with healthy exit code, marking as completed", proc.name());
-            proc.update_state(ProcessState::Completed);
+        match proc.start() {
+            Ok(()) => {
+                let pid = proc.id().expect("if the process started, its id shuld be set");
+                log_info!("spawned process '{}', PID {}", proc.name(), pid);
+                Some(ProcessState::HealthCheck(Instant::now()))
+            }
+            Err(err) => {
+                log_info!("failed to start process {}: {}", proc.name(), err);
+                Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))))
+            }
         }
     }
 }
 
-pub fn running(proc: &mut Process) {
-    if let Some(code) = proc.exited() {
-        if !proc.config().exitcodes().contains(&code) {
-            proc.update_state(ProcessState::Failed(Box::new(ProcessState::Healthy)));
-        } else {
-            proc.update_state(ProcessState::Completed);
+impl State for HealthCheck {
+    fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
+        if proc.healthy(self.started_at()) {
+            log_info!(
+                "process '{}' has been running for {} seconds, marking as healthy",
+                proc.name(),
+                proc.config().starttime()
+            );
+
+            proc.update_state(ProcessState::Healthy);
+            return None;
         }
+
+        if let Some(code) = proc.exited() {
+            if !proc.config().exitcodes().contains(&code) {
+                log_info!("process '{}' exited during healthcheck with unexpected code: {}", proc.name(), code);
+                return Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(self.started_at()))));
+            } else {
+                log_info!("process '{}' exited with healthy exit code, marking as completed", proc.name());
+                return Some(ProcessState::Completed);
+            }
+        }
+        None
     }
 }
 
-pub fn failed_runtime(proc: &mut Process) {
+impl State for Healthy {
+    fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
+        if let Some(code) = proc.exited() {
+            if !proc.config().exitcodes().contains(&code) {
+                return Some(ProcessState::Failed(Box::new(ProcessState::Healthy)));
+            } else {
+                return Some(ProcessState::Completed);
+            }
+        }
+        None
+    }
+}
+
+pub fn failed_runtime(proc: &mut Process) -> Option<ProcessState> {
     match proc.config().autorestart().mode() {
-        "always" => proc.update_state(ProcessState::HealthCheck(Instant::now())),
+        "always" => Some(ProcessState::HealthCheck(Instant::now())),
         "on-failure" => {
             let max_retries = proc.config().autorestart().max_retries();
 
             if proc.runtime_failures() == max_retries {
                 log_info!("process '{}' exited unexpectedly {} times, giving up", proc.name(), proc.runtime_failures());
-                proc.update_state(ProcessState::Stopped);
-                return;
+                return Some(ProcessState::Stopped);
             }
 
             log_info!(
@@ -76,73 +85,86 @@ pub fn failed_runtime(proc: &mut Process) {
             );
 
             proc.increment_runtime_failures();
-            proc.update_state(ProcessState::WaitingForRetry(proc.retry_at()));
+            Some(ProcessState::WaitingForRetry(proc.retry_at()))
         }
-        _ => {}
+        _ => None,
     }
 }
 
-pub fn failed_healthcheck(proc: &mut Process) {
+pub fn failed_healthcheck(proc: &mut Process) -> Option<ProcessState> {
     if proc.startup_failures() == proc.config().startretries() {
         log_info!("reached max startretries for process '{}', giving up", proc.name());
 
-        proc.update_state(ProcessState::Stopped);
+        Some(ProcessState::Stopped)
     } else {
         log_info!("restarting process '{}' in {} seconds..", proc.name(), proc.config().backoff());
 
         proc.increment_startup_failures();
-        proc.update_state(ProcessState::WaitingForRetry(proc.retry_at()));
+        Some(ProcessState::WaitingForRetry(proc.retry_at()))
     }
 }
 
-pub fn failed(proc: &mut Process, prev_state: ProcessState) {
-    assert!(matches!(prev_state, ProcessState::HealthCheck(_)) || prev_state == ProcessState::Healthy);
+impl State for Failed {
+    fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
+        let prev_state = self.prev_state();
+        assert!(matches!(prev_state, ProcessState::HealthCheck(_)) || prev_state == &ProcessState::Healthy);
 
-    match prev_state {
-        ProcessState::Healthy => failed_runtime(proc),
-        ProcessState::HealthCheck(_) => failed_healthcheck(proc),
-        _ => {}
-    }
-}
-
-pub fn waiting_for_retry(proc: &mut Process, retry_at: Instant) {
-    if retry_at > Instant::now() {
-        return;
-    }
-
-    match proc.start() {
-        Ok(()) => {
-            log_info!(
-                "spawned process '{}', PID {}",
-                proc.name(),
-                proc.id().expect("if the process started, its id should be set")
-            );
-            proc.update_state(ProcessState::HealthCheck(Instant::now()))
-        }
-        Err(err) => {
-            log_info!("failed to start process {}: {}", proc.name(), err);
-            proc.update_state(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))));
+        match prev_state {
+            ProcessState::Healthy => failed_runtime(proc),
+            ProcessState::HealthCheck(_) => failed_healthcheck(proc),
+            _ => None,
         }
     }
 }
 
-pub fn completed(proc: &mut Process) {
-    if proc.config().autorestart().mode() != "always" {
-        return;
-    }
+impl State for WaitingForRetry {
+    fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
+        if self.retry_at() > Instant::now() {
+            return None;
+        }
 
-    match proc.start() {
-        Ok(()) => {
-            log_info!(
-                "spawned process '{}', PID {}",
-                proc.name(),
-                proc.id().expect("if the process started, its id should be set")
-            );
-            proc.update_state(ProcessState::HealthCheck(Instant::now()))
+        match proc.start() {
+            Ok(()) => {
+                log_info!(
+                    "spawned process '{}', PID {}",
+                    proc.name(),
+                    proc.id().expect("if the process started, its id should be set")
+                );
+                Some(ProcessState::HealthCheck(Instant::now()))
+            }
+            Err(err) => {
+                log_info!("failed to start process {}: {}", proc.name(), err);
+                Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))))
+            }
         }
-        Err(err) => {
-            log_error!("failed to start process {}: {}", proc.name(), err);
-            proc.update_state(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))));
+    }
+}
+
+impl State for Completed {
+    fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
+        if proc.config().autorestart().mode() != "always" {
+            return None;
         }
+
+        match proc.start() {
+            Ok(()) => {
+                log_info!(
+                    "spawned process '{}', PID {}",
+                    proc.name(),
+                    proc.id().expect("if the process started, its id should be set")
+                );
+                Some(ProcessState::HealthCheck(Instant::now()))
+            }
+            Err(err) => {
+                log_error!("failed to start process {}: {}", proc.name(), err);
+                Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))))
+            }
+        }
+    }
+}
+
+impl State for Stopped {
+    fn handle(&self, _proc: &mut Process) -> Option<ProcessState> {
+        None
     }
 }
