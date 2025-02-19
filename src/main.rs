@@ -15,6 +15,6 @@ fn main() {
     };
 
     let mut daemon = Daemon::from_config(&conf);
-    println!("{:?}", daemon.get_processes());
+    log::info(format_args!("starting taskmaster.."));
     let _ = daemon.run();
 }

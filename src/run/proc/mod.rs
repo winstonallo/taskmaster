@@ -6,7 +6,10 @@ use std::{
     time,
 };
 
-use crate::conf::{self, proc::ProcessConfig};
+use crate::{
+    conf::{self, proc::ProcessConfig},
+    log_error, log_info,
+};
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
 pub use state::ProcessState;
@@ -132,8 +135,6 @@ impl Process<'_> {
         self.id = Some(self.child.as_ref().unwrap().id());
         self.last_startup = Some(time::Instant::now());
 
-        println!("process '{}' started, PID: {}", self.name, self.id.unwrap());
-
         Ok(())
     }
 
@@ -145,9 +146,9 @@ impl Process<'_> {
                 Some(code) => Some(code),
                 None => {
                     if let Some(signal) = status.signal() {
-                        eprintln!("PID {} terminated by signal {}", self.id().expect("something went very wrong"), signal);
+                        log_info!("PID {} terminated by signal {}", self.id().expect("something went very wrong"), signal);
                     } else {
-                        eprintln!(
+                        log_info!(
                             "PID {} terminated without exit or signal information",
                             self.id().expect("something went very wrong")
                         )
@@ -157,7 +158,7 @@ impl Process<'_> {
             },
             Ok(None) => None,
             Err(err) => {
-                eprintln!("could not get status for PID {}: {}", self.id().expect("something went very wrong"), err);
+                log_error!("could not get status for PID {}: {}", self.id().expect("something went very wrong"), err);
                 None
             }
         }

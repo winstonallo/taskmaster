@@ -1,16 +1,11 @@
-use std::{
-    collections::HashMap,
-    fmt::Write,
-    io::{stderr, stdout, Read},
-    os::unix::net::UnixListener,
-};
+use std::{collections::HashMap, io::Read, os::unix::net::UnixListener};
 
 use error::DaemonError;
 
 use super::proc;
-use crate::{conf, log::Logger};
+use crate::conf;
 mod error;
-mod monitor;
+mod statemachine;
 
 trait ClientStream {
     fn poll(&self) -> Option<Vec<u8>>;
@@ -61,13 +56,12 @@ impl ClientStream for UnixSocketStream {
     }
 }
 
-pub struct Daemon<'tm, W: Write + Send> {
+pub struct Daemon<'tm> {
     processes: HashMap<String, proc::Process<'tm>>,
-    logger: Logger<W>,
     client_stream: Box<dyn ClientStream>,
 }
 
-impl<'tm, W: Write + Send> Daemon<'tm, W> {
+impl<'tm> Daemon<'tm> {
     pub fn from_config(conf: &'tm conf::Config) -> Self {
         let procs: HashMap<String, proc::Process<'tm>> = conf
             .processes()
@@ -79,13 +73,8 @@ impl<'tm, W: Write + Send> Daemon<'tm, W> {
 
         Self {
             processes: procs,
-            logger: Logger::new(stdout(), stderr()),
             client_stream: Box::new(client_stream),
         }
-    }
-
-    pub fn get_processes(&self) -> &HashMap<String, proc::Process<'tm>> {
-        &self.processes
     }
 
     pub fn run(&mut self) -> Result<(), DaemonError> {
@@ -95,7 +84,7 @@ impl<'tm, W: Write + Send> Daemon<'tm, W> {
             }
 
             for proc in self.processes.values_mut() {
-                monitor::monitor_state(proc);
+                statemachine::monitor_state(proc);
             }
         }
     }
