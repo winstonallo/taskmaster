@@ -16,7 +16,7 @@ impl Daemon<'_> {
 
         if args.len() < 2 {
             for (proc_name, proc) in &self.processes {
-                response.push(format!("{:?}", proc.state()));
+                response.push(format!("{}: {}", proc_name, proc.state()));
             }
             return Ok(response.join("\n"));
         }
@@ -26,14 +26,14 @@ impl Daemon<'_> {
                 if let Some(pid) = proc.id() {
                     if let Ok(id) = arg.parse::<u32>() {
                         if id == pid {
-                            response.push(format!("{:?}", proc.state()));
+                            response.push(format!("{}: {}", proc_name, proc.state()));
                             break;
                         }
                     }
                 }
                 let base_name: &str = proc_name.split("_").collect::<Vec<&str>>()[0];
                 if arg == proc_name || arg == &base_name {
-                    response.push(format!("{:?}", proc.state()));
+                    response.push(format!("{}: {}", proc_name, proc.state()));
                     break;
                 }
             }

@@ -1,4 +1,7 @@
-use std::time;
+use std::{
+    fmt::{Debug, Display},
+    time::{self, Instant},
+};
 
 use crate::run::proc::Process;
 
@@ -12,6 +15,20 @@ pub enum ProcessState {
     WaitingForRetry(time::Instant),
     Completed,
     Stopped,
+}
+
+impl Display for ProcessState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ProcessState::Idle => write!(f, "idle"),
+            ProcessState::HealthCheck(started_at) => write!(f, "in healthcheck since {} seconds", Instant::now().duration_since(*started_at).as_secs()),
+            ProcessState::Healthy => write!(f, "healthy"),
+            ProcessState::Failed(prev_state) => write!(f, "failed while in state: {}", *prev_state),
+            ProcessState::WaitingForRetry(retry_at) => write!(f, "retrying in {} seconds", retry_at.duration_since(Instant::now()).as_secs()),
+            ProcessState::Completed => write!(f, "completed successfully"),
+            ProcessState::Stopped => write!(f, "stopped"),
+        }
+    }
 }
 
 /// Trait to be implemented by for the abstraction of state transitions.
