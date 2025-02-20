@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::log_error;
 
 pub enum CommandError {

@@ -11,6 +11,8 @@ mod tests;
 pub struct Config {
     #[serde(default = "defaults::dflt_socketpath")]
     socketpath: String,
+    #[serde(default = "defaults::dflt_authgroup")]
+    authgroup: String,
     #[serde(flatten)]
     processes: HashMap<String, ProcessConfig>,
 }
@@ -59,5 +61,9 @@ impl Config {
 
     pub fn socketpath(&self) -> &str {
         &self.socketpath
+    }
+
+    pub fn authgroup(&self) -> &str {
+        &self.authgroup
     }
 }

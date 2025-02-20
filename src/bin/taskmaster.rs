@@ -1,6 +1,6 @@
 use tasklib::conf::Config;
-use tasklib::log;
 use tasklib::run::daemon::Daemon;
+use tasklib::{log, log_error};
 
 fn main() {
     let conf = match Config::from_file("./config/example.toml") {
@@ -11,7 +11,13 @@ fn main() {
         }
     };
 
-    let mut daemon = Daemon::from_config(&conf);
+    let mut daemon = match Daemon::from_config(&conf) {
+        Ok(d) => d,
+        Err(e) => {
+            log_error!("{}", e);
+            return;
+        }
+    };
     log::info(format_args!("starting taskmaster.."));
     let _ = daemon.run();
 }
