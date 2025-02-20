@@ -37,7 +37,6 @@ impl State for HealthCheck {
                 proc.config().starttime()
             );
 
-            proc.update_state(ProcessState::Healthy);
             return Some(ProcessState::Healthy);
         }
 
