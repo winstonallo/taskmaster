@@ -3,7 +3,16 @@ name = "taskmaster"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "tasklib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "taskmaster"
 [dependencies]
 libc = "0.2.169"
 serde = { version = "1.0.217", features = ["derive"] }
 toml = "0.8.20"
+
+[[bin]]
+name = "taskshell"

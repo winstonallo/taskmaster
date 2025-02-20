@@ -1,9 +1,6 @@
-use conf::Config;
-use run::daemon::Daemon;
-
-mod conf;
-mod log;
-mod run;
+use tasklib::conf::Config;
+use tasklib::log;
+use tasklib::run::daemon::Daemon;
 
 fn main() {
     let conf = match Config::from_file("./config/example.toml") {
