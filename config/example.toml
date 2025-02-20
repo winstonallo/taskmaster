@@ -18,7 +18,7 @@ args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
-processes = 5
+processes = 255
 
 # Mask for files created by the process.
 # Defaults to "022".
@@ -101,7 +101,7 @@ args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
-processes = 8
+processes = 255
 
 # Mask for files created by the process.
 # Defaults to "022".
