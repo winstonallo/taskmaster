@@ -16,6 +16,8 @@ pub enum ProcessState {
 
 /// Trait to be implemented by for the abstraction of state transitions.
 pub trait State {
+    /// Returns the new `ProcessState` for `proc`, or `None` if no transition
+    /// is required.
     fn handle(&self, proc: &mut Process) -> Option<ProcessState>;
 }
 

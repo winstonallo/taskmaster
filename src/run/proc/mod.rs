@@ -13,7 +13,7 @@ use crate::{
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
 
-use super::statemachine::state::ProcessState;
+use super::statemachine::states::ProcessState;
 
 mod error;
 

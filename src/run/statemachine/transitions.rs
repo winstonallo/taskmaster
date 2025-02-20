@@ -2,10 +2,10 @@ use std::time::Instant;
 
 use crate::{
     log_error, log_info,
-    run::{proc::Process, statemachine::state::ProcessState},
+    run::{proc::Process, statemachine::states::ProcessState},
 };
 
-use super::state::{Completed, Failed, HealthCheck, Healthy, Idle, State, Stopped, WaitingForRetry};
+use super::states::{Completed, Failed, HealthCheck, Healthy, Idle, State, Stopped, WaitingForRetry};
 
 impl State for Idle {
     fn handle(&self, proc: &mut Process) -> Option<ProcessState> {
