@@ -1,8 +1,11 @@
 use std::{
     ffi::CString,
     fs::{self},
-    io::{ErrorKind, Read},
-    os::unix::{fs::PermissionsExt, net::UnixListener},
+    io::{ErrorKind, Read, Write},
+    os::unix::{
+        fs::PermissionsExt,
+        net::{UnixListener, UnixStream},
+    },
 };
 
 use libc::{chown, getgrnam, gid_t};
@@ -12,6 +15,7 @@ pub struct UnixSocket {
     path: String,
     authgroup: String,
     listener: UnixListener,
+    stream: Option<UnixStream>,
 }
 
 fn get_group_id(group_name: &str) -> Result<u32, String> {
@@ -29,14 +33,14 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
 
 impl UnixSocket {
     pub fn new(path: &str, authgroup: &str) -> Result<Self, String> {
-        if std::fs::metadata(path).is_ok() {
-            let _ = std::fs::remove_file(path);
+        if fs::metadata(path).is_ok() {
+            let _ = fs::remove_file(path);
         }
-        let listener = UnixListener::bind(path).map_err(|err| format!("could not bind to socket at path: {path}: {err}"))?;
+        let listener = UnixListener::bind(path).map_err(|err| format!("could not bind to socket at path: {}: {}", path, err))?;
 
         listener
             .set_nonblocking(true)
-            .map_err(|err| format!("failed to set non-blocking mode: {err}"))?;
+            .map_err(|err| format!("failed to set non-blocking mode: {}", err))?;
 
         let gid = get_group_id(authgroup)?;
 
@@ -58,29 +62,57 @@ impl UnixSocket {
             path: path.to_string(),
             authgroup: authgroup.to_string(),
             listener,
+            stream: None,
         })
     }
 
-    pub fn poll(&self) -> Option<Vec<u8>> {
-        match self.listener.accept() {
-            Ok((mut socket, _)) => {
-                let _ = socket.set_nonblocking(true);
-                let mut req = String::new();
-                match socket.read_to_string(&mut req) {
-                    Ok(n) if n > 0 => Some(req.into_bytes()),
-                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
-                    Err(e) => {
-                        eprintln!("read error: {e}");
-                        None
-                    }
-                    _ => None,
+    pub fn poll(&mut self) -> Option<Vec<u8>> {
+        if self.stream.is_none() {
+            match self.listener.accept() {
+                Ok((stream, _)) => self.stream = Some(stream),
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => return None,
+                Err(e) => {
+                    eprintln!("accept error: {}", e);
+                    return None;
                 }
             }
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
-            Err(e) => {
-                eprintln!("accept error: {e}");
-                None
+        }
+
+        if let Some(ref mut stream) = self.stream {
+            let mut req = Vec::new();
+            match stream.read_to_end(&mut req) {
+                Ok(0) => {
+                    self.stream = None;
+                    None
+                }
+                Ok(_) => Some(req),
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
+                Err(e) => {
+                    eprintln!("read error: {}", e);
+                    self.stream = None;
+                    None
+                }
             }
+        } else {
+            None
+        }
+    }
+
+    pub fn write(&mut self, data: &[u8]) -> Result<(), String> {
+        if self.stream.is_none() {
+            match self.listener.accept() {
+                Ok((stream, _)) => self.stream = Some(stream),
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => return Err("no client connection available".to_string()),
+                Err(e) => return Err(format!("failed to accept connection: {}", e)),
+            }
+        }
+
+        if let Some(ref mut stream) = self.stream {
+            stream.write_all(data).map_err(|e| format!("write error: {}", e))?;
+            stream.flush().map_err(|e| format!("flush error: {}", e))?;
+            Ok(())
+        } else {
+            Err("no connection established".to_string())
         }
     }
 }

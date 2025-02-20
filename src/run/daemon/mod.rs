@@ -4,14 +4,14 @@ use error::DaemonError;
 use socket::UnixSocket;
 
 use super::{proc, statemachine};
-use crate::conf;
+use crate::{conf, log_error};
 mod command;
 mod error;
 mod socket;
 
 pub struct Daemon<'tm> {
     processes: HashMap<String, proc::Process<'tm>>,
-    client_stream: Box<UnixSocket>,
+    client_stream: UnixSocket,
 }
 
 impl<'tm> Daemon<'tm> {
@@ -35,7 +35,7 @@ impl<'tm> Daemon<'tm> {
 
         Ok(Self {
             processes: procs,
-            client_stream: Box::new(client_stream),
+            client_stream,
         })
     }
 
@@ -44,9 +44,10 @@ impl<'tm> Daemon<'tm> {
             if let Some(data) = self.client_stream.poll() {
                 let data = unsafe { String::from_utf8_unchecked(data) };
 
+                #[allow(unused_must_use)]
                 match self.run_command(&data) {
-                    Ok(response) => println!("{}", response), // write response to socket
-                    Err(_) => {}                              // write error response to socket
+                    Ok(response) => self.client_stream.write(response.as_bytes()).map_err(|e| log_error!("{}", e)), // write response to socket
+                    Err(_) => Ok(()),                                                                               // write error response to socket
                 };
             }
 

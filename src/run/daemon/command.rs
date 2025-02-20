@@ -1,5 +1,7 @@
 #![allow(unused)]
 
+use std::fmt::{format, Debug};
+
 use crate::{log_error, log_info};
 
 use super::Daemon;
@@ -13,31 +15,31 @@ impl Daemon<'_> {
         let mut response: Vec<String> = vec![];
 
         if args.len() < 2 {
-            // get status for all processes
-            // for arg in args {
             for (proc_name, proc) in &self.processes {
                 response.push(format!("{:?}", proc.state()));
-                // if let Ok(id) = proc_name.parse::<u32>() {
-                //     if let Some(pid) = proc.id() {
-                //         if id == pid {
-                //             break;
-                //         }
-                //     }
-                // }
-                // if arg == proc_name {
-                //     response.push(format!("{:?}", proc.state()));
-                // }
-                // // }
             }
             return Ok(response.join("\n"));
         }
 
         for arg in &args[1..] {
-            // if arg == some pid or arg == some process name { append status }
-            // else { append error }
+            for (proc_name, proc) in &self.processes {
+                if let Some(pid) = proc.id() {
+                    if let Ok(id) = arg.parse::<u32>() {
+                        if id == pid {
+                            response.push(format!("{:?}", proc.state()));
+                            break;
+                        }
+                    }
+                }
+                let base_name: &str = proc_name.split("_").collect::<Vec<&str>>()[0];
+                if arg == proc_name || arg == &base_name {
+                    response.push(format!("{:?}", proc.state()));
+                    break;
+                }
+            }
         }
 
-        Ok("".to_string())
+        Ok(response.join("\n"))
     }
 
     fn start(&self, args: Vec<&str>) -> Result<String, CommandError> {
