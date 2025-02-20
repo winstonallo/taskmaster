@@ -1,9 +1,13 @@
-use std::{collections::HashMap, io::Read, os::unix::net::UnixListener};
+use std::{
+    collections::HashMap,
+    io::{ErrorKind, Read},
+    os::unix::net::UnixListener,
+};
 
 use error::DaemonError;
 
 use super::{proc, statemachine};
-use crate::conf;
+use crate::{conf, log_error};
 mod error;
 
 trait ClientStream {
@@ -35,22 +39,23 @@ impl ClientStream for UnixSocketStream {
         match self.listener.accept() {
             Ok((mut socket, addr)) => {
                 println!("got client: {:?} - {:?}", socket, addr);
+                let _ = socket.set_nonblocking(true);
                 let mut req = String::new();
                 match socket.read_to_string(&mut req) {
-                    Ok(val) => {
-                        if val > 0 {
-                            Some(req.as_bytes().to_vec())
-                        } else {
-                            None
-                        }
-                    }
-                    Err(err) => {
-                        eprintln!("could not read: {err}");
+                    Ok(n) if n > 0 => Some(req.into_bytes()),
+                    Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
+                    Err(e) => {
+                        eprintln!("read error: {e}");
                         None
                     }
+                    _ => None,
                 }
             }
-            Err(_) => None,
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
+            Err(e) => {
+                eprintln!("accept error: {e}");
+                None
+            }
         }
     }
 }
@@ -88,7 +93,7 @@ impl<'tm> Daemon<'tm> {
     pub fn run(&mut self) -> Result<(), DaemonError> {
         loop {
             if let Some(data) = self.client_stream.poll() {
-                println!("received data: {:?}", String::from_utf8(data));
+                log_error!("received data: {:?}", String::from_utf8(data));
             }
 
             for proc in self.processes.values_mut() {

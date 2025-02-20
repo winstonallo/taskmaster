@@ -1,8 +1,8 @@
-use state::{Completed, Failed, HealthCheck, Healthy, Idle, ProcessState, State, Stopped, WaitingForRetry};
+use states::{Completed, Failed, HealthCheck, Healthy, Idle, ProcessState, State, Stopped, WaitingForRetry};
 
 use super::proc::Process;
 
-pub mod state;
+pub mod states;
 mod transitions;
 
 fn try_update_state<S: State>(proc: &mut Process, handler: S) {

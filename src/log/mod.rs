@@ -43,7 +43,7 @@ impl Logger {
     pub fn error(&self, args: fmt::Arguments) {
         let mut guard = self.stderr.lock().expect("Mutex lock panicked in another thread");
         let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
-        let _ = guard.write_all(b" [error]: ");
+        let _ = guard.write_all(b" \x1b[31m[err_]\x1b[0m: ");
         let _ = guard.write_fmt(args);
         let _ = guard.write_all(b"\n");
     }
@@ -51,7 +51,15 @@ impl Logger {
     pub fn info(&self, args: fmt::Arguments) {
         let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
         let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
-        let _ = guard.write_all(b" [info]: ");
+        let _ = guard.write_all(b" \x1b[32m[info]\x1b[0m: ");
+        let _ = guard.write_fmt(args);
+        let _ = guard.write_all(b"\n");
+    }
+
+    pub fn warning(&self, args: fmt::Arguments) {
+        let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
+        let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
+        let _ = guard.write_all(b" \x1b[33m[warn]\x1b[0m: ");
         let _ = guard.write_fmt(args);
         let _ = guard.write_all(b"\n");
     }
@@ -83,6 +91,18 @@ pub fn fatal(args: fmt::Arguments) {
     get_logger().fatal(args);
 }
 
+pub fn prefix_info(prefix: &str, args: fmt::Arguments) {
+    let prefix = format!("\x1b[1m{}\x1b[22m", prefix);
+
+    get_logger().info(format_args!("{} {}", prefix, args));
+}
+
+pub fn prefix_warning(prefix: &str, args: fmt::Arguments) {
+    let prefix = format!("\x1b[1m{}\x1b[22m", prefix);
+
+    get_logger().warning(format_args!("{} {}", prefix, args));
+}
+
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {
@@ -101,6 +121,20 @@ macro_rules! log_info {
 macro_rules! log_fatal {
     ($($arg:tt)*) => {
         $crate::log::fatal(format_args!($($arg)*))
+    };
+}
+
+#[macro_export]
+macro_rules! proc_info {
+    ($proc:expr, $($arg:tt)*) => {
+        $crate::log::prefix_info($proc, format_args!($($arg)*))
+    };
+}
+
+#[macro_export]
+macro_rules! proc_warning {
+    ($proc:expr, $($arg:tt)*) => {
+        $crate::log::prefix_warning($proc, format_args!($($arg)*))
     };
 }
 
