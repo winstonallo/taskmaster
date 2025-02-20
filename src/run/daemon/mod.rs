@@ -8,6 +8,7 @@ use error::DaemonError;
 
 use super::{proc, statemachine};
 use crate::{conf, log_error};
+mod commands;
 mod error;
 
 trait ClientStream {
