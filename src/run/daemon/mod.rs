@@ -4,8 +4,8 @@ use error::DaemonError;
 use socket::UnixSocket;
 
 use super::{proc, statemachine};
-use crate::{conf, log_error};
-mod commands;
+use crate::conf;
+mod command;
 mod error;
 mod socket;
 
@@ -42,7 +42,12 @@ impl<'tm> Daemon<'tm> {
     pub fn run(&mut self) -> Result<(), DaemonError> {
         loop {
             if let Some(data) = self.client_stream.poll() {
-                log_error!("received data: {:?}", String::from_utf8(data));
+                let data = unsafe { String::from_utf8_unchecked(data) };
+
+                match self.run_command(&data) {
+                    Ok(response) => println!("{}", response), // write response to socket
+                    Err(_) => {}                              // write error response to socket
+                };
             }
 
             for proc in self.processes.values_mut() {
