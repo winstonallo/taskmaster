@@ -4,7 +4,11 @@ use error::DaemonError;
 use socket::UnixSocket;
 
 use super::{proc, statemachine};
-use crate::{conf, log_error};
+use crate::{
+    conf,
+    jsonrpc::{JsonRPCMessage, JsonRPCRaw},
+    log_error,
+};
 mod command;
 mod error;
 mod socket;
@@ -42,10 +46,31 @@ impl<'tm> Daemon<'tm> {
     pub fn run(&mut self) -> Result<(), DaemonError> {
         loop {
             if let Some(data) = self.client_stream.poll() {
-                let data = unsafe { String::from_utf8_unchecked(data) };
+                let raw: JsonRPCRaw = match serde_json::from_slice(&data) {
+                    Ok(raw) => raw,
+                    Err(e) => {
+                        log_error!("could not parse JSON-RPC: {e}");
+                        continue;
+                    }
+                };
+
+                let msg = match JsonRPCMessage::try_from(raw) {
+                    Ok(msg) => msg,
+                    Err(e) => {
+                        log_error!("could not parse JSON-RPC: {:?}", e);
+                        continue;
+                    }
+                };
+
+                let msg = match msg {
+                    JsonRPCMessage::Request(req) => req,
+                    _ => {
+                        todo!()
+                    }
+                };
 
                 #[allow(unused_must_use)]
-                match self.run_command(&data) {
+                match self.run_command(&msg) {
                     Ok(response) => self.client_stream.write(response.as_bytes()).map_err(|e| log_error!("{}", e)), // write response to socket
                     Err(_) => Ok(()),                                                                               // write error response to socket
                 };

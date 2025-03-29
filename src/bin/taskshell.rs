@@ -3,6 +3,8 @@ use std::{
     os::unix::net::UnixStream,
 };
 
+use tasklib::jsonrpc::JsonRPCRequest;
+
 fn read_from_stream(unix_stream: &mut UnixStream) -> Result<(), String> {
     let mut buf = String::new();
 
@@ -26,10 +28,18 @@ fn main() {
         panic!("dont play with me");
     }
 
-    let input = &args.collect::<Vec<String>>()[1..].join(" ");
+    let request = serde_json::to_string(&JsonRPCRequest {
+        jsonrpc: "2.0".to_string(),
+        id: 1,
+        method: "status".to_string(),
+        params: None,
+    })
+    .expect("Serialization failed")
+    .into_bytes();
+
     let socket_path = "/tmp/.taskmaster.sock";
 
     let mut unix_stream = UnixStream::connect(socket_path).expect("could not create stream");
-    let _ = write_request(&mut unix_stream, input.as_bytes());
+    let _ = write_request(&mut unix_stream, &request);
     let _ = read_from_stream(&mut unix_stream);
 }
