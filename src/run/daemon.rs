@@ -54,6 +54,7 @@ async fn handle_client(mut socket: AsyncUnixSocket) {
         Ok(0) => { /* connection closed, do nothing */ }
         Ok(_) => {
             println!("{}", line);
+            
             if let Err(e) = socket.write(line.as_bytes()).await {
                 log_error!("error writing to client: {}", e);
             }
@@ -70,14 +71,17 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
+
                 if let Err(e) = accept_result {
                     log_error!("Failed to accept connection: {}", e);
                     continue;
                 }
-                let socket_for_task = listener;
+
+                let socket = listener;
                 tokio::spawn(async move {
-                    handle_client(socket_for_task).await;
+                    handle_client(socket).await;
                 });
+
                 listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
             },
             _ = sleep(Duration::from_nanos(1)) => {

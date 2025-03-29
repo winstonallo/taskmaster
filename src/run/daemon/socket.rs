@@ -14,7 +14,7 @@ use libc::{chown, getgrnam, gid_t};
 
 #[allow(unused)]
 pub struct AsyncUnixSocket {
-    path: String,
+    socketpath: String,
     authgroup: String,
     listener: Option<UnixListener>,
     stream: Option<UnixStream>,
@@ -32,31 +32,42 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
         }
     }
 }
+fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
+    let gid = get_group_id(authgroup)?;
+    let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {}", e))?;
+
+    unsafe {
+        if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
+            return Err(format!(
+                "could not change group ownership: {} - do you have permissions for group '{}'?",
+                std::io::Error::last_os_error(),
+                authgroup
+            ));
+        }
+    }
+
+    fs::set_permissions(socketpath, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {}", e))
+}
 
 impl AsyncUnixSocket {
-    pub fn new(path: &str, authgroup: &str) -> Result<Self, String> {
-        if fs::metadata(path).is_ok() {
-            let _ = fs::remove_file(path);
+    pub fn new(socketpath: &str, authgroup: &str) -> Result<Self, String> {
+        if fs::metadata(socketpath).is_ok() {
+            let _ = fs::remove_file(socketpath);
         }
-        let listener = UnixListener::bind(path).map_err(|err| format!("could not bind to socket at path: {}: {}", path, err))?;
 
-        let gid = get_group_id(authgroup)?;
-        let c_path = CString::new(path).map_err(|e| format!("invalid path: {}", e))?;
-
-        unsafe {
-            if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
-                return Err(format!(
-                    "could not change group ownership: {} - do you have permissions for group '{}'?",
-                    std::io::Error::last_os_error(),
-                    authgroup
-                ));
+        let listener = match UnixListener::bind(socketpath) {
+            Ok(listener) => listener,
+            Err(e) => {
+                return Err(format!("could not bind to unix socket at path {}: {}", socketpath, e));
             }
-        }
+        };
 
-        fs::set_permissions(path, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {}", e))?;
+        if let Err(e) = set_permissions(socketpath, authgroup) {
+            return Err(e);
+        }
 
         Ok(Self {
-            path: path.to_string(),
+            socketpath: socketpath.to_string(),
             authgroup: authgroup.to_string(),
             listener: Some(listener),
             stream: None,
