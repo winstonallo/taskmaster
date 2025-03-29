@@ -1,9 +1,8 @@
-use core::task;
 use std::error::Error;
 
 use tasklib::conf::Config;
 use tasklib::run::daemon::Daemon;
-use tasklib::{log, log_error, log_info};
+use tasklib::{log_error, log_info};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {

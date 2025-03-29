@@ -1,13 +1,5 @@
-use std::{
-    collections::HashMap,
-    error::Error,
-    hash::Hash,
-    io::{Write, stdout},
-    time::Duration,
-};
+use std::{collections::HashMap, error::Error, time::Duration};
 
-use error::DaemonError;
-use libc::stat;
 use socket::AsyncUnixSocket;
 use tokio::time::sleep;
 
@@ -15,11 +7,8 @@ use super::{
     proc::{self, Process},
     statemachine,
 };
-use crate::{
-    conf,
-    jsonrpc::{JsonRPCMessage, JsonRPCRaw},
-    log_error, log_info,
-};
+
+use crate::{conf, log_error};
 mod command;
 mod error;
 mod socket;
@@ -59,35 +48,38 @@ pub fn monitor_state(procs: &mut HashMap<String, Process>) {
     }
 }
 
-pub async fn run<'tm>(procs: &mut HashMap<String, Process<'_>>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
-    let mut server_socket = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
+pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
+    let mut listener = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
 
     loop {
         tokio::select! {
-            accept_result = server_socket.accept() => {
+            accept_result = listener.accept() => {
                 match accept_result {
                     Ok(()) => {
-                        let mut socket_for_task = server_socket;
+                        let mut socket_for_task = listener;
                         tokio::spawn(async move {
                             let mut line = String::new();
                             match socket_for_task.read_line(&mut line).await {
                                 Ok(0) => { /* connection closed, do nothing */ },
                                 Ok(_) => {
                                     println!("{}", line);
+                                    if let Err(e) = socket_for_task.write(line.as_bytes()).await {
+                                        log_error!("error writing to client: {}", e);
+                                    }
                                 },
                                 Err(e) => {
                                     log_error!("Error reading from socket: {}", e);
                                 }
                             }
                         });
-                        server_socket = AsyncUnixSocket::new(&socketpath, &authgroup)?;
+                        listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
                     },
                     Err(e) => {
                         log_error!("Failed to accept connection: {}", e);
                     }
                 }
             },
-            _ = sleep(Duration::from_millis(1)) => {
+            _ = sleep(Duration::from_nanos(1)) => {
                 monitor_state(procs);
             }
         }

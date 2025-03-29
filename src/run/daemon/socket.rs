@@ -3,7 +3,6 @@ use std::{
     ffi::CString,
     fs::{self},
     os::unix::fs::PermissionsExt,
-    u32,
 };
 
 use tokio::{
@@ -78,34 +77,30 @@ impl AsyncUnixSocket {
         }
     }
 
-    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error>> {
+    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error + Send>> {
         if self.stream.is_none() {
-            self.accept().await?;
+            self.accept().await.unwrap();
         }
 
         if let Some(ref mut stream) = self.stream {
             let mut reader = BufReader::new(stream);
-            reader.read_line(line).await.map_err(|e| e.into())
+            reader.read_line(line).await.map_err(|e| Box::new(e) as Box<dyn Error + Send>)
         } else {
-            Err("no connection established".to_string().into())
+            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
         }
     }
 
-    pub async fn write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error>> {
+    pub async fn write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error + Send>> {
         if self.stream.is_none() {
-            self.accept().await?;
+            self.accept().await.unwrap();
         }
 
         if let Some(ref mut stream) = self.stream {
-            stream.write_all(data).await.map_err(|e| format!("write error: {}", e))?;
-            stream.flush().await.map_err(|e| format!("flush error: {}", e))?;
+            stream.write_all(data).await.map_err(|e| format!("write error: {}", e)).unwrap();
+            stream.flush().await.map_err(|e| format!("flush error: {}", e)).unwrap();
             Ok(())
         } else {
-            Err("no connection established".to_string().into())
+            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
         }
-    }
-
-    pub async fn connect(path: &str) -> Result<UnixStream, Box<dyn Error>> {
-        UnixStream::connect(path).await.map_err(|e| format!("connect: {e}").into())
     }
 }

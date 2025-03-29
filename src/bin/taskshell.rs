@@ -44,6 +44,6 @@ fn main() {
     let socket_path = "/tmp/.taskmaster.sock";
 
     let mut unix_stream = UnixStream::connect(socket_path).expect("could not create stream");
-    let _ = write_request(&mut unix_stream, &bytes);
+    let _ = write_request(&mut unix_stream, bytes);
     let _ = read_from_stream(&mut unix_stream);
 }
