@@ -1,4 +1,4 @@
-use std::{collections::HashMap, error::Error, time::Duration};
+use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
 use socket::AsyncUnixSocket;
 use tokio::time::sleep;
@@ -8,7 +8,7 @@ use super::{
     statemachine,
 };
 
-use crate::{conf, log_error};
+use crate::{conf, jsonrpc::JsonRPCRequest, log_error};
 mod command;
 mod error;
 mod socket;
@@ -48,12 +48,16 @@ pub fn monitor_state(procs: &mut HashMap<String, Process>) {
     }
 }
 
-async fn handle_client(mut socket: AsyncUnixSocket) {
+async fn handle_client(mut socket: AsyncUnixSocket, mut sender: Arc<tokio::sync::mpsc::Sender<JsonRPCRequest>>) {
     let mut line = String::new();
     match socket.read_line(&mut line).await {
         Ok(0) => { /* connection closed, do nothing */ }
         Ok(_) => {
-            println!("{}", line);
+            //println!("{}", line);
+
+            let request = serde_json::from_str(&line).unwrap();
+
+            sender.send(request).await;
 
             if let Err(e) = socket.write(line.as_bytes()).await {
                 log_error!("error writing to client: {}", e);
@@ -68,6 +72,8 @@ async fn handle_client(mut socket: AsyncUnixSocket) {
 pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
     let mut listener = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
 
+    let (sender, mut reciever) = tokio::sync::mpsc::channel(1024);
+    let a = Arc::new(sender);
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
@@ -78,11 +84,15 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
                 }
 
                 let socket = listener;
+                let temp = a.clone();
                 tokio::spawn(async move {
-                    handle_client(socket).await;
+                    handle_client(socket, temp).await;
                 });
 
                 listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
+            },
+            Some(request) = reciever.recv() => {
+                println!("{:?}", request)
             },
             _ = sleep(Duration::from_nanos(1)) => {
                 monitor_state(procs);
