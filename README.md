@@ -10,7 +10,7 @@ Its key components are:
 
 ## Challenges
 ### State Management
-The first challenge I faced was managing the state of the processes efficiently. I broke down the possible states of any process to the following:
+The first challenge was managing the state of the processes efficiently. The possible states of processes can be broken down to the following:
 ```rust
 pub enum ProcessState {
     Idle,
