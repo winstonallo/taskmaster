@@ -54,7 +54,7 @@ async fn handle_client(mut socket: AsyncUnixSocket) {
         Ok(0) => { /* connection closed, do nothing */ }
         Ok(_) => {
             println!("{}", line);
-            
+
             if let Err(e) = socket.write(line.as_bytes()).await {
                 log_error!("error writing to client: {}", e);
             }

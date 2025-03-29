@@ -62,9 +62,7 @@ impl AsyncUnixSocket {
             }
         };
 
-        if let Err(e) = set_permissions(socketpath, authgroup) {
-            return Err(e);
-        }
+        set_permissions(socketpath, authgroup)?;
 
         Ok(Self {
             socketpath: socketpath.to_string(),
