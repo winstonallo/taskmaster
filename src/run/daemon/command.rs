@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use std::fmt::{format, Debug};
+use std::fmt::{Debug, format};
 
 use crate::{log_error, log_info};
 

@@ -3,8 +3,8 @@ mod from_str {
     use libc::SIGTERM;
 
     use crate::conf::{
-        proc::{defaults, types},
         Config,
+        proc::{defaults, types},
     };
 
     #[test]
@@ -360,8 +360,8 @@ mod from_file {
     use libc::{SIGTERM, SIGUSR1};
 
     use crate::conf::{
-        proc::types::{AccessibleDirectory, StopSignal},
         Config,
+        proc::types::{AccessibleDirectory, StopSignal},
     };
 
     #[test]
