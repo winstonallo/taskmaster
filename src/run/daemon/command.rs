@@ -2,7 +2,7 @@
 
 use std::fmt::{Debug, format};
 
-use crate::{log_error, log_info};
+use crate::{jsonrpc::JsonRPCRequest, log_error, log_info};
 
 use super::Daemon;
 
@@ -62,20 +62,21 @@ impl Daemon<'_> {
         Ok("".to_string())
     }
 
-    pub fn run_command(&self, input: &str) -> Result<String, CommandError> {
-        log_info!("got command: {}", input);
-        let command: Vec<&str> = input.split_whitespace().collect();
-        match command[0] {
-            "status" => self.status(command),
-            "start" => self.start(command),
-            "stop" => self.stop(command),
-            "restart" => self.restart(command),
-            "reload-config" => self.reload_config(command),
-            "exit" => self.exit(command),
-            _ => {
-                log_error!("{} does not exist", command[0]);
-                Err(CommandError::NotFound)
-            }
-        }
+    pub fn run_command(&self, request: &JsonRPCRequest) -> Result<String, CommandError> {
+        log_info!("got command: {:?}", request);
+        let command: &str = &request.method;
+        // match command[0] {
+        //     "status" => self.status(command),
+        //     "start" => self.start(command),
+        //     "stop" => self.stop(command),
+        //     "restart" => self.restart(command),
+        //     "reload-config" => self.reload_config(command),
+        //     "exit" => self.exit(command),
+        //     _ => {
+        //         log_error!("{} does not exist", command[0]);
+        //         Err(CommandError::NotFound)
+        //     }
+        // }
+        Ok("".to_string())
     }
 }

@@ -1,20 +1,22 @@
 use std::{
+    error::Error,
     ffi::CString,
     fs::{self},
-    io::{ErrorKind, Read, Write},
-    os::unix::{
-        fs::PermissionsExt,
-        net::{UnixListener, UnixStream},
-    },
+    os::unix::fs::PermissionsExt,
+};
+
+use tokio::{
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::{UnixListener, UnixStream},
 };
 
 use libc::{chown, getgrnam, gid_t};
 
 #[allow(unused)]
-pub struct UnixSocket {
-    path: String,
+pub struct AsyncUnixSocket {
+    socketpath: String,
     authgroup: String,
-    listener: UnixListener,
+    listener: Option<UnixListener>,
     stream: Option<UnixStream>,
 }
 
@@ -30,89 +32,84 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
         }
     }
 }
+fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
+    let gid = get_group_id(authgroup)?;
+    let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {}", e))?;
 
-impl UnixSocket {
-    pub fn new(path: &str, authgroup: &str) -> Result<Self, String> {
-        if fs::metadata(path).is_ok() {
-            let _ = fs::remove_file(path);
+    unsafe {
+        if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
+            return Err(format!(
+                "could not change group ownership: {} - do you have permissions for group '{}'?",
+                std::io::Error::last_os_error(),
+                authgroup
+            ));
         }
-        let listener = UnixListener::bind(path).map_err(|err| format!("could not bind to socket at path: {}: {}", path, err))?;
+    }
 
-        listener
-            .set_nonblocking(true)
-            .map_err(|err| format!("failed to set non-blocking mode: {}", err))?;
+    fs::set_permissions(socketpath, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {}", e))
+}
 
-        let gid = get_group_id(authgroup)?;
+impl AsyncUnixSocket {
+    pub fn new(socketpath: &str, authgroup: &str) -> Result<Self, String> {
+        if fs::metadata(socketpath).is_ok() {
+            let _ = fs::remove_file(socketpath);
+        }
 
-        let c_path = CString::new(path).map_err(|e| format!("invalid path: {}", e))?;
-
-        unsafe {
-            if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
-                return Err(format!(
-                    "could not change group ownership: {} - do you have permissions for group '{}'?",
-                    std::io::Error::last_os_error(),
-                    authgroup
-                ));
+        let listener = match UnixListener::bind(socketpath) {
+            Ok(listener) => listener,
+            Err(e) => {
+                return Err(format!("could not bind to unix socket at path {}: {}", socketpath, e));
             }
-        }
+        };
 
-        fs::set_permissions(path, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {}", e))?;
+        set_permissions(socketpath, authgroup)?;
 
         Ok(Self {
-            path: path.to_string(),
+            socketpath: socketpath.to_string(),
             authgroup: authgroup.to_string(),
-            listener,
+            listener: Some(listener),
             stream: None,
         })
     }
 
-    pub fn poll(&mut self) -> Option<Vec<u8>> {
-        if self.stream.is_none() {
-            match self.listener.accept() {
-                Ok((stream, _)) => self.stream = Some(stream),
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => return None,
-                Err(e) => {
-                    eprintln!("accept error: {}", e);
-                    return None;
+    pub async fn accept(&mut self) -> Result<(), Box<dyn Error>> {
+        if let Some(listener) = &self.listener {
+            match listener.accept().await {
+                Ok((stream, _)) => {
+                    self.stream = Some(stream);
+                    Ok(())
                 }
-            }
-        }
-
-        if let Some(ref mut stream) = self.stream {
-            let mut req = Vec::new();
-            match stream.read_to_end(&mut req) {
-                Ok(0) => {
-                    self.stream = None;
-                    None
-                }
-                Ok(_) => Some(req),
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => None,
-                Err(e) => {
-                    eprintln!("read error: {}", e);
-                    self.stream = None;
-                    None
-                }
+                Err(e) => Err(format!("accept: {e}").into()),
             }
         } else {
-            None
+            Err("listener not available".to_string().into())
         }
     }
 
-    pub fn write(&mut self, data: &[u8]) -> Result<(), String> {
+    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error + Send>> {
         if self.stream.is_none() {
-            match self.listener.accept() {
-                Ok((stream, _)) => self.stream = Some(stream),
-                Err(ref e) if e.kind() == ErrorKind::WouldBlock => return Err("no client connection available".to_string()),
-                Err(e) => return Err(format!("failed to accept connection: {}", e)),
-            }
+            self.accept().await.unwrap();
         }
 
         if let Some(ref mut stream) = self.stream {
-            stream.write_all(data).map_err(|e| format!("write error: {}", e))?;
-            stream.flush().map_err(|e| format!("flush error: {}", e))?;
+            let mut reader = BufReader::new(stream);
+            reader.read_line(line).await.map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+        } else {
+            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
+        }
+    }
+
+    pub async fn write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error + Send>> {
+        if self.stream.is_none() {
+            self.accept().await.unwrap();
+        }
+
+        if let Some(ref mut stream) = self.stream {
+            stream.write_all(data).await.map_err(|e| format!("write error: {}", e)).unwrap();
+            stream.flush().await.map_err(|e| format!("flush error: {}", e)).unwrap();
             Ok(())
         } else {
-            Err("no connection established".to_string())
+            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
         }
     }
 }

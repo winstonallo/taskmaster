@@ -1,13 +1,16 @@
+use std::error::Error;
+
 use tasklib::conf::Config;
 use tasklib::run::daemon::Daemon;
-use tasklib::{log, log_error};
+use tasklib::{log_error, log_info};
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let conf = match Config::from_file("./config/example.toml") {
         Ok(c) => c,
-        Err(err) => {
-            eprintln!("could not serialize config: {err}");
-            return;
+        Err(e) => {
+            log_error!("{}", e);
+            return Err(e);
         }
     };
 
@@ -15,9 +18,14 @@ fn main() {
         Ok(d) => d,
         Err(e) => {
             log_error!("{}", e);
-            return;
+            return Err(e);
         }
     };
-    log::info(format_args!("starting taskmaster.."));
-    let _ = daemon.run();
+
+    log_info!("starting taskmaster..");
+    let _ = tasklib::run::daemon::run(&mut daemon.processes, conf.socketpath().to_string(), conf.authgroup().to_string()).await;
+
+    tokio::signal::ctrl_c().await?;
+
+    Ok(())
 }

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs};
+use std::{collections::HashMap, error::Error, fs};
 
 use proc::ProcessConfig;
 use serde::Deserialize;
@@ -18,11 +18,11 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn from_file(path: &str) -> Result<Self, String> {
+    pub fn from_file(path: &str) -> Result<Self, Box<dyn Error>> {
         let conf_str = match fs::read_to_string(path) {
             Ok(s) => s,
             Err(err) => {
-                return Err(format!("could not read config at path '{path}' to into string: {err}"));
+                return Err(format!("could not read config at path '{path}' to into string: {err}").into());
             }
         };
 
@@ -30,15 +30,15 @@ impl Config {
     }
 
     #[cfg(test)]
-    pub fn from_str(config: &str) -> Result<Self, String> {
+    pub fn from_str(config: &str) -> Result<Self, Box<dyn Error>> {
         Config::parse(config)
     }
 
-    fn parse(config_str: &str) -> Result<Self, String> {
+    fn parse(config_str: &str) -> Result<Self, Box<dyn Error>> {
         let mut conf: Config = match toml::from_str(config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
-                return Err(format!("could not parse config string: {err}"));
+                return Err(format!("could not parse config string: {err}").into());
             }
         };
 
