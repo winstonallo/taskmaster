@@ -1,7 +1,7 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 
 use error::DaemonError;
-use socket::UnixSocket;
+use socket::AsyncUnixSocket;
 
 use super::{proc, statemachine};
 use crate::{
@@ -15,11 +15,10 @@ mod socket;
 
 pub struct Daemon<'tm> {
     processes: HashMap<String, proc::Process<'tm>>,
-    client_stream: UnixSocket,
 }
 
 impl<'tm> Daemon<'tm> {
-    pub fn from_config(conf: &'tm conf::Config) -> Result<Self, String> {
+    pub fn from_config(conf: &'tm conf::Config) -> Result<Self, Box<dyn Error>> {
         let procs: HashMap<String, proc::Process<'tm>> = conf
             .processes()
             .iter()
@@ -35,15 +34,17 @@ impl<'tm> Daemon<'tm> {
             })
             .collect::<HashMap<String, proc::Process<'tm>>>();
 
-        let client_stream = UnixSocket::new(conf.socketpath(), conf.authgroup()).map_err(|e| format!("unix socket stream creation failed: {}", e))?;
-
-        Ok(Self {
-            processes: procs,
-            client_stream,
-        })
+        Ok(Self { processes: procs })
     }
 
-    pub fn run(&mut self) -> Result<(), DaemonError> {
+    pub async fn run(&mut self, conf: &'tm conf::Config) -> Result<(), Box<dyn Error>> {
+        tokio::spawn({
+            let client_stream = AsyncUnixSocket::new(conf.socketpath(), conf.authgroup())?;
+            async move {
+                let data = client_stream.read_line().await?;
+            }
+        });
+
         loop {
             if let Some(data) = self.client_stream.poll() {
                 let raw: JsonRPCRaw = match serde_json::from_slice(&data) {
@@ -65,6 +66,7 @@ impl<'tm> Daemon<'tm> {
                 let msg = match msg {
                     JsonRPCMessage::Request(req) => req,
                     _ => {
+                        // server should not receive anything else than requests
                         todo!()
                     }
                 };

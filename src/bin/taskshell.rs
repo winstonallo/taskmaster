@@ -28,13 +28,15 @@ fn main() {
         panic!("dont play with me");
     }
 
+    let args = args.collect::<Vec<String>>();
+
     let request = serde_json::to_string(&JsonRPCRequest {
         jsonrpc: "2.0".to_string(),
         id: 1,
-        method: "status".to_string(),
+        method: args[1].clone(),
         params: None,
     })
-    .expect("Serialization failed")
+    .expect("serde failed")
     .into_bytes();
 
     let socket_path = "/tmp/.taskmaster.sock";
