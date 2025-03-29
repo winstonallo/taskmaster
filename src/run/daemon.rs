@@ -7,7 +7,7 @@ use super::{proc, statemachine};
 use crate::{
     conf,
     jsonrpc::{JsonRPCMessage, JsonRPCRaw},
-    log_error,
+    log_error, log_info,
 };
 mod command;
 mod error;
@@ -40,52 +40,53 @@ impl<'tm> Daemon<'tm> {
     pub async fn run(&mut self, conf: &'tm conf::Config) -> Result<(), Box<dyn Error>> {
         tokio::spawn({
             async move {
-                let client_stream = AsyncUnixSocket::new(conf.socketpath(), conf.authgroup())?;
+                let client_stream = match AsyncUnixSocket::new(conf.socketpath(), conf.authgroup()) {
+                    Ok(stream) => stream,
+                    Err(e) => return Err(format!("hello")),
+                };
+
                 let mut line = String::new();
                 loop {
                     match client_stream.read_line(&mut line).await {
-                        Ok(()) => 
+                        Ok(0) => continue,
+                        Ok(_) => {
+                            let raw: JsonRPCRaw = match serde_json::from_str(&line) {
+                                Ok(raw) => raw,
+                                Err(e) => {
+                                    log_error!("could not parse JSON-RPC: {}", e); // TODO: write error response to socket
+                                    continue;
+                                }
+                            };
+
+                            let msg = match JsonRPCMessage::try_from(raw) {
+                                Ok(msg) => msg,
+                                Err(e) => {
+                                    log_error!("could not parse JSON-RPC: {:?}", e);
+                                    continue;
+                                }
+                            };
+
+                            let msg = match msg {
+                                JsonRPCMessage::Request(req) => req,
+                                _ => {
+                                    // server should not receive anything else than requests
+                                    todo!()
+                                }
+                            };
+                        }
+                        Err(e) => {
+                            log_error!("{}", e); // TODO: write error response to socket
+                            continue;
+                        }
                     }
                 }
             }
         });
 
-        loop {
-            if let Some(data) = self.client_stream.poll() {
-                let raw: JsonRPCRaw = match serde_json::from_slice(&data) {
-                    Ok(raw) => raw,
-                    Err(e) => {
-                        log_error!("could not parse JSON-RPC: {e}");
-                        continue;
-                    }
-                };
-
-                let msg = match JsonRPCMessage::try_from(raw) {
-                    Ok(msg) => msg,
-                    Err(e) => {
-                        log_error!("could not parse JSON-RPC: {:?}", e);
-                        continue;
-                    }
-                };
-
-                let msg = match msg {
-                    JsonRPCMessage::Request(req) => req,
-                    _ => {
-                        // server should not receive anything else than requests
-                        todo!()
-                    }
-                };
-
-                #[allow(unused_must_use)]
-                match self.run_command(&msg) {
-                    Ok(response) => self.client_stream.write(response.as_bytes()).map_err(|e| log_error!("{}", e)), // write response to socket
-                    Err(_) => Ok(()),                                                                               // write error response to socket
-                };
-            }
-
-            for proc in self.processes.values_mut() {
-                statemachine::monitor_state(proc);
-            }
+        for proc in self.processes.values_mut() {
+            statemachine::monitor_state(proc);
         }
+
+        Ok(())
     }
 }
