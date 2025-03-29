@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 #[repr(i16)]
 #[derive(Debug, Serialize)]
-pub enum ErrorCode {
+pub enum JsonRPCErrorCode {
     ServerError(i16), // -32000 to -32099
     InvalidRequest = -32600,
     MethodNotFound = -32601,
@@ -11,19 +11,19 @@ pub enum ErrorCode {
     ParseError = -32700,
 }
 
-impl<'de> Deserialize<'de> for ErrorCode {
+impl<'de> Deserialize<'de> for JsonRPCErrorCode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let code = i16::deserialize(deserializer)?;
         match code {
-            -32099..-32000 => Ok(ErrorCode::ServerError(code)),
-            -32600 => Ok(ErrorCode::InvalidRequest),
-            -32601 => Ok(ErrorCode::MethodNotFound),
-            -32602 => Ok(ErrorCode::InvalidParams),
-            -32603 => Ok(ErrorCode::InternalError),
-            -32700 => Ok(ErrorCode::ParseError),
+            -32099..-32000 => Ok(JsonRPCErrorCode::ServerError(code)),
+            -32600 => Ok(JsonRPCErrorCode::InvalidRequest),
+            -32601 => Ok(JsonRPCErrorCode::MethodNotFound),
+            -32602 => Ok(JsonRPCErrorCode::InvalidParams),
+            -32603 => Ok(JsonRPCErrorCode::InternalError),
+            -32700 => Ok(JsonRPCErrorCode::ParseError),
             _ => Err(serde::de::Error::custom(format!("unknown error code: {}", code))),
         }
     }
@@ -41,22 +41,27 @@ pub struct JsonRPCRequest {
 pub struct JsonRPCResponse {
     pub jsonrpc: String,
     pub id: usize,
-    pub result: Option<serde_json::Value>,
-    pub error: Option<JsonRPCError>,
+    pub result: serde_json::Value,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct JsonRPCErrorData {
+    pub code: JsonRPCErrorCode,
+    pub message: String,
+    pub data: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRPCError {
-    code: ErrorCode,
-    message: String,
-    data: Option<serde_json::Value>,
+    pub jsonrpc: String,
+    pub id: usize,
+    pub error: JsonRPCErrorData,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Raw {
+pub struct JsonRPCRaw {
     pub jsonrpc: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<usize>,
+    pub id: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -64,9 +69,61 @@ pub struct Raw {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub result: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRPCError>,
+    pub error: Option<JsonRPCErrorData>,
+}
+
+#[derive(Debug)]
+pub enum JsonRPCMessage {
+    Request(JsonRPCRequest),
+    Response(JsonRPCResponse),
+    Error(JsonRPCError),
+}
+
+impl TryFrom<JsonRPCRaw> for JsonRPCMessage {
+    type Error = JsonRPCError;
+
+    fn try_from(value: JsonRPCRaw) -> Result<Self, <JsonRPCMessage as TryFrom<JsonRPCRaw>>::Error> {
+        if let Some(error) = value.error {
+            return Ok(JsonRPCMessage::Error(JsonRPCError {
+                jsonrpc: value.jsonrpc,
+                id: value.id,
+                error,
+            }));
+        }
+
+        if let Some(result) = value.result {
+            return Ok(JsonRPCMessage::Response(JsonRPCResponse {
+                jsonrpc: value.jsonrpc,
+                id: value.id,
+                result,
+            }));
+        }
+
+        if let Some(method) = value.method {
+            return Ok(JsonRPCMessage::Request(JsonRPCRequest {
+                jsonrpc: value.jsonrpc,
+                id: value.id,
+                method,
+                params: value.params,
+            }));
+        }
+
+        // `jsonrpc` and `id` already are required by deserialization.
+        Err(JsonRPCError {
+            jsonrpc: value.jsonrpc,
+            id: value.id,
+            error: JsonRPCErrorData {
+                code: JsonRPCErrorCode::InvalidRequest,
+                message: format!(
+                    "invalid JSON-RPC format: id: {:?}, method: {:?}, params: {:?}, result: {:?}, error: {:?}",
+                    value.id, value.method, value.params, value.result, value.error
+                ),
+                data: None,
+            },
+        })
+    }
 }
 
 pub trait Method {
-    fn handle() -> Result<serde_json::Value, JsonRPCError>;
+    fn handle(request: JsonRPCRequest) -> Result<JsonRPCResponse, JsonRPCError>;
 }
