@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
     log::info(format_args!("starting taskmaster.."));
-    let _ = daemon.run(&conf).await;
+    let _ = tasklib::run::daemon::run(conf.socketpath().to_string(), conf.authgroup().to_string()).await;
 
     tokio::signal::ctrl_c().await?;
 

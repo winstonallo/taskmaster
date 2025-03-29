@@ -1,9 +1,13 @@
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, hash::Hash};
 
 use error::DaemonError;
+use libc::stat;
 use socket::AsyncUnixSocket;
 
-use super::{proc, statemachine};
+use super::{
+    proc::{self, Process},
+    statemachine,
+};
 use crate::{
     conf,
     jsonrpc::{JsonRPCMessage, JsonRPCRaw},
@@ -36,57 +40,59 @@ impl<'tm> Daemon<'tm> {
 
         Ok(Self { processes: procs })
     }
+}
 
-    pub async fn run(&mut self, conf: &'tm conf::Config) -> Result<(), Box<dyn Error>> {
-        tokio::spawn({
-            async move {
-                let client_stream = match AsyncUnixSocket::new(conf.socketpath(), conf.authgroup()) {
-                    Ok(stream) => stream,
-                    Err(e) => return Err(format!("hello")),
-                };
+pub fn monitor_state(mut procs: HashMap<String, Process>) {
+    for proc in procs.values_mut() {
+        statemachine::monitor_state(proc);
+    }
+}
 
-                let mut line = String::new();
-                loop {
-                    match client_stream.read_line(&mut line).await {
-                        Ok(0) => continue,
-                        Ok(_) => {
-                            let raw: JsonRPCRaw = match serde_json::from_str(&line) {
-                                Ok(raw) => raw,
-                                Err(e) => {
-                                    log_error!("could not parse JSON-RPC: {}", e); // TODO: write error response to socket
-                                    continue;
-                                }
-                            };
+pub async fn run<'tm>(socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
+    tokio::spawn({
+        async move {
+            // Removed unused constant declaration causing syntax errors
+            let mut client_stream = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
 
-                            let msg = match JsonRPCMessage::try_from(raw) {
-                                Ok(msg) => msg,
-                                Err(e) => {
-                                    log_error!("could not parse JSON-RPC: {:?}", e);
-                                    continue;
-                                }
-                            };
+            let mut line = String::new();
+            loop {
+                match client_stream.read_line(&mut line).await {
+                    Ok(0) => continue,
+                    Ok(_) => {
+                        let raw: JsonRPCRaw = match serde_json::from_str(&line) {
+                            Ok(raw) => raw,
+                            Err(e) => {
+                                log_error!("could not parse JSON-RPC: {}", e); // TODO: write error response to socket
+                                continue;
+                            }
+                        };
 
-                            let msg = match msg {
-                                JsonRPCMessage::Request(req) => req,
-                                _ => {
-                                    // server should not receive anything else than requests
-                                    todo!()
-                                }
-                            };
-                        }
-                        Err(e) => {
-                            log_error!("{}", e); // TODO: write error response to socket
-                            continue;
-                        }
+                        let msg = match JsonRPCMessage::try_from(raw) {
+                            Ok(msg) => msg,
+                            Err(e) => {
+                                log_error!("could not parse JSON-RPC: {:?}", e);
+                                continue;
+                            }
+                        };
+
+                        let msg = match msg {
+                            JsonRPCMessage::Request(req) => req,
+                            _ => {
+                                // server should not receive anything else than requests
+                                todo!()
+                            }
+                        };
+                    }
+                    Err(e) => {
+                        log_error!("{}", e); // TODO: write error response to socket
+                        continue;
                     }
                 }
             }
-        });
-
-        for proc in self.processes.values_mut() {
-            statemachine::monitor_state(proc);
         }
+    });
 
-        Ok(())
-    }
+    let _ = tokio::signal::ctrl_c().await;
+
+    Ok(())
 }
