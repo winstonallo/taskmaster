@@ -1,8 +1,15 @@
-use std::{collections::HashMap, error::Error, hash::Hash};
+use std::{
+    collections::HashMap,
+    error::Error,
+    hash::Hash,
+    io::{Write, stdout},
+    time::Duration,
+};
 
 use error::DaemonError;
 use libc::stat;
 use socket::AsyncUnixSocket;
+use tokio::time::sleep;
 
 use super::{
     proc::{self, Process},
@@ -18,7 +25,7 @@ mod error;
 mod socket;
 
 pub struct Daemon<'tm> {
-    processes: HashMap<String, proc::Process<'tm>>,
+    pub processes: HashMap<String, proc::Process<'tm>>,
 }
 
 impl<'tm> Daemon<'tm> {
@@ -40,59 +47,49 @@ impl<'tm> Daemon<'tm> {
 
         Ok(Self { processes: procs })
     }
+
+    pub fn processes_mut(&mut self) -> &HashMap<String, Process> {
+        &mut self.processes
+    }
 }
 
-pub fn monitor_state(mut procs: HashMap<String, Process>) {
+pub fn monitor_state(procs: &mut HashMap<String, Process>) {
     for proc in procs.values_mut() {
         statemachine::monitor_state(proc);
     }
 }
 
-pub async fn run<'tm>(socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
-    tokio::spawn({
-        async move {
-            // Removed unused constant declaration causing syntax errors
-            let mut client_stream = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
+pub async fn run<'tm>(procs: &mut HashMap<String, Process<'_>>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
+    let mut server_socket = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
 
-            let mut line = String::new();
-            loop {
-                match client_stream.read_line(&mut line).await {
-                    Ok(0) => continue,
-                    Ok(_) => {
-                        let raw: JsonRPCRaw = match serde_json::from_str(&line) {
-                            Ok(raw) => raw,
-                            Err(e) => {
-                                log_error!("could not parse JSON-RPC: {}", e); // TODO: write error response to socket
-                                continue;
+    loop {
+        tokio::select! {
+            accept_result = server_socket.accept() => {
+                match accept_result {
+                    Ok(()) => {
+                        let mut socket_for_task = server_socket;
+                        tokio::spawn(async move {
+                            let mut line = String::new();
+                            match socket_for_task.read_line(&mut line).await {
+                                Ok(0) => { /* connection closed, do nothing */ },
+                                Ok(_) => {
+                                    println!("{}", line);
+                                },
+                                Err(e) => {
+                                    log_error!("Error reading from socket: {}", e);
+                                }
                             }
-                        };
-
-                        let msg = match JsonRPCMessage::try_from(raw) {
-                            Ok(msg) => msg,
-                            Err(e) => {
-                                log_error!("could not parse JSON-RPC: {:?}", e);
-                                continue;
-                            }
-                        };
-
-                        let msg = match msg {
-                            JsonRPCMessage::Request(req) => req,
-                            _ => {
-                                // server should not receive anything else than requests
-                                todo!()
-                            }
-                        };
-                    }
+                        });
+                        server_socket = AsyncUnixSocket::new(&socketpath, &authgroup)?;
+                    },
                     Err(e) => {
-                        log_error!("{}", e); // TODO: write error response to socket
-                        continue;
+                        log_error!("Failed to accept connection: {}", e);
                     }
                 }
+            },
+            _ = sleep(Duration::from_millis(1)) => {
+                monitor_state(procs);
             }
         }
-    });
-
-    let _ = tokio::signal::ctrl_c().await;
-
-    Ok(())
+    }
 }

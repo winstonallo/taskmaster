@@ -36,12 +36,14 @@ fn main() {
         method: args[1].clone(),
         params: None,
     })
-    .expect("serde failed")
-    .into_bytes();
+    .expect("serde failed");
+
+    let formatted_request = format!("{}\n", request);
+    let bytes = formatted_request.as_bytes();
 
     let socket_path = "/tmp/.taskmaster.sock";
 
     let mut unix_stream = UnixStream::connect(socket_path).expect("could not create stream");
-    let _ = write_request(&mut unix_stream, &request);
+    let _ = write_request(&mut unix_stream, &bytes);
     let _ = read_from_stream(&mut unix_stream);
 }
