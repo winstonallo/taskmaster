@@ -22,6 +22,6 @@ impl StdError for DaemonError {}
 
 impl From<DaemonError> for io::Error {
     fn from(value: DaemonError) -> Self {
-        io::Error::new(io::ErrorKind::Other, value)
+        io::Error::other(value)
     }
 }

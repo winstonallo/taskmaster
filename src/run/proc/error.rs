@@ -24,6 +24,6 @@ impl StdError for ProcessError {}
 
 impl From<ProcessError> for io::Error {
     fn from(value: ProcessError) -> Self {
-        io::Error::new(io::ErrorKind::Other, value)
+        io::Error::other(value)
     }
 }
