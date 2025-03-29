@@ -47,7 +47,7 @@ impl UnixSocket {
         let c_path = CString::new(path).map_err(|e| format!("invalid path: {}", e))?;
 
         unsafe {
-            if chown(c_path.as_ptr(), gid as gid_t, gid as gid_t) != 0 {
+            if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
                 return Err(format!(
                     "could not change group ownership: {} - do you have permissions for group '{}'?",
                     std::io::Error::last_os_error(),
