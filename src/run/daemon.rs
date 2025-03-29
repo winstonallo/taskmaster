@@ -39,9 +39,14 @@ impl<'tm> Daemon<'tm> {
 
     pub async fn run(&mut self, conf: &'tm conf::Config) -> Result<(), Box<dyn Error>> {
         tokio::spawn({
-            let client_stream = AsyncUnixSocket::new(conf.socketpath(), conf.authgroup())?;
             async move {
-                let data = client_stream.read_line().await?;
+                let client_stream = AsyncUnixSocket::new(conf.socketpath(), conf.authgroup())?;
+                let mut line = String::new();
+                loop {
+                    match client_stream.read_line(&mut line).await {
+                        Ok(()) => 
+                    }
+                }
             }
         });
 

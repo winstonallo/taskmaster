@@ -77,19 +77,14 @@ impl AsyncUnixSocket {
         }
     }
 
-    pub async fn read_line(&mut self) -> Result<String, Box<dyn Error>> {
+    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error>> {
         if self.stream.is_none() {
             self.accept().await?;
         }
 
         if let Some(ref mut stream) = self.stream {
             let mut reader = BufReader::new(stream);
-            let mut line = String::new();
-
-            match reader.read_line(&mut line).await {
-                Ok(_) => Ok(line),
-                Err(e) => Err(format!("read_line: {e}").into()),
-            }
+            reader.read_line(line).await.map_err(|e| e.into())
         } else {
             Err("no connection established".to_string().into())
         }
