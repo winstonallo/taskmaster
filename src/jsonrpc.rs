@@ -3,10 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::run::{
-    self,
-    statemachine::states::ProcessState,
-};
+use crate::run::{self, statemachine::states::ProcessState};
 
 #[repr(i16)]
 #[derive(Debug, Serialize)]
@@ -166,6 +163,13 @@ pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemac
                 data: None,
             },
         )),
+    }
+}
+
+pub fn handle_halt(request: &JsonRPCRequest) -> Option<JsonRPCResponse> {
+    match request.method.as_str() {
+        "halt" => Some(JsonRPCResponse::from_json_rpc_request(request, json!("taskmaster shutting down - goodbye"))),
+        _ => None,
     }
 }
 

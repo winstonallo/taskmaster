@@ -11,7 +11,7 @@ use super::{
 use crate::{
     conf,
     jsonrpc::{self, JsonRPCRequest},
-    log_error,
+    log_error, log_info,
 };
 mod command;
 mod error;
@@ -100,6 +100,19 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
                 listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
             },
             Some((request, mut socket)) = reciever.recv() => {
+                if let Some(resp) = jsonrpc::handle_halt(&request) {
+                        match serde_json::to_string(&resp) {
+                            Err(_) => {},
+                            Ok(s) => {
+                                tokio::spawn(async move {
+                                   let _ = socket.write(s.as_bytes()).await;
+                                });
+                            }
+                        }
+                    log_info!("shutting down taskmaster...");
+                    return Ok(());
+                }
+
                 let res = jsonrpc::handle(request, procs);
 
                 match res {

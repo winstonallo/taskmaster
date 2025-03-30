@@ -190,7 +190,11 @@ impl Process<'_> {
 
     pub fn stop(&mut self) -> std::io::Result<()> {
         self.child.take().unwrap().kill();
-        proc_info!(self.name(), "killed, PID {}", self.id().expect("process without id killed - this should not happen"));
+        proc_info!(
+            self.name(),
+            "killed, PID {}",
+            self.id().expect("process without id killed - this should not happen")
+        );
         self.id.take();
 
         Ok(())
