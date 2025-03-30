@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::run::{self, statemachine::states::ProcessState};
+use crate::{
+    conf::Config,
+    run::{self, daemon::Daemon, statemachine::states::ProcessState},
+};
 
 #[repr(i16)]
 #[derive(Debug, Serialize)]
@@ -149,12 +152,13 @@ impl TryFrom<JsonRPCRaw> for JsonRPCMessage {
     }
 }
 
-pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process<'_>>) -> Result<JsonRPCResponse, JsonRPCError> {
+pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process>) -> Result<JsonRPCResponse, JsonRPCError> {
     match request.method.as_str() {
         "start" => handle_start(request, procs),
         "stop" => handle_stop(request, procs),
         "restart" => handle_restart(request, procs),
         "status" => handle_status(request, procs),
+        "reload" => handle_reload(request, procs),
         _ => Err(JsonRPCError::from_json_rpc_request(
             &request,
             JsonRPCErrorData {
@@ -165,7 +169,6 @@ pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemac
         )),
     }
 }
-
 pub fn handle_halt(request: &JsonRPCRequest) -> Option<JsonRPCResponse> {
     match request.method.as_str() {
         "halt" => Some(JsonRPCResponse::from_json_rpc_request(request, json!("taskmaster shutting down - goodbye"))),
@@ -173,7 +176,66 @@ pub fn handle_halt(request: &JsonRPCRequest) -> Option<JsonRPCResponse> {
     }
 }
 
-pub fn handle_status(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process<'_>>) -> Result<JsonRPCResponse, JsonRPCError> {
+pub fn handle_reload(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process>) -> Result<JsonRPCResponse, JsonRPCError> {
+    let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
+        &request,
+        JsonRPCErrorData {
+            code: JsonRPCErrorCode::InvalidParams,
+            message: "you provided wrong params".to_string(),
+            data: request.params.clone(),
+        },
+    );
+    let conf = match Config::from_file("./config/example.toml") {
+        Ok(c) => c,
+        Err(_e) => return Err(wrong_params_json_rpc_error),
+    };
+
+    let daemon = match Daemon::from_config(&conf) {
+        Ok(d) => d,
+        Err(_e) => return Err(wrong_params_json_rpc_error),
+    };
+
+    let mut leftover = vec![];
+    for (name, _p) in procs.iter() {
+        leftover.push(name.to_owned());
+    }
+
+    for (name, p) in daemon.processes {
+        match procs.get_mut(&name) {
+            Some(old_process) => {
+                *old_process.config_mut() = p.config().clone();
+
+                use ProcessState::*;
+                match (p.config().autostart(), old_process.state()) {
+                    (false, Ready | HealthCheck(_) | Healthy) => {
+                        let _ = old_process.stop();
+                        old_process.update_state(Idle);
+                    }
+                    (true, Idle | Completed | Stopped | Failed(_) | WaitingForRetry(_)) => {
+                        old_process.update_state(Ready);
+                    }
+                    _ => {}
+                }
+                if let Some(index) = leftover.iter().position(|n| *n == old_process.name()) {
+                    leftover.remove(index);
+                }
+            }
+            None => {
+                procs.insert(name, p);
+            }
+        }
+    }
+
+    for l in leftover.iter() {
+        if let Some(mut p) = procs.remove_entry(l) {
+            let _ = p.1.stop();
+        }
+    }
+
+    Ok(JsonRPCResponse::from_json_rpc_request(&request, json!("sucessfully reloaded config")))
+}
+
+pub fn handle_status(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process>) -> Result<JsonRPCResponse, JsonRPCError> {
     let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
         &request,
         JsonRPCErrorData {
@@ -215,7 +277,7 @@ pub fn handle_status(request: JsonRPCRequest, procs: &mut HashMap<String, run::s
     }
 }
 
-pub fn handle_restart(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process<'_>>) -> Result<JsonRPCResponse, JsonRPCError> {
+pub fn handle_restart(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process>) -> Result<JsonRPCResponse, JsonRPCError> {
     let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
         &request,
         JsonRPCErrorData {
@@ -261,7 +323,7 @@ pub fn handle_restart(request: JsonRPCRequest, procs: &mut HashMap<String, run::
         },
     }
 }
-pub fn handle_stop(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process<'_>>) -> Result<JsonRPCResponse, JsonRPCError> {
+pub fn handle_stop(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process>) -> Result<JsonRPCResponse, JsonRPCError> {
     let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
         &request,
         JsonRPCErrorData {
@@ -303,7 +365,7 @@ pub fn handle_stop(request: JsonRPCRequest, procs: &mut HashMap<String, run::sta
         },
     }
 }
-pub fn handle_start(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process<'_>>) -> Result<JsonRPCResponse, JsonRPCError> {
+pub fn handle_start(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process>) -> Result<JsonRPCResponse, JsonRPCError> {
     let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
         &request,
         JsonRPCErrorData {
