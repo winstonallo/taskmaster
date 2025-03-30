@@ -5,9 +5,7 @@ use tokio::time::sleep;
 
 use super::{
     proc::{self, Process},
-    statemachine::{
-        self,
-    },
+    statemachine::{self},
 };
 
 use crate::{
@@ -84,7 +82,6 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
     let (sender, mut reciever) = tokio::sync::mpsc::channel(1024);
     let sender = Arc::new(sender);
 
-    let rpc_actions: Vec<RPCAction> = vec![];
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
@@ -124,7 +121,7 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
                                    let _ = socket.write(s.as_bytes()).await;
                                 });
                             }
-                        } 
+                        }
                     }
                 };
              },
