@@ -121,7 +121,7 @@ impl Process<'_> {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    umask(umask_val);
+                    umask(umask_val as u16);
                     Ok(())
                 })
                 .spawn()
