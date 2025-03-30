@@ -8,7 +8,7 @@ use crate::{
 use super::states::{Completed, Failed, HealthCheck, Healthy, Idle, Ready, State, Stopped, WaitingForRetry};
 
 impl State for Idle {
-    fn handle(&self, p: &mut Process) -> Option<ProcessState> {
+    fn handle(&self, _p: &mut Process) -> Option<ProcessState> {
         None
     }
 }

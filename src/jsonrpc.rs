@@ -3,7 +3,10 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::run::{self, statemachine::states::ProcessState};
+use crate::run::{
+    self,
+    statemachine::states::ProcessState,
+};
 
 #[repr(i16)]
 #[derive(Debug, Serialize)]
@@ -54,7 +57,7 @@ impl JsonRPCResponse {
         Self {
             jsonrpc: request.jsonrpc.clone(),
             id: request.id,
-            result: result,
+            result,
         }
     }
 }
@@ -154,6 +157,7 @@ pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemac
         "start" => handle_start(request, procs),
         "stop" => handle_stop(request, procs),
         "restart" => handle_restart(request, procs),
+        "status" => handle_status(request, procs),
         _ => Err(JsonRPCError::from_json_rpc_request(
             &request,
             JsonRPCErrorData {
@@ -164,12 +168,55 @@ pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemac
         )),
     }
 }
+
+pub fn handle_status(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process<'_>>) -> Result<JsonRPCResponse, JsonRPCError> {
+    let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
+        &request,
+        JsonRPCErrorData {
+            code: JsonRPCErrorCode::InvalidParams,
+            message: "wrong or no params given | `name`".to_string(),
+            data: request.params.clone(),
+        },
+    );
+    let params = match request.params.clone() {
+        Some(value) => value,
+        None => return Err(wrong_params_json_rpc_error),
+    };
+
+    let object = match params.as_object() {
+        Some(object) => object,
+        None => return Err(wrong_params_json_rpc_error),
+    };
+    match object.get("name") {
+        None => {
+            let mut line: String = String::new();
+            line.push_str("processes: [");
+            for (_, p) in procs.iter() {
+                line.push_str(&format!("{{name: {}, state: {}}}", p.name(), p.state()));
+            }
+            line.push(']');
+
+            Ok(JsonRPCResponse::from_json_rpc_request(&request, json!(line)))
+        }
+        Some(id) => match id.as_str() {
+            None => Err(wrong_params_json_rpc_error),
+            Some(id) => match procs.get_mut(id) {
+                None => Err(wrong_params_json_rpc_error),
+                Some(p) => Ok(JsonRPCResponse::from_json_rpc_request(
+                    &request,
+                    json!(format!(r#"{{"name": {}, "state": {}}}"#, p.name(), p.state())),
+                )),
+            },
+        },
+    }
+}
+
 pub fn handle_restart(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process<'_>>) -> Result<JsonRPCResponse, JsonRPCError> {
     let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
         &request,
         JsonRPCErrorData {
             code: JsonRPCErrorCode::InvalidParams,
-            message: format!("wrong or no params given | `name`"),
+            message: "wrong or no params given | `name`".to_string(),
             data: request.params.clone(),
         },
     );
@@ -199,7 +246,10 @@ pub fn handle_restart(request: JsonRPCRequest, procs: &mut HashMap<String, run::
                         Ready | HealthCheck(_) | Healthy => {
                             let _ = p.stop();
                             p.update_state(Ready);
-                            Ok(JsonRPCResponse::from_json_rpc_request(&request, json!("process running - stopping and starting process")))
+                            Ok(JsonRPCResponse::from_json_rpc_request(
+                                &request,
+                                json!("process running - stopping and starting process"),
+                            ))
                         }
                     }
                 }
@@ -212,7 +262,7 @@ pub fn handle_stop(request: JsonRPCRequest, procs: &mut HashMap<String, run::sta
         &request,
         JsonRPCErrorData {
             code: JsonRPCErrorCode::InvalidParams,
-            message: format!("wrong or no params given | `name`"),
+            message: "wrong or no params given | `name`".to_string(),
             data: request.params.clone(),
         },
     );
@@ -254,7 +304,7 @@ pub fn handle_start(request: JsonRPCRequest, procs: &mut HashMap<String, run::st
         &request,
         JsonRPCErrorData {
             code: JsonRPCErrorCode::InvalidParams,
-            message: format!("wrong or no params given | `name`"),
+            message: "wrong or no params given | `name`".to_string(),
             data: request.params.clone(),
         },
     );
