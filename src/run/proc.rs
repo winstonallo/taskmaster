@@ -31,14 +31,25 @@ pub struct Process<'tm> {
 
 impl<'tm> Process<'tm> {
     pub fn from_process_config(conf: &'tm conf::proc::ProcessConfig, proc_name: &str) -> Self {
-        Self {
-            id: None,
-            name: proc_name.to_string(),
-            child: None,
-            conf,
-            startup_failures: 0,
-            runtime_failures: 0,
-            state: Mutex::new(ProcessState::Idle),
+        match conf.autostart() {
+            true => Self {
+                id: None,
+                name: proc_name.to_string(),
+                child: None,
+                conf,
+                startup_failures: 0,
+                runtime_failures: 0,
+                state: Mutex::new(ProcessState::Ready),
+            },
+            false => Self {
+                id: None,
+                name: proc_name.to_string(),
+                child: None,
+                conf,
+                startup_failures: 0,
+                runtime_failures: 0,
+                state: Mutex::new(ProcessState::Idle),
+            },
         }
     }
 }
@@ -121,7 +132,7 @@ impl Process<'_> {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    umask(umask_val);
+                    umask(umask_val as u16);
                     Ok(())
                 })
                 .spawn()

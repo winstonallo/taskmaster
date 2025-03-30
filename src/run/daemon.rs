@@ -48,7 +48,7 @@ pub fn monitor_state(procs: &mut HashMap<String, Process>) {
     }
 }
 
-async fn handle_client(mut socket: AsyncUnixSocket, mut sender: Arc<tokio::sync::mpsc::Sender<JsonRPCRequest>>) {
+async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mpsc::Sender<JsonRPCRequest>>) {
     let mut line = String::new();
     match socket.read_line(&mut line).await {
         Ok(0) => { /* connection closed, do nothing */ }
@@ -57,7 +57,9 @@ async fn handle_client(mut socket: AsyncUnixSocket, mut sender: Arc<tokio::sync:
 
             let request = serde_json::from_str(&line).unwrap();
 
-            sender.send(request).await;
+            // TODO here very important
+
+            let _ = sender.send(request).await;
 
             if let Err(e) = socket.write(line.as_bytes()).await {
                 log_error!("error writing to client: {}", e);
@@ -73,7 +75,7 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
     let mut listener = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
 
     let (sender, mut reciever) = tokio::sync::mpsc::channel(1024);
-    let a = Arc::new(sender);
+    let sender = Arc::new(sender);
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
@@ -84,15 +86,16 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
                 }
 
                 let socket = listener;
-                let temp = a.clone();
+                let clone = sender.clone();
                 tokio::spawn(async move {
-                    handle_client(socket, temp).await;
+                    handle_client(socket, clone).await;
                 });
 
                 listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
             },
             Some(request) = reciever.recv() => {
-                println!("{:?}", request)
+                
+                println!("{:?} | {:?}", request, procs)
             },
             _ = sleep(Duration::from_nanos(1)) => {
                 monitor_state(procs);

@@ -9,6 +9,7 @@ use crate::run::proc::Process;
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProcessState {
     Idle,
+    Ready,
     HealthCheck(time::Instant),
     Healthy,
     Failed(Box<ProcessState>),
@@ -21,6 +22,7 @@ impl Display for ProcessState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ProcessState::Idle => write!(f, "idle"),
+            ProcessState::Ready => write!(f, "ready"),
             ProcessState::HealthCheck(started_at) => write!(f, "in healthcheck since {} seconds", Instant::now().duration_since(*started_at).as_secs()),
             ProcessState::Healthy => write!(f, "healthy"),
             ProcessState::Failed(prev_state) => write!(f, "failed while in state: {}", *prev_state),
@@ -39,6 +41,8 @@ pub trait State {
 }
 
 pub struct Idle;
+
+pub struct Ready;
 
 pub struct HealthCheck {
     started_at: time::Instant,

@@ -5,14 +5,16 @@ use crate::{
     run::{proc::Process, statemachine::states::ProcessState},
 };
 
-use super::states::{Completed, Failed, HealthCheck, Healthy, Idle, State, Stopped, WaitingForRetry};
+use super::states::{Completed, Failed, HealthCheck, Healthy, Idle, Ready, State, Stopped, WaitingForRetry};
 
 impl State for Idle {
     fn handle(&self, p: &mut Process) -> Option<ProcessState> {
-        if !p.config().autostart() {
-            return None;
-        }
+        None
+    }
+}
 
+impl State for Ready {
+    fn handle(&self, p: &mut Process) -> Option<ProcessState> {
         match p.start() {
             Ok(()) => {
                 let pid = p.id().expect("id should always be set if the process is running");
