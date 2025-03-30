@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     conf::{self, proc::ProcessConfig},
-    log_error, log_info,
+    log_error, log_info, proc_info,
 };
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
@@ -190,6 +190,7 @@ impl Process<'_> {
 
     pub fn stop(&mut self) -> std::io::Result<()> {
         self.child.take().unwrap().kill();
+        proc_info!(self.name(), "killed, PID {}", self.id().expect("process without id killed - this should not happen"));
         self.id.take();
 
         Ok(())

@@ -3,6 +3,7 @@ use std::{
     os::unix::net::UnixStream,
 };
 
+use serde_json::json;
 use tasklib::jsonrpc::JsonRPCRequest;
 
 fn read_from_stream(unix_stream: &mut UnixStream) -> Result<(), String> {
@@ -34,7 +35,9 @@ fn main() {
         jsonrpc: "2.0".to_string(),
         id: 1,
         method: args[1].clone(),
-        params: None,
+        params: Some(json!({
+            "name": "ls",
+        })),
     })
     .expect("serde failed");
 

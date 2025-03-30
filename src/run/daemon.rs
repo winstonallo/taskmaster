@@ -5,10 +5,16 @@ use tokio::time::sleep;
 
 use super::{
     proc::{self, Process},
-    statemachine,
+    statemachine::{
+        self,
+    },
 };
 
-use crate::{conf, jsonrpc::JsonRPCRequest, log_error};
+use crate::{
+    conf,
+    jsonrpc::{self, JsonRPCRequest},
+    log_error,
+};
 mod command;
 mod error;
 mod socket;
@@ -48,22 +54,23 @@ pub fn monitor_state(procs: &mut HashMap<String, Process>) {
     }
 }
 
-async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mpsc::Sender<JsonRPCRequest>>) {
+async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mpsc::Sender<(JsonRPCRequest, AsyncUnixSocket)>>) {
     let mut line = String::new();
     match socket.read_line(&mut line).await {
         Ok(0) => { /* connection closed, do nothing */ }
         Ok(_) => {
-            //println!("{}", line);
-
-            let request = serde_json::from_str(&line).unwrap();
-
-            // TODO here very important
-
-            let _ = sender.send(request).await;
-
-            if let Err(e) = socket.write(line.as_bytes()).await {
-                log_error!("error writing to client: {}", e);
+            match serde_json::from_str(&line) {
+                Ok(request) => {
+                    let _ = sender.send((request, socket)).await;
+                }
+                Err(e) => {
+                    log_error!("error deserializing request: {}", e)
+                }
             }
+
+            // if let Err(e) = socket.write(line.as_bytes()).await {
+            //     log_error!("error writing to client: {}", e);
+            // }
         }
         Err(e) => {
             log_error!("Error reading from socket: {}", e);
@@ -76,6 +83,8 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
 
     let (sender, mut reciever) = tokio::sync::mpsc::channel(1024);
     let sender = Arc::new(sender);
+
+    let rpc_actions: Vec<RPCAction> = vec![];
     loop {
         tokio::select! {
             accept_result = listener.accept() => {
@@ -93,10 +102,32 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
 
                 listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
             },
-            Some(request) = reciever.recv() => {
-                
-                println!("{:?} | {:?}", request, procs)
-            },
+            Some((request, mut socket)) = reciever.recv() => {
+                let res = jsonrpc::handle(request, procs);
+
+                match res {
+                    Ok(resp) => {
+                        match serde_json::to_string(&resp) {
+                            Err(_) => {},
+                            Ok(s) => {
+                                tokio::spawn(async move {
+                                   let _ = socket.write(s.as_bytes()).await;
+                                });
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        match serde_json::to_string(&err) {
+                            Err(_) => {},
+                            Ok(s) => {
+                                tokio::spawn(async move {
+                                   let _ = socket.write(s.as_bytes()).await;
+                                });
+                            }
+                        } 
+                    }
+                };
+             },
             _ = sleep(Duration::from_nanos(1)) => {
                 monitor_state(procs);
             }
