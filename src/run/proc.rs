@@ -155,12 +155,13 @@ impl Process<'_> {
         Ok(())
     }
 
-    fn check_signal(&self, status: ExitStatus, pid: u32) -> Option<i32> {
+    fn check_signal(&mut self, status: ExitStatus, pid: u32) -> Option<i32> {
         if let Some(signal) = status.signal() {
             log_info!("PID {} terminated by signal {}", pid, signal);
         } else {
             log_info!("PID {} terminated without exit or signal information", pid)
         }
+        self.update_state(ProcessState::Stopped);
         None
     }
 
