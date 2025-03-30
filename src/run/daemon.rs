@@ -17,13 +17,13 @@ mod command;
 mod error;
 mod socket;
 
-pub struct Daemon<'tm> {
-    pub processes: HashMap<String, proc::Process<'tm>>,
+pub struct Daemon {
+    pub processes: HashMap<String, proc::Process>,
 }
 
-impl<'tm> Daemon<'tm> {
-    pub fn from_config(conf: &'tm conf::Config) -> Result<Self, Box<dyn Error>> {
-        let procs: HashMap<String, proc::Process<'tm>> = conf
+impl Daemon {
+    pub fn from_config(conf: &conf::Config) -> Result<Self, Box<dyn Error>> {
+        let procs: HashMap<String, proc::Process> = conf
             .processes()
             .iter()
             .flat_map(|(proc_name, proc)| {
@@ -33,10 +33,10 @@ impl<'tm> Daemon<'tm> {
                     } else {
                         proc_name.to_owned()
                     };
-                    (key.clone(), proc::Process::from_process_config(proc, &key))
+                    (key.clone(), proc::Process::from_process_config(proc.clone(), &key))
                 })
             })
-            .collect::<HashMap<String, proc::Process<'tm>>>();
+            .collect::<HashMap<String, proc::Process>>();
 
         Ok(Self { processes: procs })
     }
@@ -76,7 +76,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
     }
 }
 
-pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
+pub async fn run(procs: &mut HashMap<String, Process>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
     let mut listener = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
 
     let (sender, mut reciever) = tokio::sync::mpsc::channel(1024);
@@ -109,6 +109,10 @@ pub async fn run(procs: &mut HashMap<String, Process<'_>>, socketpath: String, a
                                 });
                             }
                         }
+
+                    for p in procs.iter_mut() {
+                        let _ = p.1.stop();
+                    }
                     log_info!("shutting down taskmaster...");
                     return Ok(());
                 }

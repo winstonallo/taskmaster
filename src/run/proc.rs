@@ -19,18 +19,18 @@ mod error;
 
 #[allow(unused)]
 #[derive(Debug)]
-pub struct Process<'tm> {
+pub struct Process {
     id: Option<u32>,
     name: String,
     child: Option<Child>,
-    conf: &'tm ProcessConfig,
+    conf: ProcessConfig,
     startup_failures: u8,
     runtime_failures: u8,
     state: Mutex<ProcessState>,
 }
 
-impl<'tm> Process<'tm> {
-    pub fn from_process_config(conf: &'tm conf::proc::ProcessConfig, proc_name: &str) -> Self {
+impl Process {
+    pub fn from_process_config(conf: conf::proc::ProcessConfig, proc_name: &str) -> Self {
         match conf.autostart() {
             true => Self {
                 id: None,
@@ -61,7 +61,7 @@ extern "C" fn kill(_signum: c_int) {
 }
 
 #[allow(unused)]
-impl Process<'_> {
+impl Process {
     pub fn state(&self) -> ProcessState {
         self.state.lock().expect("something went terribly wrong").clone()
     }
@@ -80,7 +80,11 @@ impl Process<'_> {
     }
 
     pub fn config(&self) -> &ProcessConfig {
-        self.conf
+        &self.conf
+    }
+
+    pub fn config_mut(&mut self) -> &mut ProcessConfig {
+        &mut self.conf
     }
 
     pub fn runtime_failures(&self) -> u8 {
@@ -190,15 +194,20 @@ impl Process<'_> {
     }
 
     pub fn stop(&mut self) -> std::io::Result<()> {
-        self.child.take().unwrap().kill();
-        proc_info!(
-            self.name(),
-            "killed, PID {}",
-            self.id().expect("process without id killed - this should not happen")
-        );
-        self.id.take();
-
-        Ok(())
+        use ProcessState::*;
+        match self.state() {
+            HealthCheck(_) | Healthy => {
+                self.child.take().unwrap().kill();
+                proc_info!(
+                    self.name(),
+                    "killed, PID {}",
+                    self.id().expect("process without id killed - this should not happen")
+                );
+                self.id.take();
+                Ok(())
+            }
+            _ => Ok(()),
+        }
     }
 }
 
@@ -212,7 +221,7 @@ mod tests {
             id: Some(1),
             name: ("".to_string()),
             child: None,
-            conf: &mut conf::proc::ProcessConfig::testconfig(),
+            conf: conf::proc::ProcessConfig::testconfig(),
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
@@ -226,7 +235,7 @@ mod tests {
             id: Some(1),
             name: ("".to_string()),
             child: None,
-            conf: &mut conf::proc::ProcessConfig::testconfig(),
+            conf: conf::proc::ProcessConfig::testconfig(),
             startup_failures: 0,
             runtime_failures: 0,
             state: Mutex::new(ProcessState::Idle),
