@@ -1,2 +1,2 @@
-mod jsonrpc;
-mod handlers;
+pub mod handlers;
+pub mod jsonrpc;
