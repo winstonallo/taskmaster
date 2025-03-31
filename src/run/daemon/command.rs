@@ -10,7 +10,7 @@ pub enum CommandError {
     NotFound,
 }
 
-impl Daemon<'_> {
+impl Daemon {
     fn status(&self, args: Vec<&str>) -> Result<String, CommandError> {
         let mut response: Vec<String> = vec![];
 

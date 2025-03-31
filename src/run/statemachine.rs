@@ -1,6 +1,6 @@
-use states::{Completed, Failed, HealthCheck, Healthy, Idle, ProcessState, State, Stopped, WaitingForRetry};
+use states::{Completed, Failed, HealthCheck, Healthy, Idle, ProcessState, Ready, State, Stopped, WaitingForRetry};
 
-use super::proc::Process;
+pub use super::proc::Process;
 
 pub mod states;
 mod transitions;
@@ -16,6 +16,7 @@ fn try_update_state<S: State>(proc: &mut Process, handler: S) {
 pub fn monitor_state(proc: &mut Process) {
     match proc.state() {
         ProcessState::Idle => try_update_state(proc, Idle),
+        ProcessState::Ready => try_update_state(proc, Ready),
         ProcessState::HealthCheck(started_at) => try_update_state(proc, HealthCheck::new(started_at)),
         ProcessState::Healthy => try_update_state(proc, Healthy),
         ProcessState::Failed(prev_state) => try_update_state(proc, Failed::new(*prev_state)),

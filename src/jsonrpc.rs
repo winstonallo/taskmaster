@@ -1,3 +1,5 @@
+pub mod handlers;
+
 use serde::{Deserialize, Serialize};
 
 #[repr(i16)]
@@ -29,7 +31,7 @@ impl<'de> Deserialize<'de> for JsonRPCErrorCode {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct JsonRPCRequest {
     pub jsonrpc: String,
     pub id: usize,
@@ -44,6 +46,16 @@ pub struct JsonRPCResponse {
     pub result: serde_json::Value,
 }
 
+impl JsonRPCResponse {
+    pub fn from_json_rpc_request(request: &JsonRPCRequest, result: serde_json::Value) -> Self {
+        Self {
+            jsonrpc: request.jsonrpc.clone(),
+            id: request.id,
+            result,
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRPCErrorData {
     pub code: JsonRPCErrorCode,
@@ -56,6 +68,16 @@ pub struct JsonRPCError {
     pub jsonrpc: String,
     pub id: usize,
     pub error: JsonRPCErrorData,
+}
+
+impl JsonRPCError {
+    pub fn from_json_rpc_request(request: &JsonRPCRequest, data: JsonRPCErrorData) -> Self {
+        Self {
+            jsonrpc: request.jsonrpc.clone(),
+            id: request.id,
+            error: data,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -122,8 +144,4 @@ impl TryFrom<JsonRPCRaw> for JsonRPCMessage {
             },
         })
     }
-}
-
-pub trait Method {
-    fn handle(request: JsonRPCRequest) -> Result<JsonRPCResponse, JsonRPCError>;
 }
