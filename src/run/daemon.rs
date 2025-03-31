@@ -56,24 +56,59 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
     let mut line = String::new();
     match socket.read_line(&mut line).await {
         Ok(0) => { /* connection closed, do nothing */ }
-        Ok(_) => {
-            match serde_json::from_str(&line) {
-                Ok(request) => {
-                    let _ = sender.send((request, socket)).await;
-                }
-                Err(e) => {
-                    log_error!("error deserializing request: {}", e)
-                }
+        Ok(_) => match serde_json::from_str(&line) {
+            Ok(request) => {
+                let _ = sender.send((request, socket)).await;
             }
-
-            // if let Err(e) = socket.write(line.as_bytes()).await {
-            //     log_error!("error writing to client: {}", e);
-            // }
-        }
+            Err(e) => {
+                log_error!("error deserializing request: {}", e)
+            }
+        },
         Err(e) => {
             log_error!("Error reading from socket: {}", e);
         }
     }
+}
+
+pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSocket, procs: &mut HashMap<String, Process>) -> bool {
+    if let Some(resp) = jsonrpc::handle_halt(&request) {
+        match serde_json::to_string(&resp) {
+            Err(_) => {}
+            Ok(s) => {
+                tokio::spawn(async move {
+                    let _ = socket.write(s.as_bytes()).await;
+                });
+            }
+        }
+
+        for p in procs.iter_mut() {
+            let _ = p.1.stop();
+        }
+        log_info!("shutting down taskmaster...");
+        return true;
+    }
+
+    let res = jsonrpc::handle(request, procs);
+
+    match res {
+        Ok(resp) => match serde_json::to_string(&resp) {
+            Err(_) => {}
+            Ok(s) => {
+                tokio::spawn(async move {
+                    let _ = socket.write(s.as_bytes()).await;
+                });
+            }
+        },
+        Err(err) => match serde_json::to_string(&err) {
+            Err(_) => {}
+            Ok(s) => {
+                tokio::spawn(async move {
+                    let _ = socket.write(s.as_bytes()).await;
+                });
+            }
+        },
+    };
+    false
 }
 
 pub async fn run(procs: &mut HashMap<String, Process>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
@@ -99,48 +134,10 @@ pub async fn run(procs: &mut HashMap<String, Process>, socketpath: String, authg
 
                 listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
             },
-            Some((request, mut socket)) = reciever.recv() => {
-                if let Some(resp) = jsonrpc::handle_halt(&request) {
-                        match serde_json::to_string(&resp) {
-                            Err(_) => {},
-                            Ok(s) => {
-                                tokio::spawn(async move {
-                                   let _ = socket.write(s.as_bytes()).await;
-                                });
-                            }
-                        }
-
-                    for p in procs.iter_mut() {
-                        let _ = p.1.stop();
-                    }
-                    log_info!("shutting down taskmaster...");
+            Some((request, socket)) = reciever.recv() => {
+                if handle_json_rpc_request(request, socket, procs) {
                     return Ok(());
                 }
-
-                let res = jsonrpc::handle(request, procs);
-
-                match res {
-                    Ok(resp) => {
-                        match serde_json::to_string(&resp) {
-                            Err(_) => {},
-                            Ok(s) => {
-                                tokio::spawn(async move {
-                                   let _ = socket.write(s.as_bytes()).await;
-                                });
-                            }
-                        }
-                    },
-                    Err(err) => {
-                        match serde_json::to_string(&err) {
-                            Err(_) => {},
-                            Ok(s) => {
-                                tokio::spawn(async move {
-                                   let _ = socket.write(s.as_bytes()).await;
-                                });
-                            }
-                        }
-                    }
-                };
              },
             _ = sleep(Duration::from_nanos(1)) => {
                 monitor_state(procs);
