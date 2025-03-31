@@ -42,7 +42,7 @@ pub fn get_proc_from_json_request<'a>(
     procs: &'a mut HashMap<String, run::statemachine::Process>,
 ) -> Result<&'a mut Process, JsonRPCError> {
     let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
-        &request,
+        request,
         JsonRPCErrorData {
             code: JsonRPCErrorCode::InvalidParams,
             message: "wrong or no params given | `name`".to_string(),
