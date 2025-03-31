@@ -136,7 +136,7 @@ impl Process {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    umask((umask_val as u16).into());
+                    umask(umask_val);
 
                     Ok(())
                 })
