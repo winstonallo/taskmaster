@@ -124,7 +124,7 @@ impl Process {
         let args = self.conf.args().to_owned();
         let working_dir = self.conf.workingdir().path();
         let stop_signals = self.conf.stopsignals().to_owned();
-        let umask_val  = self.conf.umask();
+        let umask_val = self.conf.umask();
 
         match unsafe {
             Command::new(cmd_path)
