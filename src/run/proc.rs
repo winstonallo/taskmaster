@@ -137,6 +137,8 @@ impl Process {
                         signal(sig.signal(), kill as usize);
                     }
                     umask(umask_val.try_into().unwrap());
+
+
                     Ok(())
                 })
                 .spawn()
