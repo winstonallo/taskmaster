@@ -1,3 +1,5 @@
+pub mod handlers;
+
 use serde::{Deserialize, Serialize};
 
 #[repr(i16)]

@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-use super::jsonrpc::{JsonRPCError, JsonRPCErrorCode, JsonRPCErrorData, JsonRPCRequest, JsonRPCResponse};
+use super::{JsonRPCError, JsonRPCErrorCode, JsonRPCErrorData, JsonRPCRequest, JsonRPCResponse};
 
 pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, run::statemachine::Process>) -> Result<JsonRPCResponse, JsonRPCError> {
     match request.method.as_str() {
