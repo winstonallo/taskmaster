@@ -71,7 +71,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
 }
 
 pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSocket, procs: &mut HashMap<String, Process>) -> bool {
-    if let Some(resp) = jsonrpc::handlers:AsMut:handle_halt(&request) {
+    if let Some(resp) = jsonrpc::handlers::handle_halt(&request) {
         match serde_json::to_string(&resp) {
             Err(_) => {}
             Ok(s) => {
