@@ -124,7 +124,7 @@ impl Process {
         let args = self.conf.args().to_owned();
         let working_dir = self.conf.workingdir().path();
         let stop_signals = self.conf.stopsignals().to_owned();
-        let umask_val: u16 = self.conf.umask() as u16;
+        let umask_val: u32 = self.conf.umask() as u32;
 
         match unsafe {
             Command::new(cmd_path)
@@ -136,7 +136,7 @@ impl Process {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    umask(umask_val);
+                    umask(umask_val.try_into().unwrap());
                     Ok(())
                 })
                 .spawn()
