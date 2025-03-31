@@ -114,7 +114,7 @@ pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSoc
 pub async fn run(procs: &mut HashMap<String, Process>, socketpath: String, authgroup: String) -> Result<(), Box<dyn Error>> {
     let mut listener = AsyncUnixSocket::new(&socketpath, &authgroup).unwrap();
 
-    let (sender, mut reciever) = tokio::sync::mpsc::channel(1024);
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
     let sender = Arc::new(sender);
 
     loop {
@@ -134,7 +134,7 @@ pub async fn run(procs: &mut HashMap<String, Process>, socketpath: String, authg
 
                 listener = AsyncUnixSocket::new(&socketpath, &authgroup)?;
             },
-            Some((request, socket)) = reciever.recv() => {
+            Some((request, socket)) = receiver.recv() => {
                 if handle_json_rpc_request(request, socket, procs) {
                     return Ok(());
                 }
