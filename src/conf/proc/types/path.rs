@@ -108,7 +108,7 @@ impl<'de> Deserialize<'de> for ExecutableFile {
         let md = match fs::metadata(s.clone()) {
             Ok(md) => md,
             Err(err) => {
-                return Err(serde::de::Error::custom(format!("expected path to file with execute permissions: {err}")));
+                return Err(serde::de::Error::custom(format!("'{s}': {err}")));
             }
         };
         if !md.is_file() {

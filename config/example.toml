@@ -15,7 +15,7 @@ authgroup = "winstonallo"
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/home/winstonallo/mastery/taskmaster/writetofile.sh"
+cmd = "/home/winstonallo/mastery/taskmaster/writetofile"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].

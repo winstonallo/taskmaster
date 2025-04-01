@@ -22,7 +22,7 @@ impl Config {
         let conf_str = match fs::read_to_string(path) {
             Ok(s) => s,
             Err(err) => {
-                return Err(format!("could not read config at path '{path}' to into string: {err}").into());
+                return Err(format!("could not read config at path '{path}': {err}").into());
             }
         };
 
@@ -38,7 +38,7 @@ impl Config {
         let mut conf: Config = match toml::from_str(config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
-                return Err(format!("could not parse config string: {err}").into());
+                return Err(format!("could not parse config: {err}").into());
             }
         };
 
