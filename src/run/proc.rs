@@ -136,7 +136,7 @@ impl Process {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    umask(umask_val);
+                    umask(umask_val as u16);
 
                     Ok(())
                 })
@@ -194,7 +194,7 @@ impl Process {
         }
     }
 
-    pub fn stop(&mut self) -> std::io::Result<()> {
+    pub fn stop(&mut self) -> Result<(), &str> {
         use ProcessState::*;
         match self.state() {
             HealthCheck(_) | Healthy => {
@@ -207,7 +207,7 @@ impl Process {
                 self.id.take();
                 Ok(())
             }
-            _ => Ok(()),
+            _ => Err("process not running"),
         }
     }
 }

@@ -10,7 +10,7 @@ use super::{
 
 use crate::{
     conf,
-    jsonrpc::{self, JsonRPCRequest},
+    jsonrpc::{self, JsonRPCError, JsonRPCRequest, JsonRPCResponse},
     log_error, log_info,
 };
 mod command;
@@ -54,8 +54,12 @@ pub fn monitor_state(procs: &mut HashMap<String, Process>) {
 
 async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mpsc::Sender<(JsonRPCRequest, AsyncUnixSocket)>>) {
     let mut line = String::new();
+
     match socket.read_line(&mut line).await {
         Ok(0) => { /* connection closed, do nothing */ }
+        Err(e) => {
+            log_error!("Error reading from socket: {}", e);
+        }
         Ok(_) => match serde_json::from_str(&line) {
             Ok(request) => {
                 let _ = sender.send((request, socket)).await;
@@ -64,32 +68,10 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                 log_error!("error deserializing request: {}", e)
             }
         },
-        Err(e) => {
-            log_error!("Error reading from socket: {}", e);
-        }
     }
 }
 
-pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSocket, procs: &mut HashMap<String, Process>) -> bool {
-    if let Some(resp) = jsonrpc::handlers::handle_halt(&request) {
-        match serde_json::to_string(&resp) {
-            Err(_) => {}
-            Ok(s) => {
-                tokio::spawn(async move {
-                    let _ = socket.write(s.as_bytes()).await;
-                });
-            }
-        }
-
-        for p in procs.iter_mut() {
-            let _ = p.1.stop();
-        }
-        log_info!("shutting down taskmaster...");
-        return true;
-    }
-
-    let res = jsonrpc::handlers::handle(request, procs);
-
+pub fn send_json_rpc_result(mut socket: AsyncUnixSocket, res: Result<JsonRPCResponse, JsonRPCError>) {
     match res {
         Ok(resp) => match serde_json::to_string(&resp) {
             Err(_) => {}
@@ -108,6 +90,28 @@ pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSoc
             }
         },
     };
+}
+
+pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSocket, procs: &mut HashMap<String, Process>) -> bool {
+    if let Some(resp) = jsonrpc::handlers::handle_halt(&request) {
+        match serde_json::to_string(&resp) {
+            Err(_) => {}
+            Ok(s) => {
+                tokio::spawn(async move {
+                    let _ = socket.write(s.as_bytes()).await;
+                });
+                return true;
+            }
+        }
+
+        for p in procs.iter_mut() {
+            let _ = p.1.stop();
+        }
+        log_info!("shutting down taskmaster...");
+        return true;
+    }
+    let res = jsonrpc::handlers::handle(request, procs);
+    send_json_rpc_result(socket, res);
     false
 }
 
@@ -136,6 +140,9 @@ pub async fn run(procs: &mut HashMap<String, Process>, socketpath: String, authg
             },
             Some((request, socket)) = receiver.recv() => {
                 if handle_json_rpc_request(request, socket, procs) {
+                    for (_name, p) in procs.iter_mut() {
+                        let _ = p.stop();
+                    }
                     return Ok(());
                 }
              },

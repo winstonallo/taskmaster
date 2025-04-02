@@ -1,9 +1,12 @@
 pub mod handlers;
 
-use serde::{Deserialize, Serialize};
+use libc::stat;
+use serde::{Deserialize, Serialize, Serializer};
+
+use crate::run::statemachine::{Process, states::ProcessState};
 
 #[repr(i16)]
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub enum JsonRPCErrorCode {
     ServerError(i16), // -32000 to -32099
     InvalidRequest = -32600,
@@ -11,6 +14,22 @@ pub enum JsonRPCErrorCode {
     InvalidParams = -32602,
     InternalError = -32603,
     ParseError = -32700,
+}
+
+impl<'de> Serialize for JsonRPCErrorCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match *self {
+            JsonRPCErrorCode::InvalidRequest => serializer.serialize_i16(-32600),
+            JsonRPCErrorCode::MethodNotFound => serializer.serialize_i16(-32601),
+            JsonRPCErrorCode::InvalidParams => serializer.serialize_i16(-32602),
+            JsonRPCErrorCode::InternalError => serializer.serialize_i16(-32603),
+            JsonRPCErrorCode::ParseError => serializer.serialize_i16(-32700),
+            JsonRPCErrorCode::ServerError(code) => serializer.serialize_i16(code),
+        }
+    }
 }
 
 impl<'de> Deserialize<'de> for JsonRPCErrorCode {
@@ -36,31 +55,130 @@ pub struct JsonRPCRequest {
     pub jsonrpc: String,
     pub id: usize,
     pub method: String,
-    pub params: Option<serde_json::Value>,
+    pub params: JsonRPCRequestParams,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub enum JsonRPCRequestParams {
+    Status,
+    StatusSingle(String),
+    Stop(String),
+    Start(String),
+    Restart(String),
+    Reload,
+    Halt,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRPCResponse {
     pub jsonrpc: String,
     pub id: usize,
-    pub result: serde_json::Value,
+    pub result: JsonRPCResponseResult,
 }
 
 impl JsonRPCResponse {
-    pub fn from_json_rpc_request(request: &JsonRPCRequest, result: serde_json::Value) -> Self {
-        Self {
-            jsonrpc: request.jsonrpc.clone(),
-            id: request.id,
-            result,
+    pub fn from_json_rpc_esponse_result(request: JsonRPCRequest, result: JsonRPCResponseResult) -> Self {
+        match result {
+            JsonRPCResponseResult::Status(statuses) => Self {
+                jsonrpc: request.jsonrpc,
+                id: request.id,
+                result: JsonRPCResponseResult::Status(statuses),
+            },
+
+            JsonRPCResponseResult::StatusSingle(status) => Self {
+                jsonrpc: request.jsonrpc,
+                id: request.id,
+                result: JsonRPCResponseResult::StatusSingle(status),
+            },
+            JsonRPCResponseResult::Stop(name) => Self {
+                jsonrpc: request.jsonrpc,
+                id: request.id,
+                result: JsonRPCResponseResult::Stop(name),
+            },
+            JsonRPCResponseResult::Start(name) => Self {
+                jsonrpc: request.jsonrpc,
+                id: request.id,
+                result: JsonRPCResponseResult::Start(name),
+            },
+            JsonRPCResponseResult::Restart(name) => Self {
+                jsonrpc: request.jsonrpc,
+                id: request.id,
+                result: JsonRPCResponseResult::Restart(name),
+            },
+            JsonRPCResponseResult::Reload => Self {
+                jsonrpc: request.jsonrpc,
+                id: request.id,
+                result: JsonRPCResponseResult::Reload,
+            },
+            JsonRPCResponseResult::Halt => Self {
+                jsonrpc: request.jsonrpc,
+                id: request.id,
+                result: JsonRPCResponseResult::Halt,
+            },
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub enum JsonRPCResponseResult {
+    Status(Vec<ResponseProcessStatus>),
+    StatusSingle(ResponseProcessStatus),
+    Stop(String),
+    Start(String),
+    Restart(String),
+    Reload,
+    Halt,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResponseProcessStatus {
+    name: String,
+    state: ResponseProcessState,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ResponseProcessState {
+    Idle,
+    Ready,
+    HealthCheck,
+    Healthy,
+    Failed,
+    WaitingForRetry,
+    Completed,
+    Stopped,
+}
+
+impl ResponseProcessState {
+    pub fn from_process_state(process_state: ProcessState) -> Self {
+        use ResponseProcessState::*;
+        match process_state {
+            ProcessState::Idle => Idle,
+            ProcessState::Ready => Ready,
+            ProcessState::HealthCheck(_) => HealthCheck,
+            ProcessState::Healthy => Healthy,
+            ProcessState::Failed(_) => Failed,
+            ProcessState::WaitingForRetry(_) => WaitingForRetry,
+            ProcessState::Completed => Completed,
+            ProcessState::Stopped => Stopped,
+        }
+    }
+}
+
+// impl JsonRPCResponse {
+//     pub fn from_json_rpc_request(request: &JsonRPCRequest, result: serde_json::Value) -> Self {
+//         Self {
+//             jsonrpc: request.jsonrpc.clone(),
+//             id: request.id,
+//             result,
+//         }
+//     }
+// }
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct JsonRPCErrorData {
     pub code: JsonRPCErrorCode,
     pub message: String,
-    pub data: Option<serde_json::Value>,
+    pub data: Option<JsonRPCRequestParams>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -101,47 +219,47 @@ pub enum JsonRPCMessage {
     Error(JsonRPCError),
 }
 
-impl TryFrom<JsonRPCRaw> for JsonRPCMessage {
-    type Error = JsonRPCError;
+// impl TryFrom<JsonRPCRaw> for JsonRPCMessage {
+//     type Error = JsonRPCError;
 
-    fn try_from(value: JsonRPCRaw) -> Result<Self, <JsonRPCMessage as TryFrom<JsonRPCRaw>>::Error> {
-        if let Some(error) = value.error {
-            return Ok(JsonRPCMessage::Error(JsonRPCError {
-                jsonrpc: value.jsonrpc,
-                id: value.id,
-                error,
-            }));
-        }
+//     fn try_from(value: JsonRPCRaw) -> Result<Self, <JsonRPCMessage as TryFrom<JsonRPCRaw>>::Error> {
+//         if let Some(error) = value.error {
+//             return Ok(JsonRPCMessage::Error(JsonRPCError {
+//                 jsonrpc: value.jsonrpc,
+//                 id: value.id,
+//                 error,
+//             }));
+//         }
 
-        if let Some(result) = value.result {
-            return Ok(JsonRPCMessage::Response(JsonRPCResponse {
-                jsonrpc: value.jsonrpc,
-                id: value.id,
-                result,
-            }));
-        }
+//         if let Some(result) = value.result {
+//             return Ok(JsonRPCMessage::Response(JsonRPCResponse {
+//                 jsonrpc: value.jsonrpc,
+//                 id: value.id,
+//                 result,
+//             }));
+//         }
 
-        if let Some(method) = value.method {
-            return Ok(JsonRPCMessage::Request(JsonRPCRequest {
-                jsonrpc: value.jsonrpc,
-                id: value.id,
-                method,
-                params: value.params,
-            }));
-        }
+//         if let Some(method) = value.method {
+//             return Ok(JsonRPCMessage::Request(JsonRPCRequest {
+//                 jsonrpc: value.jsonrpc,
+//                 id: value.id,
+//                 method,
+//                 params: value.params,
+//             }));
+//         }
 
-        // `jsonrpc` and `id` already are required by deserialization.
-        Err(JsonRPCError {
-            jsonrpc: value.jsonrpc,
-            id: value.id,
-            error: JsonRPCErrorData {
-                code: JsonRPCErrorCode::InvalidRequest,
-                message: format!(
-                    "invalid JSON-RPC format: id: {:?}, method: {:?}, params: {:?}, result: {:?}, error: {:?}",
-                    value.id, value.method, value.params, value.result, value.error
-                ),
-                data: None,
-            },
-        })
-    }
-}
+//         // `jsonrpc` and `id` already are required by deserialization.
+//         Err(JsonRPCError {
+//             jsonrpc: value.jsonrpc,
+//             id: value.id,
+//             error: JsonRPCErrorData {
+//                 code: JsonRPCErrorCode::InvalidRequest,
+//                 message: format!(
+//                     "invalid JSON-RPC format: id: {:?}, method: {:?}, params: {:?}, result: {:?}, error: {:?}",
+//                     value.id, value.method, value.params, value.result, value.error
+//                 ),
+//                 data: None,
+//             },
+//         })
+//     }
+// }
