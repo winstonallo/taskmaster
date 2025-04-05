@@ -1,3 +1,3 @@
 pub mod daemon;
-mod proc;
+pub mod proc;
 pub(crate) mod statemachine;

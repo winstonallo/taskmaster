@@ -3,7 +3,16 @@ use std::{
     time::{self, Instant},
 };
 
-use crate::run::proc::Process;
+use crate::run::{
+    proc::Process,
+    statemachine::{
+        desired::{desire_healthy, desire_idle, desire_ready},
+        monitor::{
+            monitor_completed, monitor_failed, monitor_health_check, monitor_healthy, monitor_idle, monitor_ready, monitor_stopped, monitor_stopping,
+            monitor_waiting_for_retry,
+        },
+    },
+};
 
 #[allow(unused)]
 #[derive(Clone, Debug, PartialEq)]
@@ -15,6 +24,7 @@ pub enum ProcessState {
     Failed(Box<ProcessState>),
     WaitingForRetry(time::Instant),
     Completed,
+    Stopping(time::Instant),
     Stopped,
 }
 
@@ -28,66 +38,48 @@ impl Display for ProcessState {
             ProcessState::Failed(prev_state) => write!(f, "failed while in state: {}", *prev_state),
             ProcessState::WaitingForRetry(retry_at) => write!(f, "retrying in {} seconds", retry_at.duration_since(Instant::now()).as_secs()),
             ProcessState::Completed => write!(f, "completed successfully"),
+            ProcessState::Stopping(_) => write!(f, "stopping"),
             ProcessState::Stopped => write!(f, "stopped"),
         }
     }
 }
 
-/// Trait to be implemented by for the abstraction of state transitions.
-pub trait State {
-    /// Returns the new `ProcessState` for `proc`, or `None` if no transition
-    /// is required.
-    fn handle(&self, proc: &mut Process) -> Option<ProcessState>;
-}
-
-pub struct Idle;
-
-pub struct Ready;
-
-pub struct HealthCheck {
-    started_at: time::Instant,
-}
-
-impl HealthCheck {
-    pub fn started_at(&self) -> time::Instant {
-        self.started_at
+impl ProcessState {
+    pub fn monitor(&mut self, proc: &mut Process) -> Option<ProcessState> {
+        use ProcessState::*;
+        match self {
+            Idle => monitor_idle(),
+            Ready => monitor_ready(proc),
+            HealthCheck(started_at) => monitor_health_check(started_at, proc),
+            Healthy => monitor_healthy(proc),
+            Failed(_process_state) => monitor_failed(proc),
+            WaitingForRetry(retry_at) => monitor_waiting_for_retry(retry_at, proc),
+            Completed => monitor_completed(proc),
+            Stopping(_) => monitor_stopping(proc),
+            Stopped => monitor_stopped(proc),
+        }
     }
 
-    pub fn new(started_at: time::Instant) -> Self {
-        Self { started_at }
+    pub fn desire(&mut self, proc: &mut Process) -> Option<ProcessState> {
+        let desired_state = match proc.desired_states().front() {
+            Some(d_s) => d_s.clone(),
+            None => return None,
+        };
+
+        use ProcessState::*;
+        let (o, remove_desired_state) = match desired_state {
+            Idle | Stopping(_) | Stopped => desire_idle(proc),
+            Ready => desire_ready(proc),
+            HealthCheck(_) | Healthy => desire_healthy(proc),
+            Completed => panic!("target ProcessState `Completed` doesn't make sense"),
+            Failed(_) => panic!("target ProcessState `Failed` doesn't make sense"),
+            WaitingForRetry(_) => panic!("target ProcessState `WaitingForRetry` doesn't make sense"),
+        };
+
+        if remove_desired_state {
+            proc.desired_states_mut().pop_front();
+        }
+
+        o
     }
 }
-
-pub struct Healthy;
-
-pub struct Failed {
-    prev_state: ProcessState,
-}
-
-impl Failed {
-    pub fn prev_state(&self) -> &ProcessState {
-        &self.prev_state
-    }
-
-    pub fn new(prev_state: ProcessState) -> Self {
-        Self { prev_state }
-    }
-}
-
-pub struct WaitingForRetry {
-    retry_at: time::Instant,
-}
-
-impl WaitingForRetry {
-    pub fn retry_at(&self) -> time::Instant {
-        self.retry_at
-    }
-
-    pub fn new(retry_at: time::Instant) -> Self {
-        Self { retry_at }
-    }
-}
-
-pub struct Completed;
-
-pub struct Stopped;

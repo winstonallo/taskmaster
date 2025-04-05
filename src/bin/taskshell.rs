@@ -36,7 +36,7 @@ fn main() {
         id: 1,
         method: args[1].clone(),
         params: Some(json!({
-            // "name": "ls",
+            "name": "ls_0",
         })),
     })
     .expect("serde failed");
