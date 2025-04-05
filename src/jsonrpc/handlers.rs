@@ -66,7 +66,7 @@ pub fn handle_reload(request: JsonRPCRequest, procs: &mut HashMap<String, Proces
                     false => old_process.push_desired_state(Idle),
                     true => old_process.push_desired_state(Healthy),
                 }
-                // println!("{:?}", old_process);
+
                 if let Some(index) = leftover.iter().position(|n| *n == old_process.name()) {
                     leftover.remove(index);
                 }
