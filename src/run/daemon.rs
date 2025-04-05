@@ -48,7 +48,8 @@ impl Daemon {
 
 pub fn monitor_state(procs: &mut HashMap<String, Process>) {
     for proc in procs.values_mut() {
-        statemachine::monitor_state(proc);
+        proc.desire();
+        proc.monitor();
     }
 }
 
@@ -82,7 +83,7 @@ pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSoc
         }
 
         for p in procs.iter_mut() {
-            let _ = p.1.stop();
+            let _ = p.1.kill_forcefully();
         }
         log_info!("shutting down taskmaster...");
         return true;
