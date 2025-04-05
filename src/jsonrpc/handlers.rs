@@ -56,13 +56,13 @@ pub fn handle_reload(request: JsonRPCRequest, procs: &mut HashMap<String, Proces
         leftover.push(name.to_owned());
     }
 
-    for (name, mut p) in daemon.processes {
+    for (name, p) in daemon.processes {
         match procs.get_mut(&name) {
             Some(old_process) => {
                 *old_process.config_mut() = p.config().clone();
 
                 use ProcessState::*;
-                match p.config().autostart().clone() {
+                match p.config().autostart() {
                     false => old_process.push_desired_state(Idle),
                     true => old_process.push_desired_state(Healthy),
                 }
@@ -78,8 +78,8 @@ pub fn handle_reload(request: JsonRPCRequest, procs: &mut HashMap<String, Proces
     }
 
     for l in leftover.iter() {
-        if let Some(mut p) = procs.remove_entry(l) {
-            let _ = p.1.push_desired_state(ProcessState::Stopped);
+        if let Some(p) = procs.get_mut(l) {
+            p.push_desired_state(ProcessState::Stopped);
         }
     }
 

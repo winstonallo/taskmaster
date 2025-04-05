@@ -3,10 +3,7 @@ use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 use socket::AsyncUnixSocket;
 use tokio::time::sleep;
 
-use super::{
-    proc::{self, Process},
-    statemachine::{self},
-};
+use super::proc::{self, Process};
 
 use crate::{
     conf,

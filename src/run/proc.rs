@@ -3,7 +3,6 @@ use std::{
     fs::File,
     os::unix::process::{CommandExt, ExitStatusExt},
     process::{Child, Command, ExitStatus},
-    sync::Mutex,
     time::{self, Duration, Instant},
 };
 
@@ -159,7 +158,7 @@ impl Process {
                     for sig in &stop_signals {
                         signal(sig.signal(), kill as usize);
                     }
-                    umask(umask_val as u16);
+                    umask(umask_val);
 
                     Ok(())
                 })
