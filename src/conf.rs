@@ -8,12 +8,13 @@ pub mod proc;
 mod tests;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default = "defaults::dflt_socketpath")]
     socketpath: String,
     #[serde(default = "defaults::dflt_authgroup")]
     authgroup: String,
-    #[serde(flatten)]
+    #[serde(default)]
     processes: HashMap<String, ProcessConfig>,
 }
 
@@ -22,7 +23,7 @@ impl Config {
         let conf_str = match fs::read_to_string(path) {
             Ok(s) => s,
             Err(err) => {
-                return Err(format!("could not read config at path '{path}' to into string: {err}").into());
+                return Err(format!("could not parse config at path '{}': '{}'", path, err).into());
             }
         };
 
@@ -38,9 +39,13 @@ impl Config {
         let mut conf: Config = match toml::from_str(config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
-                return Err(format!("could not parse config string: {err}").into());
+                return Err(err.into());
             }
         };
+
+        if conf.processes.is_empty() {
+            return Err("taskmaster expects at least one process to be defined to operate".into());
+        }
 
         // Did not find a way to have serde defaults depend on other field's values.
         for (proc_name, proc) in &mut conf.processes {

@@ -10,7 +10,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(c) => c,
         Err(e) => {
             log_error!("{}", e);
-            return Err(e);
+            std::process::exit(1)
         }
     };
 
@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(d) => d,
         Err(e) => {
             log_error!("{}", e);
-            return Err(e);
+            std::process::exit(1)
         }
     };
 

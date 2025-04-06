@@ -10,7 +10,7 @@ socketpath = "/tmp/.taskmaster.sock"
 authgroup = "winstonallo"
 
 # Process name.
-[ls]
+[processes.ls]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
@@ -90,7 +90,7 @@ stderr = "/tmp/ls.stderr"
 env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
 
 # Process name.
-[lsls]
+[processes.lsls]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
