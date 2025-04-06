@@ -8,6 +8,7 @@ pub mod proc;
 mod tests;
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(default = "defaults::dflt_socketpath")]
     socketpath: String,
@@ -42,7 +43,7 @@ impl Config {
             }
         };
 
-        if conf.processes.len() < 1 {
+        if conf.processes.is_empty() {
             return Err("expected at least one process".into());
         }
 

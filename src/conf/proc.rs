@@ -34,6 +34,7 @@ use serde::Deserialize;
 /// the `Deserializer` trait.
 #[allow(unused)]
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProcessConfig {
     cmd: types::ExecutableFile,
 
