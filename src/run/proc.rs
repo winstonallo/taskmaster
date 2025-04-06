@@ -77,10 +77,6 @@ impl Process {
         self.state.clone()
     }
 
-    // pub fn update_state(&mut self, new_state: ProcessState) {
-    //     self.state = new_state
-    // }
-
     pub fn push_desired_state(&mut self, desired_state: ProcessState) {
         self.desired_states.push_back(desired_state);
     }
