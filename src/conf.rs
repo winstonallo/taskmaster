@@ -23,7 +23,7 @@ impl Config {
         let conf_str = match fs::read_to_string(path) {
             Ok(s) => s,
             Err(err) => {
-                return Err(err.into());
+                return Err(format!("could not parse config at path '{}': '{}'", path, err).into());
             }
         };
 
