@@ -10,7 +10,7 @@ socketpath = "/tmp/.taskmaster.sock"
 authgroup = "winstonallo"
 
 # Process name.
-[ls]
+[processes.ls]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
@@ -86,14 +86,8 @@ stderr = "/tmp/ls.stderr"
 # Defaults to [[]].
 env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
 
-# Example config for taskmaster.
-
-# Path to the socket used for connections between taskmaster and its client.
-# Defaults to "/tmp/.taskmaster.sock".
-socketpath = "/tmp/.taskmaster.sock"
-
 # Process name.
-[lsls]
+[processes.lsls]
 
 # Command to run in order to start this process.
 # Must be an absolute path.

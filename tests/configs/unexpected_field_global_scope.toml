@@ -1,5 +1,7 @@
 # Example config for taskmaster.
 
+idonotexist = "hehe"
+
 # Process name.
 [processes.nginx]
 
