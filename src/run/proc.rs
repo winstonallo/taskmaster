@@ -26,6 +26,7 @@ pub struct Process {
     conf: ProcessConfig,
     startup_failures: u8,
     runtime_failures: u8,
+    healthcheck_failures: u8,
     state: ProcessState,
     desired_states: VecDeque<ProcessState>,
 }
@@ -40,6 +41,7 @@ impl Process {
             conf,
             startup_failures: 0,
             runtime_failures: 0,
+            healthcheck_failures: 0,
             state: ProcessState::Idle,
             desired_states: match is_autostart {
                 true => VecDeque::from([ProcessState::Ready]),
@@ -121,6 +123,14 @@ impl Process {
         self.startup_failures = self.startup_failures.saturating_add(1);
     }
 
+    pub fn healthcheck_failures(&self) -> u8 {
+        self.healthcheck_failures
+    }
+
+    pub fn increment_healthcheck_failures(&mut self) {
+        self.healthcheck_failures = self.healthcheck_failures.saturating_add(1);
+    }
+
     /// Returns a `time::Instant` representing the next time the process should
     /// be retried according to its configured backoff, assuming the failure
     /// happened at the time of calling this method.
@@ -130,25 +140,26 @@ impl Process {
 
     /// Checks whether the process is healthy, according to `started_at` and its
     /// configured healthcheck time.
-    pub fn healthy(&self, started_at: time::Instant) -> bool {
-        let healthcheck = self.conf.healthcheck();
+    pub fn healthy(&mut self, started_at: time::Instant) -> bool {
+        let mut healthcheck = self.conf.healthcheck();
+        let healthcheck_starttime = healthcheck.starttime();
 
         if healthcheck.command().is_none() {
-            return Instant::now().duration_since(started_at).as_secs() >= self.conf.healthcheck().starttime() as u64;
+            return Instant::now().duration_since(started_at).as_secs() >= healthcheck_starttime as u64;
         }
 
         if let Some((is_healthy, duration)) = healthcheck.check_result() {
             if is_healthy {
-                log_info!("healthcheck for {} passed in {:?}s", self.name, duration.as_secs());
                 return true;
             } else {
-                log_error!("healthcheck for {} failed after {:?}s", self.name, duration.as_secs());
+                let _ = healthcheck.reset();
+                proc_info!(self, "healthcheck failed, retrying in {}s", healthcheck.backoff());
+                self.increment_healthcheck_failures();
                 return false;
             }
-
-            let _ = healthcheck.reset();
         } else if !healthcheck.running() {
             if let Some(pid) = self.id {
+                proc_info!(self, "starting new healthcheck in background");
                 let _ = healthcheck.start_background(pid);
             }
             return false;
@@ -288,6 +299,7 @@ mod tests {
             conf: conf::proc::ProcessConfig::testconfig(),
             startup_failures: 0,
             runtime_failures: 0,
+            healthcheck_failures: 0,
             state: ProcessState::Idle,
             desired_states: VecDeque::new(),
         };

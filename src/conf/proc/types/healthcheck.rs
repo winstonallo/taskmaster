@@ -84,15 +84,6 @@ impl HealthCheck {
     }
 
     pub fn start_background(&self, pid: u32) -> Result<(), String> {
-        let cmd = match &self.command {
-            Some(cmd) => cmd,
-            None => return Ok(()),
-        };
-
-        if self.running() {
-            return Ok(());
-        }
-
         let status = CheckStatus {
             started_at: Instant::now(),
             completed: false,
@@ -103,9 +94,8 @@ impl HealthCheck {
             let mut status_guard = self.status.lock().map_err(|e| e.to_string())?;
             *status_guard = Some(status);
         }
-
         let check_status = Arc::clone(&self.status);
-        let cmd = cmd.clone();
+        let cmd = self.command.as_ref().unwrap().clone();
         let args = self.args.clone().unwrap_or_default();
         let timeout_duration = Duration::from_secs(self.timeout as u64);
         tokio::spawn(async move {
@@ -119,13 +109,10 @@ impl HealthCheck {
                     .status(),
             )
             .await;
-
             let exit_code = match result {
                 Ok(Ok(status)) => status.code(),
-                Ok(Err(_)) => None,
                 _ => None,
             };
-
             if let Ok(mut status_guard) = check_status.lock() {
                 if let Some(status) = &mut *status_guard {
                     status.completed = true;
