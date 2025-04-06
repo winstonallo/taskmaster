@@ -1,8 +1,8 @@
 use std::{
+    collections::VecDeque,
     fs::File,
     os::unix::process::{CommandExt, ExitStatusExt},
     process::{Child, Command, ExitStatus},
-    sync::Mutex,
     time::{self, Duration, Instant},
 };
 
@@ -26,31 +26,42 @@ pub struct Process {
     conf: ProcessConfig,
     startup_failures: u8,
     runtime_failures: u8,
-    state: Mutex<ProcessState>,
+    state: ProcessState,
+    desired_states: VecDeque<ProcessState>,
 }
 
 impl Process {
     pub fn from_process_config(conf: conf::proc::ProcessConfig, proc_name: &str) -> Self {
-        match conf.autostart() {
-            true => Self {
-                id: None,
-                name: proc_name.to_string(),
-                child: None,
-                conf,
-                startup_failures: 0,
-                runtime_failures: 0,
-                state: Mutex::new(ProcessState::Ready),
-            },
-            false => Self {
-                id: None,
-                name: proc_name.to_string(),
-                child: None,
-                conf,
-                startup_failures: 0,
-                runtime_failures: 0,
-                state: Mutex::new(ProcessState::Idle),
+        let is_autostart = conf.autostart();
+        Self {
+            id: None,
+            name: proc_name.to_string(),
+            child: None,
+            conf,
+            startup_failures: 0,
+            runtime_failures: 0,
+            state: ProcessState::Idle,
+            desired_states: match is_autostart {
+                true => VecDeque::from([ProcessState::Ready]),
+                false => VecDeque::new(),
             },
         }
+    }
+
+    pub fn monitor(&mut self) {
+        let new_state = match self.state.clone().monitor(self) {
+            Some(new_state) => new_state,
+            None => return,
+        };
+        self.state = new_state;
+    }
+
+    pub fn desire(&mut self) {
+        let new_state = match self.state.clone().desire(self) {
+            Some(new_state) => new_state,
+            None => return,
+        };
+        self.state = new_state; // desired state
     }
 }
 
@@ -63,12 +74,11 @@ extern "C" fn kill(_signum: c_int) {
 #[allow(unused)]
 impl Process {
     pub fn state(&self) -> ProcessState {
-        self.state.lock().expect("something went terribly wrong").clone()
+        self.state.clone()
     }
 
-    pub fn update_state(&mut self, new_state: ProcessState) {
-        let mut handle = self.state.lock().expect("something went terribly wrong");
-        *handle = new_state;
+    pub fn push_desired_state(&mut self, desired_state: ProcessState) {
+        self.desired_states.push_back(desired_state);
     }
 
     pub fn id(&self) -> Option<u32> {
@@ -89,6 +99,14 @@ impl Process {
 
     pub fn runtime_failures(&self) -> u8 {
         self.runtime_failures
+    }
+
+    pub fn desired_states(&self) -> &VecDeque<ProcessState> {
+        &self.desired_states
+    }
+
+    pub fn desired_states_mut(&mut self) -> &mut VecDeque<ProcessState> {
+        &mut self.desired_states
     }
 
     pub fn increment_runtime_failures(&mut self) {
@@ -166,7 +184,7 @@ impl Process {
         } else {
             log_info!("PID {} terminated without exit or signal information", pid)
         }
-        self.update_state(ProcessState::Stopped);
+        self.state = ProcessState::Stopped;
         None
     }
 
@@ -194,21 +212,43 @@ impl Process {
         }
     }
 
-    pub fn stop(&mut self) -> std::io::Result<()> {
+    pub fn kill_gracefully(&mut self) -> Result<(), &str> {
         use ProcessState::*;
         match self.state() {
-            HealthCheck(_) | Healthy => {
-                self.child.take().unwrap().kill();
-                proc_info!(
-                    self.name(),
-                    "killed, PID {}",
-                    self.id().expect("process without id killed - this should not happen")
-                );
-                self.id.take();
-                Ok(())
-            }
-            _ => Ok(()),
+            HealthCheck(_) | Healthy => {}
+            _ => return Err("process not running"),
         }
+
+        let child = match &self.child {
+            Some(c) => c,
+            None => return Err("child is None"),
+        };
+
+        unsafe {
+            libc::kill(child.id() as i32, libc::SIGTERM);
+        }
+        proc_info!(self.name(), "shutting down, PID {} gracefully", child.id());
+
+        Ok(())
+    }
+
+    pub fn kill_forcefully(&mut self) -> Result<(), &str> {
+        use ProcessState::*;
+        match self.state() {
+            HealthCheck(_) | Healthy | Stopping(_) => {}
+            _ => return Err("process not running or in stopping state"),
+        }
+
+        let mut child = match self.child.take() {
+            Some(c) => c,
+            None => return Err("child is None"),
+        };
+
+        child.kill();
+        proc_info!(self.name(), "killed, PID {}", child.id());
+        self.id.take();
+
+        Ok(())
     }
 }
 
@@ -225,23 +265,9 @@ mod tests {
             conf: conf::proc::ProcessConfig::testconfig(),
             startup_failures: 0,
             runtime_failures: 0,
-            state: Mutex::new(ProcessState::Idle),
+            state: ProcessState::Idle,
+            desired_states: VecDeque::new(),
         };
         assert_eq!(proc.state(), ProcessState::Idle)
-    }
-
-    #[test]
-    fn update_state() {
-        let mut proc = Process {
-            id: Some(1),
-            name: ("".to_string()),
-            child: None,
-            conf: conf::proc::ProcessConfig::testconfig(),
-            startup_failures: 0,
-            runtime_failures: 0,
-            state: Mutex::new(ProcessState::Idle),
-        };
-        proc.update_state(ProcessState::Healthy);
-        assert_eq!(proc.state(), ProcessState::Healthy)
     }
 }
