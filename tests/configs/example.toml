@@ -1,7 +1,7 @@
 # Example config for taskmaster.
 
 # Process name.
-[nginx]
+[processes.nginx]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
