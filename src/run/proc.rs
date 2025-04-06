@@ -159,11 +159,7 @@ impl Process {
         }
 
         if let Some((is_healthy, duration)) = healthcheck.check_result() {
-            if is_healthy {
-                return true;
-            } else {
-                return false;
-            }
+            return is_healthy;
         } else if !healthcheck.running() {
             if let Some(last_attempt) = self.last_healthcheck_attempt {
                 if last_attempt.elapsed().as_secs() < healthcheck.backoff() as u64 {
