@@ -38,7 +38,6 @@ impl Config {
         let mut conf: Config = match toml::from_str(config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
-                
                 return Err(err.into());
             }
         };
