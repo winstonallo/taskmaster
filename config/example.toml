@@ -19,7 +19,7 @@ cmd = "/usr/bin/sleep"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
-args = ["2"]
+args = ["20"]
 
 # Number of processes to start.
 # Defaults to 1, max 255.
@@ -46,15 +46,11 @@ autostart = true
 # - "always": Always restart when exiting, no matter the status.
 autorestart = "on-failure[:5]"
 
-# Backoff time (in seconds) for retries.
-# Defaults to 5, max 255.
-backoff = 1
-
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
 exitcodes = [0, 2]
 
-healthcheck = { retries = 3, backoff = 5, timeout = 5, starttime = 5, command = "/usr/bin/sleep", args = [
+healthcheck = { retries = 1, backoff = 5, timeout = 5, starttime = 5, command = "/usr/bin/sleep", args = [
     "asd",
 ] }
 

@@ -24,15 +24,6 @@ pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
 }
 
 pub fn monitor_health_check(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
-    if p.healthy(*started_at) {
-        match p.config().healthcheck().command() {
-            Some(_) => proc_info!(p, "healthcheck command successful, marking as healthy"),
-            None => proc_info!(p, "has been running for {} seconds, marking as healthy", p.config().healthcheck().starttime()),
-        }
-
-        return Some(ProcessState::Healthy);
-    }
-
     if let Some(code) = p.exited() {
         if !p.config().exitcodes().contains(&code) {
             proc_warning!(p, "exited during healthcheck with unexpected code ({})", code);
@@ -42,6 +33,28 @@ pub fn monitor_health_check(started_at: &Instant, p: &mut Process) -> Option<Pro
             return Some(ProcessState::Completed);
         }
     }
+
+    if p.healthy(*started_at) {
+        match p.config().healthcheck().command() {
+            Some(_) => proc_info!(p, "healthcheck command successful, marking as healthy"),
+            None => proc_info!(p, "has been running for {} seconds, marking as healthy", p.config().healthcheck().starttime()),
+        }
+
+        return Some(ProcessState::Healthy);
+    } else if started_at.elapsed().as_secs() >= p.config().healthcheck().backoff() as u64 {
+        if p.healthcheck_failures() > p.config().healthcheck().retries() {
+            let _ = p.config().healthcheck().reset();
+            proc_warning!(p, "reached max retries, giving up");
+            let _ = p.kill_forcefully();
+            return Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))));
+        }
+        let _ = p.config().healthcheck().reset();
+        proc_warning!(p, "healthcheck failed, retrying in {}s", p.config().healthcheck().backoff());
+        p.set_last_healthcheck_attempt(Some(Instant::now()));
+        p.increment_healthcheck_failures();
+        return Some(ProcessState::HealthCheck(Instant::now()));
+    }
+
     None
 }
 

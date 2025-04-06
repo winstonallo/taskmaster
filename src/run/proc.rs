@@ -27,6 +27,7 @@ pub struct Process {
     startup_failures: u8,
     runtime_failures: u8,
     healthcheck_failures: u8,
+    last_healthcheck_attempt: Option<Instant>,
     state: ProcessState,
     desired_states: VecDeque<ProcessState>,
 }
@@ -42,6 +43,7 @@ impl Process {
             startup_failures: 0,
             runtime_failures: 0,
             healthcheck_failures: 0,
+            last_healthcheck_attempt: None,
             state: ProcessState::Idle,
             desired_states: match is_autostart {
                 true => VecDeque::from([ProcessState::Ready]),
@@ -131,6 +133,14 @@ impl Process {
         self.healthcheck_failures = self.healthcheck_failures.saturating_add(1);
     }
 
+    pub fn last_healthcheck_attempt(&self) -> Option<Instant> {
+        self.last_healthcheck_attempt
+    }
+
+    pub fn set_last_healthcheck_attempt(&mut self, attempt: Option<Instant>) {
+        self.last_healthcheck_attempt = attempt;
+    }
+
     /// Returns a `time::Instant` representing the next time the process should
     /// be retried according to its configured backoff, assuming the failure
     /// happened at the time of calling this method.
@@ -152,12 +162,15 @@ impl Process {
             if is_healthy {
                 return true;
             } else {
-                let _ = healthcheck.reset();
-                proc_info!(self, "healthcheck failed, retrying in {}s", healthcheck.backoff());
-                self.increment_healthcheck_failures();
                 return false;
             }
         } else if !healthcheck.running() {
+            if let Some(last_attempt) = self.last_healthcheck_attempt {
+                if last_attempt.elapsed().as_secs() < healthcheck.backoff() as u64 {
+                    return false;
+                }
+            }
+
             if let Some(pid) = self.id {
                 proc_info!(self, "starting new healthcheck in background");
                 let _ = healthcheck.start_background(pid);
@@ -300,6 +313,7 @@ mod tests {
             startup_failures: 0,
             runtime_failures: 0,
             healthcheck_failures: 0,
+            last_healthcheck_attempt: None,
             state: ProcessState::Idle,
             desired_states: VecDeque::new(),
         };
