@@ -3,10 +3,7 @@ use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 use socket::AsyncUnixSocket;
 use tokio::time::sleep;
 
-use super::{
-    proc::{self, Process},
-    statemachine::{self},
-};
+use super::proc::{self, Process};
 
 use crate::{
     conf,
@@ -48,7 +45,8 @@ impl Daemon {
 
 pub fn monitor_state(procs: &mut HashMap<String, Process>) {
     for proc in procs.values_mut() {
-        statemachine::monitor_state(proc);
+        proc.desire();
+        proc.monitor();
     }
 }
 
@@ -82,7 +80,7 @@ pub fn handle_json_rpc_request(request: JsonRPCRequest, mut socket: AsyncUnixSoc
         }
 
         for p in procs.iter_mut() {
-            let _ = p.1.stop();
+            let _ = p.1.kill_forcefully();
         }
         log_info!("shutting down taskmaster...");
         return true;
