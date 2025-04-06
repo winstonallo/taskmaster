@@ -13,7 +13,7 @@ pub struct Config {
     socketpath: String,
     #[serde(default = "defaults::dflt_authgroup")]
     authgroup: String,
-    #[serde(flatten)]
+    #[serde(default)]
     processes: HashMap<String, ProcessConfig>,
 }
 
@@ -41,6 +41,10 @@ impl Config {
                 return Err(err.into());
             }
         };
+
+        if conf.processes.len() < 1 {
+            return Err("expected at least one process".into());
+        }
 
         // Did not find a way to have serde defaults depend on other field's values.
         for (proc_name, proc) in &mut conf.processes {

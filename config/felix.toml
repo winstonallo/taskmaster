@@ -10,7 +10,7 @@ socketpath = "/tmp/.taskmaster.sock"
 authgroup = "everyone"
 
 # Process name.
-[ls]
+[processes.ls]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
