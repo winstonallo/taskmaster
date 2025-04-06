@@ -44,7 +44,7 @@ impl Config {
         };
 
         if conf.processes.is_empty() {
-            return Err("expected at least one process".into());
+            return Err("taskmaster expects at least one process to be defined to operate".into());
         }
 
         // Did not find a way to have serde defaults depend on other field's values.
