@@ -369,6 +369,20 @@ mod from_file {
     }
 
     #[test]
+    fn unexpected_field_global_scope() {
+        let conf = Config::from_file("./tests/configs/unexpected_field_global_scope.toml");
+
+        assert!(conf.is_err())
+    }
+
+    #[test]
+    fn unexpected_field_process_scope() {
+        let conf = Config::from_file("./tests/configs/unexpected_field_process_scope.toml");
+
+        assert!(conf.is_err())
+    }
+
+    #[test]
     fn valid_config_all_fields_set() {
         let conf = Config::from_file("./tests/configs/example.toml").expect("could not parse config");
 
