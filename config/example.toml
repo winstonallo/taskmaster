@@ -15,11 +15,11 @@ authgroup = "winstonallo"
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/home/winstonallo/mastery/taskmaster/writetofile.sh"
+cmd = "/usr/bin/sleep"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
-args = []
+args = ["20"]
 
 # Number of processes to start.
 # Defaults to 1, max 255.
@@ -54,7 +54,9 @@ backoff = 1
 # Defaults to [0].
 exitcodes = [0, 2]
 
-healthcheck = { retries = 3, backoff = 5, timeout = 1, starttime = 30 }
+healthcheck = { retries = 3, backoff = 5, timeout = 5, starttime = 5, command = "/usr/bin/sleep", args = [
+    "1",
+] }
 
 # Number of attempts to start the program before giving up.
 # Defaults to 3, max 255.

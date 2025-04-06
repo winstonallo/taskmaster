@@ -1,6 +1,20 @@
-use serde::Deserialize;
+use std::{
+    process::Stdio,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
+};
 
-use crate::conf::proc::defaults;
+use serde::Deserialize;
+use tokio::process::Command;
+
+use crate::{conf::proc::defaults, log_info};
+
+#[derive(Debug, Clone)]
+struct CheckStatus {
+    started_at: Instant,
+    completed: bool,
+    exit_code: Option<i32>,
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HealthCheck {
@@ -12,10 +26,12 @@ pub struct HealthCheck {
     timeout: u8,
     #[serde(default = "defaults::dflt_starttime")]
     starttime: u16,
-    #[serde(skip_deserializing)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     command: Option<String>,
-    #[serde(skip_deserializing)]
+    #[serde(skip_serializing_if = "Option::is_none")]
     args: Option<Vec<String>>,
+    #[serde(skip)]
+    status: Arc<Mutex<Option<CheckStatus>>>,
 }
 
 impl Default for HealthCheck {
@@ -27,6 +43,7 @@ impl Default for HealthCheck {
             starttime: defaults::dflt_starttime(),
             command: None,
             args: None,
+            status: Arc::new(Mutex::new(None)),
         }
     }
 }
@@ -54,5 +71,110 @@ impl HealthCheck {
 
     pub fn args(&self) -> Option<Vec<String>> {
         self.args.clone()
+    }
+
+    pub fn running(&self) -> bool {
+        if let Ok(status) = self.status.lock() {
+            if let Some(check) = &*status {
+                log_info!("runningcheck: {}, completed: {}", !check.completed, check.completed);
+                return !check.completed;
+            }
+        }
+
+        log_info!("running check: false (no status)");
+        false
+    }
+
+    pub fn start_background(&self, pid: u32) -> Result<(), String> {
+        let cmd = match &self.command {
+            Some(cmd) => cmd,
+            None => return Ok(()),
+        };
+
+        if self.running() {
+            log_info!("not starting new check because one is already running");
+            return Ok(());
+        }
+
+        let status = CheckStatus {
+            started_at: Instant::now(),
+            completed: false,
+            exit_code: None,
+        };
+
+        {
+            let mut status_guard = self.status.lock().map_err(|e| e.to_string())?;
+            *status_guard = Some(status);
+            log_info!("set initial status: completed=false");
+        }
+
+        let check_status = Arc::clone(&self.status);
+        let cmd = cmd.clone();
+        let args = self.args.clone().unwrap_or_default();
+        let timeout_duration = Duration::from_secs(self.timeout as u64);
+        log_info!("Spawning healthcheck: cmd={} args={:?}", cmd, args);
+        tokio::spawn(async move {
+            log_info!("healthcheck task started");
+            let result = tokio::time::timeout(
+                timeout_duration,
+                Command::new(&cmd)
+                    .args(&args)
+                    .env("PROCESS_PID", pid.to_string())
+                    .stdout(Stdio::null())
+                    .stderr(Stdio::null())
+                    .status(),
+            )
+            .await;
+
+            let exit_code = match result {
+                Ok(Ok(status)) => {
+                    log_info!("healthcheck completed with exit code: {:?}", status.code());
+                    status.code()
+                }
+                Ok(Err(err)) => {
+                    log_info!("healtcheck command failed: {err}");
+                    None
+                }
+                _ => {
+                    log_info!("healthcheck timed out");
+                    None
+                }
+            };
+
+            if let Ok(mut status_guard) = check_status.lock() {
+                if let Some(status) = &mut *status_guard {
+                    status.completed = true;
+                    status.exit_code = exit_code;
+                }
+            }
+        });
+
+        Ok(())
+    }
+
+    pub fn check_result(&self) -> Option<(bool, Duration)> {
+        let status_guard = match self.status.lock() {
+            Ok(guard) => guard,
+            Err(_) => return None,
+        };
+
+        if let Some(status) = &*status_guard {
+            if status.completed {
+                let healthy = status.exit_code == Some(0);
+                let duration = status.started_at.elapsed();
+                return Some((healthy, duration));
+            }
+
+            if status.started_at.elapsed() > Duration::from_secs(self.timeout as u64) {
+                return Some((false, status.started_at.elapsed()));
+            }
+        }
+        None
+    }
+
+    pub fn reset(&self) -> Result<(), String> {
+        let mut status_guard = self.status.lock().map_err(|e| e.to_string())?;
+        *status_guard = None;
+        Ok(())
     }
 }

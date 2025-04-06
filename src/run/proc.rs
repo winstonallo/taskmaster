@@ -131,7 +131,30 @@ impl Process {
     /// Checks whether the process is healthy, according to `started_at` and its
     /// configured healthcheck time.
     pub fn healthy(&self, started_at: time::Instant) -> bool {
-        Instant::now().duration_since(started_at).as_secs() >= self.conf.healthcheck().starttime() as u64
+        let healthcheck = self.conf.healthcheck();
+
+        if healthcheck.command().is_none() {
+            return Instant::now().duration_since(started_at).as_secs() >= self.conf.healthcheck().starttime() as u64;
+        }
+
+        if let Some((is_healthy, duration)) = healthcheck.check_result() {
+            if is_healthy {
+                log_info!("healthcheck for {} passed in {:?}s", self.name, duration.as_secs());
+                return true;
+            } else {
+                log_error!("healthcheck for {} failed after {:?}s", self.name, duration.as_secs());
+                return false;
+            }
+
+            let _ = healthcheck.reset();
+        } else if !healthcheck.running() {
+            if let Some(pid) = self.id {
+                let _ = healthcheck.start_background(pid);
+            }
+            return false;
+        }
+
+        false
     }
 
     fn spawn(&self) -> Result<Child, ProcessError> {
