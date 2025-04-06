@@ -7,7 +7,7 @@ use std::{
 use serde::Deserialize;
 use tokio::process::Command;
 
-use crate::{conf::proc::defaults, log_info};
+use crate::conf::proc::defaults;
 
 #[derive(Debug, Clone)]
 struct CheckStatus {
@@ -76,12 +76,10 @@ impl HealthCheck {
     pub fn running(&self) -> bool {
         if let Ok(status) = self.status.lock() {
             if let Some(check) = &*status {
-                log_info!("runningcheck: {}, completed: {}", !check.completed, check.completed);
                 return !check.completed;
             }
         }
 
-        log_info!("running check: false (no status)");
         false
     }
 
@@ -92,7 +90,6 @@ impl HealthCheck {
         };
 
         if self.running() {
-            log_info!("not starting new check because one is already running");
             return Ok(());
         }
 
@@ -105,16 +102,13 @@ impl HealthCheck {
         {
             let mut status_guard = self.status.lock().map_err(|e| e.to_string())?;
             *status_guard = Some(status);
-            log_info!("set initial status: completed=false");
         }
 
         let check_status = Arc::clone(&self.status);
         let cmd = cmd.clone();
         let args = self.args.clone().unwrap_or_default();
         let timeout_duration = Duration::from_secs(self.timeout as u64);
-        log_info!("Spawning healthcheck: cmd={} args={:?}", cmd, args);
         tokio::spawn(async move {
-            log_info!("healthcheck task started");
             let result = tokio::time::timeout(
                 timeout_duration,
                 Command::new(&cmd)
@@ -127,18 +121,9 @@ impl HealthCheck {
             .await;
 
             let exit_code = match result {
-                Ok(Ok(status)) => {
-                    log_info!("healthcheck completed with exit code: {:?}", status.code());
-                    status.code()
-                }
-                Ok(Err(err)) => {
-                    log_info!("healtcheck command failed: {err}");
-                    None
-                }
-                _ => {
-                    log_info!("healthcheck timed out");
-                    None
-                }
+                Ok(Ok(status)) => status.code(),
+                Ok(Err(_)) => None,
+                _ => None,
             };
 
             if let Ok(mut status_guard) = check_status.lock() {

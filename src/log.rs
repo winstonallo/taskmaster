@@ -7,6 +7,8 @@ use std::{
 
 use libc::{c_char, localtime, strftime, time_t};
 
+use crate::run::proc::Process;
+
 struct Logger {
     stderr: Mutex<Box<dyn Write + Send>>,
     stdout: Mutex<Box<dyn Write + Send>>,
@@ -91,14 +93,14 @@ pub fn fatal(args: fmt::Arguments) {
     get_logger().fatal(args);
 }
 
-pub fn prefix_info(prefix: &str, args: fmt::Arguments) {
-    let prefix = format!("\x1b[1m{}\x1b[22m", prefix);
+pub fn proc_info(proc: &Process, args: fmt::Arguments) {
+    let prefix = format!("\x1b[1m{}\x1b[22m", proc.name());
 
     get_logger().info(format_args!("{} {}", prefix, args));
 }
 
-pub fn prefix_warning(prefix: &str, args: fmt::Arguments) {
-    let prefix = format!("\x1b[1m{}\x1b[22m", prefix);
+pub fn proc_warning(proc: &Process, args: fmt::Arguments) {
+    let prefix = format!("\x1b[1m{}\x1b[22m", proc.name());
 
     get_logger().warning(format_args!("{} {}", prefix, args));
 }
@@ -127,14 +129,14 @@ macro_rules! log_fatal {
 #[macro_export]
 macro_rules! proc_info {
     ($proc:expr, $($arg:tt)*) => {
-        $crate::log::prefix_info($proc, format_args!($($arg)*))
+        $crate::log::proc_info($proc, format_args!($($arg)*))
     };
 }
 
 #[macro_export]
 macro_rules! proc_warning {
     ($proc:expr, $($arg:tt)*) => {
-        $crate::log::prefix_warning($proc, format_args!($($arg)*))
+        $crate::log::proc_warning($proc, format_args!($($arg)*))
     };
 }
 

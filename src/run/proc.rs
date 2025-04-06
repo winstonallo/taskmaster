@@ -250,7 +250,7 @@ impl Process {
         unsafe {
             libc::kill(child.id() as i32, libc::SIGTERM);
         }
-        proc_info!(self.name(), "shutting down, PID {} gracefully", child.id());
+        proc_info!(self, "shutting down, PID {} gracefully", child.id());
 
         Ok(())
     }
@@ -268,7 +268,7 @@ impl Process {
         };
 
         child.kill();
-        proc_info!(self.name(), "killed, PID {}", child.id());
+        proc_info!(self, "killed, PID {}", child.id());
         self.id.take();
 
         Ok(())
