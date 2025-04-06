@@ -39,15 +39,6 @@ autorestart = "on-failure[:5]"
 # Defaults to [0].
 exitcodes = [0, 2]
 
-# Number of attempts to start the program before giving up.
-# Defaults to 3, max 255.
-startretries = 3
-
-# Time (in seconds) given for the program to startup - if the program 
-# does not start within this time, it will be considered a failure.
-# Defaults to 5, max 65536.
-starttime = 5
-
 # List of signals triggering a stop of the process, options are any 
 # FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).
 # Defaults to ["TERM"].

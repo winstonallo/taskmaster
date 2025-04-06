@@ -61,6 +61,7 @@ pub struct ProcessConfig {
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
+    #[serde(default)]
     healthcheck: HealthCheck,
 
     #[serde(default = "defaults::dflt_stopsignals")]
@@ -94,7 +95,7 @@ pub struct HealthCheck {
     args: Option<Vec<String>>,
 }
 
-impl HealthCheck {
+impl Default for HealthCheck {
     fn default() -> Self {
         Self {
             retries: defaults::dflt_startretries(),
@@ -105,7 +106,9 @@ impl HealthCheck {
             args: None,
         }
     }
+}
 
+impl HealthCheck {
     pub fn retries(&self) -> u8 {
         self.retries
     }
