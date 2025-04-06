@@ -1,6 +1,6 @@
 #[cfg(test)]
 /// # defaults
-/// `src/conf/proc/defaults.ts`
+/// `src/conf/proc/defaults.rs`
 ///
 /// Contains functions returning the configuration fields' default values, passed to
 /// `serde` in case a non-required field is empty.  
@@ -8,7 +8,7 @@ pub mod defaults;
 
 #[cfg(not(test))]
 /// # defaults
-/// `src/conf/proc/defaults.ts`
+/// `src/conf/proc/defaults.rs`
 ///
 /// Contains functions returning the configuration fields' default values, passed to
 /// `serde` in case a non-required field is empty.  
@@ -28,7 +28,7 @@ pub mod types;
 use serde::Deserialize;
 
 /// # ProcessConfig
-/// `src/conf/proc/mod.rs`
+/// `src/conf/proc.rs`
 ///
 /// Rust representation of the `taskmaster` config. All its types implement
 /// the `Deserializer` trait.
@@ -60,11 +60,7 @@ pub struct ProcessConfig {
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
-    #[serde(default = "defaults::dflt_startretries")]
-    startretries: u8,
-
-    #[serde(default = "defaults::dflt_startttime")]
-    starttime: u16,
+    healthcheck: HealthCheck,
 
     #[serde(default = "defaults::dflt_stopsignals")]
     stopsignals: Vec<types::StopSignal>,
@@ -79,6 +75,51 @@ pub struct ProcessConfig {
     stderr: types::WritableFile,
 
     env: Option<Vec<(String, String)>>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct HealthCheck {
+    #[serde(default = "defaults::dflt_startretries")]
+    retries: u8,
+    #[serde(default = "defaults::dflt_backoff")]
+    backoff: u8,
+    #[serde(default = "defaults::dflt_timeout")]
+    timeout: u8,
+    #[serde(default = "defaults::dflt_starttime")]
+    starttime: u16,
+    #[serde(skip_deserializing)]
+    command: Option<String>,
+    #[serde(skip_deserializing)]
+    args: Option<Vec<String>>,
+}
+
+impl HealthCheck {
+    fn default() -> Self {
+        Self {
+            retries: defaults::dflt_startretries(),
+            backoff: defaults::dflt_backoff(),
+            timeout: defaults::dflt_timeout(),
+            starttime: defaults::dflt_starttime(),
+            command: None,
+            args: None,
+        }
+    }
+
+    pub fn retries(&self) -> u8 {
+        self.retries
+    }
+
+    pub fn backoff(&self) -> u8 {
+        self.backoff
+    }
+
+    pub fn timeout(&self) -> u8 {
+        self.timeout
+    }
+
+    pub fn starttime(&self) -> u16 {
+        self.starttime
+    }
 }
 
 #[allow(unused)]
@@ -117,16 +158,12 @@ impl ProcessConfig {
         self.backoff
     }
 
+    pub fn healthcheck(&self) -> &HealthCheck {
+        &self.healthcheck
+    }
+
     pub fn exitcodes(&self) -> &Vec<i32> {
         &self.exitcodes
-    }
-
-    pub fn startretries(&self) -> u8 {
-        self.startretries
-    }
-
-    pub fn starttime(&self) -> u16 {
-        self.starttime
     }
 
     pub fn stopsignals(&self) -> &Vec<types::StopSignal> {
@@ -171,8 +208,7 @@ impl ProcessConfig {
             autorestart: types::AutoRestart::default(),
             backoff: 5,
             exitcodes: vec![0],
-            startretries: 1,
-            starttime: 5,
+            healthcheck: HealthCheck::default(),
             stopsignals: vec![types::StopSignal(SIGTERM)],
             stoptime: 5,
             stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),

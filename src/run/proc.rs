@@ -131,7 +131,7 @@ impl Process {
     /// Checks whether the process is healthy, according to `started_at` and its
     /// configured healthcheck time.
     pub fn healthy(&self, started_at: time::Instant) -> bool {
-        Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
+        Instant::now().duration_since(started_at).as_secs() >= self.conf.healthcheck().starttime() as u64
     }
 
     fn spawn(&self) -> Result<Child, ProcessError> {

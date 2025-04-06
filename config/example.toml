@@ -54,6 +54,9 @@ backoff = 1
 # Defaults to [0].
 exitcodes = [0, 2]
 
+healthcheck = []
+
+
 # Number of attempts to start the program before giving up.
 # Defaults to 3, max 255.
 startretries = 3
@@ -85,12 +88,6 @@ stderr = "/tmp/ls.stderr"
 # at startup.
 # Defaults to [[]].
 env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
-
-# Example config for taskmaster.
-
-# Path to the socket used for connections between taskmaster and its client.
-# Defaults to "/tmp/.taskmaster.sock".
-socketpath = "/tmp/.taskmaster.sock"
 
 # Process name.
 [lsls]

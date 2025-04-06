@@ -25,7 +25,11 @@ pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
 
 pub fn monitor_health_check(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
     if p.healthy(*started_at) {
-        proc_info!(&p.name(), "has been running for {} seconds, marking as healthy", p.config().starttime());
+        proc_info!(
+            &p.name(),
+            "has been running for {} seconds, marking as healthy",
+            p.config().healthcheck().starttime()
+        );
 
         return Some(ProcessState::Healthy);
     }
@@ -78,7 +82,7 @@ pub fn failed_runtime(p: &mut Process) -> Option<ProcessState> {
 }
 
 pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
-    if p.startup_failures() == p.config().startretries() {
+    if p.startup_failures() == p.config().healthcheck().retries() {
         proc_warning!(&p.name(), "reached max startretries, giving up");
         Some(ProcessState::Stopped)
     } else {

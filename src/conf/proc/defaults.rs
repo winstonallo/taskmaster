@@ -34,8 +34,12 @@ pub fn dflt_startretries() -> u8 {
     3
 }
 
-pub fn dflt_startttime() -> u16 {
+pub fn dflt_starttime() -> u16 {
     5
+}
+
+pub fn dflt_timeout() -> u8 {
+    30
 }
 
 pub fn dflt_stopsignals() -> Vec<types::StopSignal> {
