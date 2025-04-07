@@ -1,3 +1,6 @@
 target/
 writetofile.sh
 file.txt
+history.txt
+a.out
+test.c
