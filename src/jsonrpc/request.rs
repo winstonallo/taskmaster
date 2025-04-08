@@ -1,15 +1,41 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::{Error, Expected}, Deserialize, Deserializer, Serialize};
+
+#[derive(Serialize, Deserialize)]
+pub struct JsonRPCRequest {
+    id: u32,
+    #[serde(deserialize_with = "json_rpc")]
+    json_rpc: String,
+    #[serde(flatten)]
+    request: JsonRPCRequestType,
+}
+
+// This function enfores that the json_rpc key has only as a value 2.0
+fn json_rpc<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    match String::deserialize(deserializer) {
+        Ok(s) => {
+            if s == "2.0" {
+                Ok(s)
+            } else {
+                Err(D::Error::invalid_value(serde::de::Unexpected::Str(&s), &"2.0"))
+            }
+        }
+        Err(e) => Err(e)
+    }
+}
 
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]
-pub enum JsonRPCRequest {
-    Status(JsonRPCRequestStatus),
+pub enum JsonRPCRequestType {
+    Status,
     StatusSingle(JsonRPCRequestStatusSingle),
     Start(JsonRPCRequestStart),
     Stop(JsonRPCRequestStop),
     Restart(JsonRPCRequestRestart),
-    Reload(JsonRPCRequestReload),
-    Halt(JsonRPCRequestHalt),
+    Reload,
+    Halt,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -17,29 +43,14 @@ pub struct JsonRPCParamsName {
     name: String,
 }
 
-
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequestStatus {
-    id: u32,
-}
-
-impl JsonRPCRequest {
-    pub fn new_status(id: u32) -> Self {
-        Self::Status(JsonRPCRequestStatus { id })
-    }
-}
-
-
 #[derive(Serialize, Deserialize)]
 pub struct JsonRPCRequestStatusSingle {
-    id: u32,
     params: JsonRPCParamsName,
 }
 
-impl JsonRPCRequest {
-    pub fn new_status_single(id: u32, name: String) -> Self {
+impl JsonRPCRequestType {
+    pub fn new_status_single(name: String) -> Self {
         Self::StatusSingle(JsonRPCRequestStatusSingle {
-            id,
             params: JsonRPCParamsName { name },
         })
     }
@@ -47,71 +58,39 @@ impl JsonRPCRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct JsonRPCRequestStart {
-    id: u32,
     params: JsonRPCParamsName,
 }
 
-impl JsonRPCRequest {
-    pub fn new_start(id: u32, name: String) -> Self {
+impl JsonRPCRequestType {
+    pub fn new_start(name: String) -> Self {
         Self::Start(JsonRPCRequestStart {
-            id,
             params: JsonRPCParamsName { name },
         })
     }
 }
-
 
 #[derive(Serialize, Deserialize)]
 pub struct JsonRPCRequestStop {
-    id: u32,
     params: JsonRPCParamsName,
 }
 
-impl JsonRPCRequest {
-    pub fn new_stop(id: u32, name: String) -> Self {
+impl JsonRPCRequestType {
+    pub fn new_stop(name: String) -> Self {
         Self::Stop(JsonRPCRequestStop {
-            id,
             params: JsonRPCParamsName { name },
         })
     }
 }
-
 
 #[derive(Serialize, Deserialize)]
 pub struct JsonRPCRequestRestart {
-    id: u32,
     params: JsonRPCParamsName,
 }
 
-impl JsonRPCRequest {
-    pub fn new_restart(id: u32, name: String) -> Self {
+impl JsonRPCRequestType {
+    pub fn new_restart(name: String) -> Self {
         Self::Restart(JsonRPCRequestRestart {
-            id,
             params: JsonRPCParamsName { name },
         })
-    }
-}
-
-
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequestReload {
-    id: u32,
-}
-
-impl JsonRPCRequest {
-    pub fn new_reload(id: u32) -> Self {
-        Self::Status(JsonRPCRequestStatus { id })
-    }
-}
-
-
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequestHalt {
-    id: u32,
-}
-
-impl JsonRPCRequest {
-    pub fn new_halt(id: u32) -> Self {
-        Self::Status(JsonRPCRequestStatus { id })
     }
 }
