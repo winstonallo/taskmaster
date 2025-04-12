@@ -1,12 +1,26 @@
-use std::error::Error;
+use std::{
+    env::{self, args},
+    error::Error,
+};
 
-use tasklib::conf::Config;
-use tasklib::run::daemon::Daemon;
-use tasklib::{log_error, log_info};
+use tasklib::{
+    conf::{self, Config},
+    log_error, log_info,
+    run::daemon::Daemon,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let conf = match Config::from_file("./config/example.toml") {
+    if env::args().len() != 2 {
+        log_error!("usage: ./taskmaster ./path/to/config.toml");
+        std::process::exit(1);
+    }
+
+    let arguments: Vec<String> = env::args().collect();
+
+    let config_path: String = arguments.get(1).unwrap().to_owned();
+
+    let conf = match Config::from_file(&config_path) {
         Ok(c) => c,
         Err(e) => {
             log_error!("{}", e);
@@ -14,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let mut daemon = match Daemon::from_config(&conf) {
+    let mut daemon = match Daemon::try_from_config(conf, config_path) {
         Ok(d) => d,
         Err(e) => {
             log_error!("{}", e);
@@ -23,11 +37,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     log_info!("starting taskmaster..");
-    let res = tasklib::run::daemon::run(&mut daemon.processes, conf.socketpath().to_string(), conf.authgroup().to_string()).await;
-    if let Ok(()) = res {
-        return Ok(());
-    }
-    tokio::signal::ctrl_c().await?;
-
-    Ok(())
+    daemon.run().await
+    // let res = tasklib::run::daemon::run(&mut daemon.processes, conf.socketpath().to_string(), conf.authgroup().to_string()).await;
+    // if let Ok(()) = res {
+    //     return Ok(());
+    // }
+    // tokio::signal::ctrl_c().await?;
 }
