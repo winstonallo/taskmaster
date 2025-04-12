@@ -1,12 +1,30 @@
-use serde::{de::{Error, Expected}, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de::Error};
 
 #[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequest {
+pub struct Request {
     id: u32,
     #[serde(deserialize_with = "json_rpc")]
     json_rpc: String,
     #[serde(flatten)]
-    request: JsonRPCRequestType,
+    request_type: RequestType,
+}
+
+impl Request {
+    pub fn new(id: u32, request_type: RequestType) -> Self {
+        Self {
+            id,
+            json_rpc: "2.0".to_owned(),
+            request_type: request_type,
+        }
+    }
+
+    pub fn id(&self) -> u32 {
+        self.id
+    }
+
+    pub fn request_type(&self) -> &RequestType {
+        &self.request_type
+    }
 }
 
 // This function enfores that the json_rpc key has only as a value 2.0
@@ -22,75 +40,142 @@ where
                 Err(D::Error::invalid_value(serde::de::Unexpected::Str(&s), &"2.0"))
             }
         }
-        Err(e) => Err(e)
+        Err(e) => Err(e),
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 #[serde(tag = "method", rename_all = "snake_case")]
-pub enum JsonRPCRequestType {
+pub enum RequestType {
     Status,
-    StatusSingle(JsonRPCRequestStatusSingle),
-    Start(JsonRPCRequestStart),
-    Stop(JsonRPCRequestStop),
-    Restart(JsonRPCRequestRestart),
+    StatusSingle(RequestStatusSingle),
+    Start(RequestStart),
+    Stop(RequestStop),
+    Restart(RequestRestart),
     Reload,
     Halt,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCParamsName {
+impl RequestType {
+    pub fn new_status() -> Self {
+        Self::Status
+    }
+
+    pub fn new_status_single(name: &str) -> Self {
+        Self::StatusSingle(RequestStatusSingle {
+            params: ParamsName { name: name.to_owned() },
+        })
+    }
+
+    pub fn new_start(name: &str) -> Self {
+        Self::Start(RequestStart {
+            params: ParamsName { name: name.to_owned() },
+        })
+    }
+
+    pub fn new_stop(name: &str) -> Self {
+        Self::Stop(RequestStop {
+            params: ParamsName { name: name.to_owned() },
+        })
+    }
+
+    pub fn new_restart(name: &str) -> Self {
+        Self::Restart(RequestRestart {
+            params: ParamsName { name: name.to_owned() },
+        })
+    }
+
+    pub fn new_reload() -> Self {
+        Self::Reload
+    }
+
+    pub fn new_halt() -> Self {
+        Self::Halt
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct ParamsName {
     name: String,
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequestStatusSingle {
-    params: JsonRPCParamsName,
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct RequestStatusSingle {
+    params: ParamsName,
 }
 
-impl JsonRPCRequestType {
-    pub fn new_status_single(name: String) -> Self {
-        Self::StatusSingle(JsonRPCRequestStatusSingle {
-            params: JsonRPCParamsName { name },
-        })
+impl RequestStatusSingle {
+    pub fn name(&self) -> &str {
+        &self.params.name
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequestStart {
-    params: JsonRPCParamsName,
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct RequestStart {
+    params: ParamsName,
 }
 
-impl JsonRPCRequestType {
-    pub fn new_start(name: String) -> Self {
-        Self::Start(JsonRPCRequestStart {
-            params: JsonRPCParamsName { name },
-        })
+impl RequestStart {
+    pub fn name(&self) -> &str {
+        &self.params.name
+    }
+}
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct RequestStop {
+    params: ParamsName,
+}
+
+impl RequestStop {
+    pub fn name(&self) -> &str {
+        &self.params.name
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequestStop {
-    params: JsonRPCParamsName,
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct RequestRestart {
+    params: ParamsName,
 }
 
-impl JsonRPCRequestType {
-    pub fn new_stop(name: String) -> Self {
-        Self::Stop(JsonRPCRequestStop {
-            params: JsonRPCParamsName { name },
-        })
+impl RequestRestart {
+    pub fn name(&self) -> &str {
+        &self.params.name
     }
 }
 
-#[derive(Serialize, Deserialize)]
-pub struct JsonRPCRequestRestart {
-    params: JsonRPCParamsName,
-}
+mod test {
 
-impl JsonRPCRequestType {
-    pub fn new_restart(name: String) -> Self {
-        Self::Restart(JsonRPCRequestRestart {
-            params: JsonRPCParamsName { name },
-        })
+    #[test]
+    fn test_valid_request() {
+        let msg = r#"{
+            "id": 2,
+            "json_rpc": "2.0",
+            "method": "status"
+        }"#;
+        let _request: super::Request = serde_json::from_str(&msg).unwrap();
+    }
+
+    #[test]
+    fn test_invalid_json_rpc_version() {
+        let json = r#"{
+            "id": 3,
+            "json_rpc": "1.0",
+            "method": "status"
+        }"#;
+
+        let result = serde_json::from_str::<super::Request>(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_params() {
+        let json = r#"{
+            "id": 3,
+            "json_rpc": "2.0",
+            "method": "start",
+            "params": { "not_name": 42 }
+        }"#;
+
+        let result = serde_json::from_str::<super::Request>(json);
+        assert!(result.is_err());
     }
 }
