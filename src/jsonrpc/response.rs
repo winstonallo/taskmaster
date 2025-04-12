@@ -71,7 +71,7 @@ pub struct ResponseError {
 }
 
 #[repr(i16)]
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub enum ErrorCode {
     ServerError(i16), // -32000 to -32099
     InvalidRequest = -32600,
@@ -98,7 +98,22 @@ impl<'de> Deserialize<'de> for ErrorCode {
         }
     }
 }
-
+impl Serialize for ErrorCode {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let n: i16 = match self {
+            ErrorCode::ServerError(n) => *n,
+            ErrorCode::InvalidRequest => -32600,
+            ErrorCode::MethodNotFound => -32601,
+            ErrorCode::InvalidParams => -32602,
+            ErrorCode::InternalError => -32603,
+            ErrorCode::ParseError => -32700,
+        };
+        serializer.serialize_i16(n)
+    }
+}
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ResponseErrorData {}
