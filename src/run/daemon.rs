@@ -21,7 +21,7 @@ pub struct Daemon {
 }
 
 impl Daemon {
-    pub fn try_from_config(conf: conf::Config, config_path: String) -> Result<Self, Box<dyn Error>> {
+    pub fn from_config(conf: conf::Config, config_path: String) -> Self {
         let processes: HashMap<String, proc::Process> = conf
             .processes()
             .iter()
@@ -37,13 +37,14 @@ impl Daemon {
             })
             .collect::<HashMap<String, proc::Process>>();
 
-        Ok(Self {
+        Self {
             processes,
             socket_path: conf.socketpath().to_owned(),
             auth_group: conf.authgroup().to_owned(),
             config_path,
-        })
+        }
     }
+
     pub fn processes(&mut self) -> &HashMap<String, Process> {
         &self.processes
     }
@@ -60,6 +61,9 @@ impl Daemon {
         &self.auth_group
     }
 
+    pub fn config_path(&self) -> &str {
+        &self.config_path
+    }
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 

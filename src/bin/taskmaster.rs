@@ -28,13 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let mut daemon = match Daemon::try_from_config(conf, config_path) {
-        Ok(d) => d,
-        Err(e) => {
-            log_error!("{}", e);
-            std::process::exit(1)
-        }
-    };
+    let mut daemon = Daemon::from_config(conf, config_path);
 
     log_info!("starting taskmaster..");
     daemon.run().await
