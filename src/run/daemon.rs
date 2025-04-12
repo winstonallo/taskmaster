@@ -1,10 +1,13 @@
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
+use serde::{Deserialize, Serialize};
 use socket::AsyncUnixSocket;
 use tokio::time::sleep;
 
 use super::proc::{self, Process};
-
+use super::statemachine::states::ProcessState;
+use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
+use crate::jsonrpc::short_process::State;
 use crate::{
     conf,
     jsonrpc::{handlers::handle_request, request::Request},
@@ -18,6 +21,7 @@ pub struct Daemon {
     socket_path: String,
     auth_group: String,
     config_path: String,
+    shutting_down: bool,
 }
 
 impl Daemon {
@@ -42,10 +46,11 @@ impl Daemon {
             socket_path: conf.socketpath().to_owned(),
             auth_group: conf.authgroup().to_owned(),
             config_path,
+            shutting_down: false,
         }
     }
 
-    pub fn processes(&mut self) -> &HashMap<String, Process> {
+    pub fn processes(&self) -> &HashMap<String, Process> {
         &self.processes
     }
 
@@ -64,6 +69,14 @@ impl Daemon {
     pub fn config_path(&self) -> &str {
         &self.config_path
     }
+
+    pub fn shutting_down(&self) -> bool {
+        self.shutting_down
+    }
+
+    pub fn shutdown(&mut self) {
+        self.shutting_down = true;
+    }
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 
@@ -79,10 +92,16 @@ impl Daemon {
                         continue;
                     }
 
-                    let socket = listener;
+                    let mut socket = listener;
                     let clone = sender.clone();
+
+                    let shutting_down = self.shutting_down;
                     tokio::spawn(async move {
-                        handle_client(socket, clone).await;
+                        if shutting_down {
+                            let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
+                        } else {
+                            handle_client(socket, clone).await;
+                        }
                     });
 
                     listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group())?;
@@ -102,17 +121,38 @@ impl Daemon {
 
                 _ = sleep(Duration::from_nanos(1)) => {
                     monitor_state(self.processes_mut());
+
+                    if  self.shutting_down && self.no_process_running(){
+                        return Ok(());
+                    }
                 }
             }
         }
     }
+
+    pub fn no_process_running(&self) -> bool {
+        let mut no_process_running = true;
+        for proc in self.processes().values() {
+            use ProcessState::*;
+            match proc.state() {
+                Ready | HealthCheck(_) | Healthy | Stopping(_) => no_process_running = false,
+                _ => {}
+            }
+        }
+        no_process_running
+    }
 }
 
-pub fn monitor_state(procs: &mut HashMap<String, Process>) {
+fn monitor_state(procs: &mut HashMap<String, Process>) {
     for proc in procs.values_mut() {
         proc.desire();
         proc.monitor();
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MininamRequest {
+    pub id: u32,
 }
 
 async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mpsc::Sender<(Request, AsyncUnixSocket)>>) {
@@ -125,7 +165,19 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                 let _ = sender.send((request, socket)).await;
             }
             Err(e) => {
-                if let Err(e) = socket.write(format!("{}", e).as_bytes()).await {
+                let error_msg = match serde_json::from_str::<MininamRequest>(&line) {
+                    Ok(m_r) => serde_json::to_string(&Response::new(
+                        m_r.id,
+                        ResponseType::Error(ResponseError {
+                            code: crate::jsonrpc::response::ErrorCode::InvalidRequest,
+                            message: format!("{}", e).to_owned(),
+                            data: None,
+                        }),
+                    ))
+                    .unwrap(),
+                    Err(_) => "request id not found - can't respond with JsonRPCError".to_owned(),
+                };
+                if let Err(e) = socket.write(error_msg.as_bytes()).await {
                     log_error!("error writing to socket: {}", e)
                 }
             }
