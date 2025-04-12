@@ -19,6 +19,18 @@ impl Response {
             response_type,
         }
     }
+
+    pub fn new(id: u32, response_type: ResponseType) -> Self {
+        Self {
+            id,
+            json_rpc: "2.0".to_owned(),
+            response_type,
+        }
+    }
+
+    pub fn response_type(&self) -> &ResponseType {
+        &self.response_type
+    }
 }
 
 fn json_rpc<S>(json_rpc: &String, s: S) -> Result<S::Ok, S::Error>
@@ -47,6 +59,8 @@ pub enum ResponseResult {
     Start(String),
     Stop(String),
     Restart(String),
+    Reload,
+    Halt,
 }
 
 #[derive(Serialize, Deserialize)]
