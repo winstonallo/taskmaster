@@ -1,12 +1,24 @@
 use serde::{Deserialize, Serialize, Serializer, ser::Error};
 
+use super::{request::Request, short_process::ShortProcess};
+
 #[derive(Serialize, Deserialize)]
-pub struct JsonRPCReponse {
+pub struct Response {
     id: u32,
     #[serde(serialize_with = "json_rpc")]
     json_rpc: String,
     #[serde(flatten)]
-    response: JsonRPCReponseType,
+    response_type: ResponseType,
+}
+
+impl Response {
+    pub fn from_request(request: Request, response_type: ResponseType) -> Self {
+        Self {
+            id: request.id(),
+            json_rpc: "2.0".to_owned(),
+            response_type,
+        }
+    }
 }
 
 fn json_rpc<S>(json_rpc: &String, s: S) -> Result<S::Ok, S::Error>
@@ -22,25 +34,31 @@ where
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
-pub enum JsonRPCReponseType {
-    Result(JsonRPCResponseResult),
-    Error(JsonRPCResponseError),
+pub enum ResponseType {
+    Result(ResponseResult),
+    Error(ResponseError),
 }
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum JsonRPCResponseResult {}
+pub enum ResponseResult {
+    Status(Vec<ShortProcess>),
+    StatusSingle(ShortProcess),
+    Start(String),
+    Stop(String),
+    Restart(String),
+}
 
 #[derive(Serialize, Deserialize)]
-pub struct JsonRPCResponseError {
-    code: JsonRPCErrorCode,
-    message: String,
-    data: Option<JsonRPCResponseErrorData>,
+pub struct ResponseError {
+    pub code: ErrorCode,
+    pub message: String,
+    pub data: Option<ResponseErrorData>,
 }
 
 #[repr(i16)]
 #[derive(Debug, Serialize)]
-pub enum JsonRPCErrorCode {
+pub enum ErrorCode {
     ServerError(i16), // -32000 to -32099
     InvalidRequest = -32600,
     MethodNotFound = -32601,
@@ -49,19 +67,19 @@ pub enum JsonRPCErrorCode {
     ParseError = -32700,
 }
 
-impl<'de> Deserialize<'de> for JsonRPCErrorCode {
+impl<'de> Deserialize<'de> for ErrorCode {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
         let code = i16::deserialize(deserializer)?;
         match code {
-            -32099..-32000 => Ok(JsonRPCErrorCode::ServerError(code)),
-            -32600 => Ok(JsonRPCErrorCode::InvalidRequest),
-            -32601 => Ok(JsonRPCErrorCode::MethodNotFound),
-            -32602 => Ok(JsonRPCErrorCode::InvalidParams),
-            -32603 => Ok(JsonRPCErrorCode::InternalError),
-            -32700 => Ok(JsonRPCErrorCode::ParseError),
+            -32099..-32000 => Ok(ErrorCode::ServerError(code)),
+            -32600 => Ok(ErrorCode::InvalidRequest),
+            -32601 => Ok(ErrorCode::MethodNotFound),
+            -32602 => Ok(ErrorCode::InvalidParams),
+            -32603 => Ok(ErrorCode::InternalError),
+            -32700 => Ok(ErrorCode::ParseError),
             _ => Err(serde::de::Error::custom(format!("unknown error code: {}", code))),
         }
     }
@@ -69,4 +87,4 @@ impl<'de> Deserialize<'de> for JsonRPCErrorCode {
 
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
-pub enum JsonRPCResponseErrorData {}
+pub enum ResponseErrorData {}
