@@ -7,7 +7,6 @@ use tokio::time::sleep;
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
-use crate::jsonrpc::short_process::State;
 use crate::{
     conf,
     jsonrpc::{handlers::handle_request, request::Request},
@@ -98,6 +97,7 @@ impl Daemon {
                     let shutting_down = self.shutting_down;
                     tokio::spawn(async move {
                         if shutting_down {
+
                             let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
                         } else {
                             handle_client(socket, clone).await;
