@@ -10,7 +10,7 @@ use crate::{
     },
     run::{daemon::Daemon, proc::Process, statemachine::states::ProcessState},
 };
-use std::{collections::HashMap, fmt::format};
+use std::collections::HashMap;
 
 use super::{
     request::{Request, RequestStatusSingle},
@@ -53,7 +53,7 @@ fn handle_request_status_single(processes: &mut HashMap<String, Process>, reques
         }
     };
 
-    ResponseType::Result(ResponseResult::StatusSingle(ShortProcess::from_process(&process)))
+    ResponseType::Result(ResponseResult::StatusSingle(ShortProcess::from_process(process)))
 }
 
 fn handle_request_start(processes: &mut HashMap<String, Process>, request: &RequestStart) -> ResponseType {
