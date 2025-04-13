@@ -1,10 +1,10 @@
 use std::{
-    env::{self, args},
+    env::{self},
     error::Error,
 };
 
 use tasklib::{
-    conf::{self, Config},
+    conf::Config,
     log_error, log_info,
     run::daemon::Daemon,
 };

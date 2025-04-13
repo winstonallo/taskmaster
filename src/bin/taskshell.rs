@@ -63,7 +63,7 @@ fn build_request_stop(name: &str) -> Request {
 }
 
 fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
-    let method = *arguments.get(0).unwrap();
+    let method = *arguments.first().unwrap();
 
     let request = match method {
         "status" => {
@@ -163,7 +163,7 @@ fn main() {
         std::io::stdin().read_line(&mut line).unwrap();
 
         let arguments: Vec<&str> = line.split_ascii_whitespace().collect();
-        if arguments.len() < 1 {
+        if arguments.is_empty() {
             continue;
         }
 

@@ -38,7 +38,7 @@ where
     S: Serializer,
 {
     if json_rpc == "2.0" {
-        s.serialize_str(&json_rpc)
+        s.serialize_str(json_rpc)
     } else {
         Err(Error::custom("json_rpc attribute has to be `2.0`"))
     }
