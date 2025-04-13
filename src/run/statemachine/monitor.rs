@@ -136,7 +136,16 @@ pub fn monitor_completed(p: &mut Process) -> Option<ProcessState> {
     }
 }
 
-pub fn monitor_stopping(_p: &mut Process) -> Option<ProcessState> {
+pub fn monitor_stopping(p: &mut Process) -> Option<ProcessState> {
+    if let Some(code) = p.exited() {
+        if !p.config().exitcodes().contains(&code) {
+            proc_warning!(&p.name(), "exited with unexpected code ({})", code);
+            return Some(ProcessState::Failed(Box::new(ProcessState::Healthy)));
+        } else {
+            proc_info!(&p.name(), "exited with healthy code ({})", code);
+            return Some(ProcessState::Completed);
+        }
+    }
     None
 }
 
