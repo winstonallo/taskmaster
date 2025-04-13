@@ -14,7 +14,7 @@ impl Request {
         Self {
             id,
             json_rpc: "2.0".to_owned(),
-            request_type
+            request_type,
         }
     }
 

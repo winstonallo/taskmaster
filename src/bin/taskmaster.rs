@@ -3,11 +3,7 @@ use std::{
     error::Error,
 };
 
-use tasklib::{
-    conf::Config,
-    log_error, log_info,
-    run::daemon::Daemon,
-};
+use tasklib::{conf::Config, log_error, log_info, run::daemon::Daemon};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
