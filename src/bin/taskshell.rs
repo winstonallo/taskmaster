@@ -1,6 +1,7 @@
 use std::{
     io::{Read, Write},
     os::unix::net::UnixStream,
+    process::exit,
     sync::atomic::AtomicU32,
 };
 
@@ -10,6 +11,8 @@ use tasklib::jsonrpc::{
 };
 
 use tasklib::jsonrpc::request::Request;
+
+const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
 
 fn read_from_stream(unix_stream: &mut UnixStream) -> Result<String, String> {
     let mut buf = String::new();
@@ -39,6 +42,7 @@ fn build_request_halt() -> Request {
 fn build_request_status() -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status())
 }
+
 fn build_request_status_single(name: &str) -> Request {
     Request::new(
         ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
@@ -58,7 +62,90 @@ fn build_request_stop(name: &str) -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop(name))
 }
 
-const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
+fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
+    let method = *arguments.get(0).unwrap();
+
+    let request = match method {
+        "status" => {
+            if arguments.len() == 2 {
+                build_request_status_single(arguments[1])
+            } else if arguments.len() == 1 {
+                build_request_status()
+            } else {
+                return Err("usage: status OR status PROCESS_NAME");
+            }
+        }
+        "start" => {
+            if arguments.len() == 2 {
+                build_request_start(arguments[1])
+            } else {
+                return Err("usage: start PROCESS_NAME");
+            }
+        }
+        "restart" => {
+            if arguments.len() == 2 {
+                build_request_restart(arguments[1])
+            } else {
+                return Err("usage: restart PROCESS_NAME");
+            }
+        }
+        "stop" => {
+            if arguments.len() == 2 {
+                build_request_stop(arguments[1])
+            } else {
+                return Err("usage: stop PROCESS_NAME");
+            }
+        }
+        "reload" => {
+            if arguments.len() == 1 {
+                build_request_reload()
+            } else {
+                return Err("usage: reload");
+            }
+        }
+        "halt" => {
+            if arguments.len() == 1 {
+                build_request_halt()
+            } else {
+                return Err("usage: halt");
+            }
+        }
+        "exit" => exit(0),
+        _ => {
+            return Err("method not implemented");
+        }
+    };
+
+    Ok(request)
+}
+
+fn print_response(response: Response) {
+    match response.response_type() {
+        ResponseType::Result(res) => {
+            use tasklib::jsonrpc::response::ResponseResult::*;
+            let str = match res {
+                Status(items) => {
+                    let mut str = String::new();
+                    for short_process in items.iter() {
+                        str.push_str(&format!("Name: {}\t State: {}\n", short_process.name(), short_process.state()));
+                    }
+                    str
+                }
+                StatusSingle(short_process) => format!("Name: {}, State: {}\n", short_process.name(), short_process.state()),
+                Start(name) => format!("staring: {}\n", name),
+                Stop(name) => format!("stopping: {}\n", name),
+                Restart(name) => format!("restarting: {}\n", name),
+                Reload => "reloading configuration\n".to_owned(),
+                Halt => "shutting down taskmaster\n".to_owned(),
+            };
+
+            print!("response from daemon: \n{}", str)
+        }
+        ResponseType::Error(err) => {
+            println!("{}", err.message)
+        }
+    }
+}
 
 fn main() {
     loop {
@@ -80,69 +167,20 @@ fn main() {
             continue;
         }
 
-        let method = *arguments.get(0).unwrap();
-
-        let request = match method {
-            "status" => {
-                if arguments.len() == 2 {
-                    build_request_status_single(arguments[1])
-                } else if arguments.len() == 1 {
-                    build_request_status()
-                } else {
-                    println!("usage: status OR status PROCESS_NAME");
-                    continue;
-                }
-            }
-            "start" => {
-                if arguments.len() == 2 {
-                    build_request_start(arguments[1])
-                } else {
-                    println!("usage: start PROCESS_NAME");
-                    continue;
-                }
-            }
-            "restart" => {
-                if arguments.len() == 2 {
-                    build_request_restart(arguments[1])
-                } else {
-                    println!("usage: restart PROCESS_NAME");
-                    continue;
-                }
-            }
-            "stop" => {
-                if arguments.len() == 2 {
-                    build_request_stop(arguments[1])
-                } else {
-                    println!("usage: stop PROCESS_NAME");
-                    continue;
-                }
-            }
-            "reload" => {
-                if arguments.len() == 1 {
-                    build_request_reload()
-                } else {
-                    println!("usage: reload");
-                    continue;
-                }
-            }
-            "halt" => {
-                if arguments.len() == 1 {
-                    build_request_halt()
-                } else {
-                    println!("usage: halt");
-                    continue;
-                }
-            }
-            "exit" => return,
-            _ => {
-                println!("method not implemented");
+        let request = match build_request(&arguments) {
+            Ok(request) => request,
+            Err(e) => {
+                println!("{}", e);
                 continue;
             }
         };
 
-        let request = serde_json::to_string(&request).unwrap();
+        let request = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
-        let _ = write_request(&mut unix_stream, request.as_bytes());
+        if let Err(e) = write_request(&mut unix_stream, request.as_bytes()) {
+            println!("error while writing request: {}", e);
+            continue;
+        }
 
         let response = match read_from_stream(&mut unix_stream) {
             Ok(resp) => resp,
@@ -154,36 +192,12 @@ fn main() {
 
         let response = match serde_json::from_str::<Response>(&response) {
             Ok(resp) => resp,
-            Err(e) => {
-                println!("message: {}", response);
+            Err(_) => {
+                println!("non json_rpc formated message: {}", response);
                 continue;
             }
         };
 
-        match response.response_type() {
-            ResponseType::Result(res) => {
-                use tasklib::jsonrpc::response::ResponseResult::*;
-                let str = match res {
-                    Status(items) => {
-                        let mut str = String::new();
-                        for short_process in items.iter() {
-                            str.push_str(&format!("Name: {}\t State: {}\n", short_process.name(), short_process.state()));
-                        }
-                        str
-                    }
-                    StatusSingle(short_process) => format!("Name: {}, State: {}\n", short_process.name(), short_process.state()),
-                    Start(name) => format!("staring: {}\n", name),
-                    Stop(name) => format!("stopping: {}\n", name),
-                    Restart(name) => format!("restarting: {}\n", name),
-                    Reload => "reloading configuration\n".to_owned(),
-                    Halt => "shutting down taskmaster\n".to_owned(),
-                };
-
-                print!("response from daemon: \n{}", str)
-            }
-            ResponseType::Error(err) => {
-                println!("{}", err.message)
-            }
-        }
+        print_response(response);
     }
 }
