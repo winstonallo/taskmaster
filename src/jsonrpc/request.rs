@@ -27,7 +27,7 @@ impl Request {
     }
 }
 
-// This function enfores that the json_rpc key has only as a value 2.0
+// This function enforces that the json_rpc key has only as a value 2.0
 fn json_rpc<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
