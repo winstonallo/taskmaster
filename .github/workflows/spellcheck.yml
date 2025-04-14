@@ -1,2 +1,12 @@
-- name: typos-action
-  uses: crate-ci/typos@v1.31.1
+name: Spellcheck
+on: [pull_request]
+
+jobs:
+  spellcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v3
+        
+      - name: Run typos check
+        uses: crate-ci/typos@v1.31.1
