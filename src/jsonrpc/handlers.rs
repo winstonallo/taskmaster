@@ -1,196 +1,171 @@
-use std::collections::HashMap;
-
-use serde_json::json;
-
+use super::{
+    request::{RequestRestart, RequestStart, RequestStop},
+    response::ErrorCode,
+};
 use crate::{
     conf::Config,
+    jsonrpc::{
+        response::{ResponseResult, ResponseType},
+        short_process::ShortProcess,
+    },
     run::{daemon::Daemon, proc::Process, statemachine::states::ProcessState},
 };
+use std::collections::HashMap;
 
-use super::{JsonRPCError, JsonRPCErrorCode, JsonRPCErrorData, JsonRPCRequest, JsonRPCResponse};
+use super::{
+    request::{Request, RequestStatusSingle},
+    response::{Response, ResponseError},
+};
 
-pub fn handle(request: JsonRPCRequest, procs: &mut HashMap<String, Process>) -> Result<JsonRPCResponse, JsonRPCError> {
-    match request.method.as_str() {
-        "start" => handle_start(request, procs),
-        "stop" => handle_stop(request, procs),
-        "restart" => handle_restart(request, procs),
-        "status" => handle_status(request, procs),
-        "reload" => handle_reload(request, procs),
-        _ => Err(JsonRPCError::from_json_rpc_request(
-            &request,
-            JsonRPCErrorData {
-                code: JsonRPCErrorCode::MethodNotFound,
-                message: format!("method {} not implemented", request.method),
+pub fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
+    use super::request::RequestType::*;
+    let response_type = match request.request_type() {
+        Status => handle_request_status(daemon.processes_mut()),
+        StatusSingle(request_status_single) => handle_request_status_single(daemon.processes_mut(), request_status_single),
+        Start(request_start) => handle_request_start(daemon.processes_mut(), request_start),
+        Stop(request_stop) => handle_request_stop(daemon.processes_mut(), request_stop),
+        Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
+        Reload => handle_request_reload(daemon),
+        Halt => handle_request_halt(daemon),
+    };
+
+    Response::from_request(request, response_type)
+}
+
+fn handle_request_status(processes: &mut HashMap<String, Process>) -> ResponseType {
+    let mut short_processes = vec![];
+    for p in processes.values() {
+        short_processes.push(ShortProcess::from_process(p));
+    }
+
+    ResponseType::Result(ResponseResult::Status(short_processes))
+}
+
+fn handle_request_status_single(processes: &mut HashMap<String, Process>, request: &RequestStatusSingle) -> ResponseType {
+    let process = match processes.get(request.name()) {
+        Some(p) => p,
+        None => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InvalidParams,
+                message: format!("no process with name {} found", request.name()),
                 data: None,
-            },
-        )),
-    }
-}
-pub fn handle_halt(request: &JsonRPCRequest) -> Option<JsonRPCResponse> {
-    match request.method.as_str() {
-        "halt" => Some(JsonRPCResponse::from_json_rpc_request(request, json!("taskmaster shutting down - goodbye"))),
-        _ => None,
-    }
-}
-pub fn handle_reload(request: JsonRPCRequest, procs: &mut HashMap<String, Process>) -> Result<JsonRPCResponse, JsonRPCError> {
-    let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
-        &request,
-        JsonRPCErrorData {
-            code: JsonRPCErrorCode::InvalidParams,
-            message: "you provided wrong params".to_string(),
-            data: request.params.clone(),
-        },
-    );
-    let conf = match Config::from_file("./config/example.toml") {
-        Ok(c) => c,
-        Err(_e) => return Err(wrong_params_json_rpc_error),
+            });
+        }
     };
 
-    let daemon = match Daemon::from_config(&conf) {
-        Ok(d) => d,
-        Err(_e) => return Err(wrong_params_json_rpc_error),
+    ResponseType::Result(ResponseResult::StatusSingle(ShortProcess::from_process(process)))
+}
+
+fn handle_request_start(processes: &mut HashMap<String, Process>, request: &RequestStart) -> ResponseType {
+    let process = match processes.get_mut(request.name()) {
+        Some(p) => p,
+        None => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InvalidParams,
+                message: format!("no process with name {} found", request.name()),
+                data: None,
+            });
+        }
     };
+
+    process.push_desired_state(ProcessState::Healthy);
+
+    use ProcessState::*;
+    match process.state() {
+        Healthy | HealthCheck(_) => ResponseType::Result(ResponseResult::Start(format!("process with name {} already running", process.name()))),
+        _ => ResponseType::Result(ResponseResult::Start(format!("starting process with name {}", process.name()))),
+    }
+}
+
+fn handle_request_stop(processes: &mut HashMap<String, Process>, request: &RequestStop) -> ResponseType {
+    let process = match processes.get_mut(request.name()) {
+        Some(p) => p,
+        None => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InvalidParams,
+                message: format!("no process with name {} found", request.name()),
+                data: None,
+            });
+        }
+    };
+
+    process.push_desired_state(ProcessState::Idle);
+
+    use ProcessState::*;
+    match process.state() {
+        Healthy | HealthCheck(_) => ResponseType::Result(ResponseResult::Stop(format!("stopping process with name {}", process.name()))),
+        _ => ResponseType::Result(ResponseResult::Stop(format!("process with name {} not running", process.name()))),
+    }
+}
+
+fn handle_request_restart(processes: &mut HashMap<String, Process>, request: &RequestRestart) -> ResponseType {
+    let process = match processes.get_mut(request.name()) {
+        Some(p) => p,
+        None => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InvalidParams,
+                message: format!("no process with name {} found", request.name()),
+                data: None,
+            });
+        }
+    };
+
+    process.push_desired_state(ProcessState::Ready);
+
+    ResponseType::Result(ResponseResult::Restart(format!("restarting process with name {} ", process.name())))
+}
+
+fn handle_request_reload(daemon: &mut Daemon) -> ResponseType {
+    let conf = match Config::from_file(daemon.config_path()) {
+        Ok(c) => c,
+        Err(e) => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InternalError,
+                message: format!("error while parsing config file: {}", e),
+                data: None,
+            });
+        }
+    };
+
+    let mut daemon_new = Daemon::from_config(conf, daemon.config_path().to_owned());
 
     let mut leftover = vec![];
-    for (name, _p) in procs.iter() {
+    for (name, _p) in daemon.processes().iter() {
         leftover.push(name.to_owned());
     }
 
-    for (name, p) in daemon.processes {
-        match procs.get_mut(&name) {
-            Some(old_process) => {
-                *old_process.config_mut() = p.config().clone();
+    for (process_name_new, process_new) in daemon_new.processes_mut().drain() {
+        match daemon.processes_mut().get_mut(&process_name_new.to_owned()) {
+            Some(process_old) => {
+                *process_old.config_mut() = process_new.config().clone();
 
-                use ProcessState::*;
-                match p.config().autostart() {
-                    false => old_process.push_desired_state(Idle),
-                    true => old_process.push_desired_state(Healthy),
+                match process_old.config().autostart() {
+                    false => process_old.push_desired_state(ProcessState::Idle),
+                    true => process_old.push_desired_state(ProcessState::Healthy),
                 }
 
-                if let Some(index) = leftover.iter().position(|n| *n == old_process.name()) {
-                    leftover.remove(index);
-                }
+                leftover.retain(|n| n != process_old.name());
             }
             None => {
-                procs.insert(name, p);
+                let _ = daemon.processes_mut().insert(process_name_new, process_new);
             }
         }
     }
 
     for l in leftover.iter() {
-        if let Some(p) = procs.get_mut(l) {
+        if let Some(p) = daemon.processes_mut().get_mut(l) {
             p.push_desired_state(ProcessState::Stopped);
         }
     }
 
-    Ok(JsonRPCResponse::from_json_rpc_request(&request, json!("sucessfully reloaded config")))
+    ResponseType::Result(ResponseResult::Reload)
 }
 
-pub fn get_proc_from_json_request<'a>(request: &JsonRPCRequest, procs: &'a mut HashMap<String, Process>) -> Result<&'a mut Process, JsonRPCError> {
-    let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
-        request,
-        JsonRPCErrorData {
-            code: JsonRPCErrorCode::InvalidParams,
-            message: "wrong or no params given | `name`".to_string(),
-            data: request.params.clone(),
-        },
-    );
-    let params = match request.params.clone() {
-        Some(value) => value,
-        None => return Err(wrong_params_json_rpc_error),
-    };
-
-    let object = match params.as_object() {
-        Some(object) => object,
-        None => return Err(wrong_params_json_rpc_error),
-    };
-
-    let name = match object.get("name") {
-        Some(name) => name,
-        None => return Err(wrong_params_json_rpc_error),
-    };
-
-    let name = match name.as_str() {
-        Some(name) => name,
-        None => return Err(wrong_params_json_rpc_error),
-    };
-
-    let proc = match procs.get_mut(&name.to_owned()) {
-        None => return Err(wrong_params_json_rpc_error),
-        Some(p) => p,
-    };
-
-    Ok(proc)
-}
-
-pub fn handle_status(request: JsonRPCRequest, procs: &mut HashMap<String, Process>) -> Result<JsonRPCResponse, JsonRPCError> {
-    let wrong_params_json_rpc_error = JsonRPCError::from_json_rpc_request(
-        &request,
-        JsonRPCErrorData {
-            code: JsonRPCErrorCode::InvalidParams,
-            message: "wrong or no params given | `name`".to_string(),
-            data: request.params.clone(),
-        },
-    );
-    let params = match request.params.clone() {
-        Some(value) => value,
-        None => return Err(wrong_params_json_rpc_error),
-    };
-
-    let object = match params.as_object() {
-        Some(object) => object,
-        None => return Err(wrong_params_json_rpc_error),
-    };
-    match object.get("name") {
-        None => {
-            let mut line: String = String::new();
-            line.push_str("processes: [");
-            for (_, p) in procs.iter() {
-                line.push_str(&format!("{{name: {}, state: {}}}", p.name(), p.state()));
-            }
-            line.push(']');
-
-            Ok(JsonRPCResponse::from_json_rpc_request(&request, json!(line)))
-        }
-        Some(id) => match id.as_str() {
-            None => Err(wrong_params_json_rpc_error),
-            Some(id) => match procs.get_mut(id) {
-                None => Err(wrong_params_json_rpc_error),
-                Some(p) => Ok(JsonRPCResponse::from_json_rpc_request(
-                    &request,
-                    json!(format!(r#"{{"name": {}, "state": {}}}"#, p.name(), p.state())),
-                )),
-            },
-        },
+fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
+    for (_name, proc) in daemon.processes_mut().iter_mut() {
+        proc.push_desired_state(ProcessState::Stopped);
     }
-}
+    daemon.shutdown();
 
-pub fn handle_restart(request: JsonRPCRequest, procs: &mut HashMap<String, Process>) -> Result<JsonRPCResponse, JsonRPCError> {
-    match get_proc_from_json_request(&request, procs) {
-        Ok(proc) => {
-            proc.push_desired_state(ProcessState::Ready);
-            Ok(JsonRPCResponse::from_json_rpc_request(&request, json!("restarting process")))
-        }
-        Err(e) => Err(e),
-    }
-}
-
-pub fn handle_stop(request: JsonRPCRequest, procs: &mut HashMap<String, Process>) -> Result<JsonRPCResponse, JsonRPCError> {
-    match get_proc_from_json_request(&request, procs) {
-        Ok(p) => {
-            p.push_desired_state(ProcessState::Stopped);
-            Ok(JsonRPCResponse::from_json_rpc_request(&request, json!("stopping process")))
-        }
-        Err(e) => Err(e),
-    }
-}
-
-pub fn handle_start(request: JsonRPCRequest, procs: &mut HashMap<String, Process>) -> Result<JsonRPCResponse, JsonRPCError> {
-    match get_proc_from_json_request(&request, procs) {
-        Ok(p) => {
-            p.push_desired_state(ProcessState::Healthy);
-            Ok(JsonRPCResponse::from_json_rpc_request(&request, json!("starting process")))
-        }
-        Err(e) => Err(e),
-    }
+    ResponseType::Result(ResponseResult::Halt)
 }
