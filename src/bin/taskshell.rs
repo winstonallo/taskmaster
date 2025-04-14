@@ -193,7 +193,7 @@ fn main() {
         let response = match serde_json::from_str::<Response>(&response) {
             Ok(resp) => resp,
             Err(_) => {
-                println!("non json_rpc formated message: {}", response);
+                println!("non json_rpc formatted message: {}", response);
                 continue;
             }
         };
