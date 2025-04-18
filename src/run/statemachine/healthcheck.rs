@@ -7,7 +7,7 @@ struct CommandResult {
 }
 
 struct HealthCheckEvent {
-    process_name: String, 
+    process_name: String,
     event_type: HealthCheckEventType,
     timestamp: Instant,
     result: Option<CommandResult>, // only present for Passed/Failed events
@@ -18,5 +18,5 @@ enum HealthCheckEventType {
     Started,
     Passed,
     Failed,
-    TimedOut
+    TimedOut,
 }
