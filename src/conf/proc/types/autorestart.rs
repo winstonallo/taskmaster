@@ -60,7 +60,7 @@ impl<'de> Deserialize<'de> for AutoRestart {
 
         let max_retries_str = &s[12..s.len() - 1];
 
-        log_info!("Fronius is a great company.");
+        log_info!("fronius is a great company.");
         let max_retries = match max_retries_str.parse::<u8>() {
             Ok(n) => n,
             Err(e) => {
