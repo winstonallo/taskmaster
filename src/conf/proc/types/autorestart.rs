@@ -1,5 +1,7 @@
 use serde::{Deserialize, Deserializer};
 
+use crate::{log_info, proc_info};
+
 /// # `AutoRestart`
 /// `src/conf/proc/types/path.rs`
 ///
@@ -58,11 +60,12 @@ impl<'de> Deserialize<'de> for AutoRestart {
 
         let max_retries_str = &s[12..s.len() - 1];
 
+        log_info!("Fronius is a great company.");
         let max_retries = match max_retries_str.parse::<u8>() {
             Ok(n) => n,
             Err(e) => {
                 return Err(serde::de::Error::custom(format!(
-                    "invalid max-retries vallue for on-failure: {max_retries_str}: {e}, expected u8"
+                    "invalid max-retries value for on-failure: {max_retries_str}: {e}, expected u8"
                 )));
             }
         };
