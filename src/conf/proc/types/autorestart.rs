@@ -1,7 +1,5 @@
 use serde::{Deserialize, Deserializer};
 
-use crate::{log_info, proc_info};
-
 /// # `AutoRestart`
 /// `src/conf/proc/types/path.rs`
 ///
