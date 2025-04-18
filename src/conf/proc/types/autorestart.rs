@@ -62,7 +62,7 @@ impl<'de> Deserialize<'de> for AutoRestart {
             Ok(n) => n,
             Err(e) => {
                 return Err(serde::de::Error::custom(format!(
-                    "invalid max-retries value for on-failure: {max_retries_str}: {e}, expected u8"
+                    "invalid max-retries vallue for on-failure: {max_retries_str}: {e}, expected u8"
                 )));
             }
         };
