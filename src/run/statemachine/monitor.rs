@@ -64,33 +64,36 @@ pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<Proc
         return Some(exited_state);
     }
 
-    if let Some(receiver) = p.healthcheck_mut().receiver() {
-        match receiver.try_recv() {
-            Ok(result) => {
-                p.healthcheck_mut().clear();
-                match result {
-                    HealthCheckEvent::Passed => {
-                        proc_info!(&p, "healthcheck successful");
-                        Some(ProcessState::Healthy)
-                    }
-                    HealthCheckEvent::Failed(reason) => {
-                        proc_warning!(&p, "healthcheck failed: {}", reason);
-                        Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
-                    }
+    let receiver = match p.healthcheck_mut().receiver() {
+        Some(receiver) => receiver,
+        None => {
+            p.start_healthcheck();
+            return None;
+        }
+    };
+
+    match receiver.try_recv() {
+        Ok(result) => {
+            p.healthcheck_mut().clear();
+            match result {
+                HealthCheckEvent::Passed => {
+                    proc_info!(&p, "healthcheck successful");
+                    Some(ProcessState::Healthy)
                 }
-            }
-            Err(e) => match e {
-                tokio::sync::oneshot::error::TryRecvError::Empty => None,
-                tokio::sync::oneshot::error::TryRecvError::Closed => {
-                    proc_warning!(&p, "healthcheck channel closed unexpectedly");
-                    p.healthcheck_mut().clear();
+                HealthCheckEvent::Failed(reason) => {
+                    proc_warning!(&p, "healthcheck failed: {}", reason);
                     Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
                 }
-            },
+            }
         }
-    } else {
-        p.start_healthcheck();
-        None
+        Err(e) => match e {
+            tokio::sync::oneshot::error::TryRecvError::Empty => None,
+            tokio::sync::oneshot::error::TryRecvError::Closed => {
+                proc_warning!(&p, "healthcheck channel closed unexpectedly");
+                p.healthcheck_mut().clear();
+                Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
+            }
+        },
     }
 }
 
