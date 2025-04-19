@@ -133,7 +133,7 @@ umask = "022"
 # Working directory for the process.
 # Must be an absolute path.
 # Required.
-workingdir = "/home"
+workingdir = "/home/winstonallo/mastery/taskmaster/src"
 
 # Start the program automatically when starting taskmaster. 
 # Defaults to false.

@@ -35,14 +35,21 @@ pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
 ///
 /// Returns `None` if `p` is running.
 fn exited_state(p: &mut Process) -> Option<ProcessState> {
-    assert!(matches!(p.state(), ProcessState::HealthCheck(_) | ProcessState::Starting(_)));
+    assert!(matches!(p.state(), ProcessState::HealthCheck(_) | ProcessState::Starting(_) | ProcessState::Healthy));
 
     if let Some(code) = p.exited() {
+        let msg = match p.state() {
+            ProcessState::Healthy => "while healthy".to_string(),
+            ProcessState::HealthCheck(t) => format!("in healthcheck after {}s", Instant::now().duration_since(t).as_secs()),
+            ProcessState::Starting(t) => format!("while starting after {}s", Instant::now().duration_since(t).as_secs()),
+            _ => String::new(),
+        };
+
         if !p.config().exitcodes().contains(&code) {
-            proc_warning!(&p, "exited {:?} with unexpected code ({})", p.state(), code);
+            proc_warning!(&p, "exited {} with unexpected code ({})", msg, code);
             return Some(ProcessState::Failed(Box::new(p.state())));
         } else {
-            proc_info!(&p, "exited {} with healthy code ({})", p.state(), code);
+            proc_info!(&p, "exited {} with healthy code ({})", msg, code);
             return Some(ProcessState::Completed);
         }
     }
