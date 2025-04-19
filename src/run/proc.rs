@@ -41,7 +41,7 @@ impl Process {
             child: None,
             conf: conf.clone(),
             startup_failures: 0,
-            healthcheck: healthcheck.as_ref().map(|hc| HealthCheckRunner::from_healthcheck_config(hc)),
+            healthcheck: healthcheck.as_ref().map(HealthCheckRunner::from_healthcheck_config),
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: match is_autostart {
@@ -161,8 +161,6 @@ impl Process {
         healthcheck.start();
     }
 
-    /// Checks whether the process is healthy, according to `started_at` and its
-    /// configured healthcheck time.
     pub fn passed_starttime(&self, started_at: time::Instant) -> bool {
         Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
     }

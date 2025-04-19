@@ -34,13 +34,15 @@ pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
 /// exit code.
 ///
 /// Returns `None` if `p` is running.
-fn exited_state(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
+fn exited_state(p: &mut Process) -> Option<ProcessState> {
+    assert!(matches!(p.state(), ProcessState::HealthCheck(_) | ProcessState::Starting(_)));
+
     if let Some(code) = p.exited() {
         if !p.config().exitcodes().contains(&code) {
-            proc_warning!(&p, "exited while starting with unexpected code ({})", code);
-            return Some(ProcessState::Failed(Box::new(ProcessState::Starting(*started_at))));
+            proc_warning!(&p, "exited {:?} with unexpected code ({})", p.state(), code);
+            return Some(ProcessState::Failed(Box::new(p.state())));
         } else {
-            proc_info!(&p, "exited while starting with healthy code ({})", code);
+            proc_info!(&p, "exited {} with healthy code ({})", p.state(), code);
             return Some(ProcessState::Completed);
         }
     }
@@ -51,8 +53,8 @@ fn exited_state(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
 pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
     assert!(p.has_healthcheck(), "a process without configured healthcheck should never be in the `HealthCheck` state");
 
-    if let Some(state) = exited_state(started_at, p) {
-        return Some(state);
+    if let Some(exited_state) = exited_state(p) {
+        return Some(exited_state);
     }
 
     if let Some(receiver) = p.healthcheck_mut().receiver() {
@@ -66,7 +68,6 @@ pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<Proc
                     }
                     HealthCheckEvent::Failed(reason) => {
                         proc_warning!(&p, "healthcheck failed: {}", reason);
-                        p.increment_healthcheck_failures();
                         Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
                     }
                 }
@@ -95,23 +96,14 @@ pub fn monitor_starting(started_at: &Instant, p: &mut Process) -> Option<Process
         return Some(ProcessState::Healthy);
     }
 
-    exited_state(started_at, p)
+    exited_state(p)
 }
 
 pub fn monitor_healthy(p: &mut Process) -> Option<ProcessState> {
-    if let Some(code) = p.exited() {
-        if !p.config().exitcodes().contains(&code) {
-            proc_warning!(&p, "exited with unexpected code ({})", code);
-            return Some(ProcessState::Failed(Box::new(ProcessState::Healthy)));
-        } else {
-            proc_info!(&p, "exited with healthy code ({})", code);
-            return Some(ProcessState::Completed);
-        }
-    }
-    None
+    exited_state(p)
 }
 
-pub fn failed_runtime(p: &mut Process) -> Option<ProcessState> {
+pub fn failed_healthy(p: &mut Process) -> Option<ProcessState> {
     match p.config().autorestart().mode() {
         "always" => Some(ProcessState::Starting(Instant::now())),
         "on-failure" => {
@@ -134,6 +126,7 @@ pub fn failed_runtime(p: &mut Process) -> Option<ProcessState> {
 }
 
 pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
+    p.increment_healthcheck_failures();
     if p.healthcheck_failures() == p.healthcheck().retries() {
         proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
         Some(ProcessState::Stopped)
@@ -161,7 +154,7 @@ pub fn monitor_failed(p: &mut Process) -> Option<ProcessState> {
         assert!(matches!(*prev_state, ProcessState::HealthCheck(_) | ProcessState::Starting(_) | ProcessState::Healthy));
 
         match *prev_state {
-            ProcessState::Healthy => failed_runtime(p),
+            ProcessState::Healthy => failed_healthy(p),
             ProcessState::Starting(_) => failed_starting(p),
             ProcessState::HealthCheck(_) => failed_healthcheck(p),
             _ => None,
