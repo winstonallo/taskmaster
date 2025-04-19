@@ -26,7 +26,8 @@ impl AutoRestart {
     /// Panics if the retry mode is anything else than `on-failure`,
     /// due to it being the only case where `max-retries` is set.   
     pub fn max_retries(&self) -> u8 {
-        self.max_retries.expect("this method should only be called after checking the autorestart mode")
+        self.max_retries
+            .expect("this method should only be called after checking the autorestart mode")
     }
 }
 

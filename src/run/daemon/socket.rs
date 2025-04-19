@@ -38,7 +38,11 @@ fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
 
     unsafe {
         if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
-            return Err(format!("could not change group ownership: {} - do you have permissions for group '{}'?", std::io::Error::last_os_error(), authgroup));
+            return Err(format!(
+                "could not change group ownership: {} - do you have permissions for group '{}'?",
+                std::io::Error::last_os_error(),
+                authgroup
+            ));
         }
     }
 

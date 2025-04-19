@@ -79,7 +79,10 @@ mod from_str {
     #[test]
     fn processes_default() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(Config::from_str(conf_str).expect("could not parse config string").processes()["nginx"].processes(), defaults::dflt_processes());
+        assert_eq!(
+            Config::from_str(conf_str).expect("could not parse config string").processes()["nginx"].processes(),
+            defaults::dflt_processes()
+        );
     }
 
     #[test]
@@ -232,7 +235,10 @@ mod from_str {
     #[test]
     fn stopsignals_default() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(*Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].stopsignals(), vec![types::StopSignal(SIGTERM)]);
+        assert_eq!(
+            *Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].stopsignals(),
+            vec![types::StopSignal(SIGTERM)]
+        );
     }
 
     #[test]

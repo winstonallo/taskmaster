@@ -7,17 +7,13 @@ use std::{
 };
 
 use crate::{
-    conf::{
-        self,
-        proc::{ProcessConfig, types::HealthCheck},
-    },
+    conf::{self, proc::ProcessConfig},
     log_error, log_info, proc_info,
 };
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
-use tokio::task::JoinHandle;
 
-use super::statemachine::{healthcheck::HealthCheckEventType, states::ProcessState};
+use super::statemachine::{healthcheck::HealthCheckRunner, states::ProcessState};
 
 mod error;
 
@@ -29,9 +25,7 @@ pub struct Process {
     child: Option<Child>,
     conf: ProcessConfig,
     startup_failures: usize,
-    healthcheck_failures: usize,
-    healthcheck_task: Option<tokio::task::JoinHandle<()>>,
-    healthcheck_receiver: Option<tokio::sync::oneshot::Receiver<HealthCheckEventType>>,
+    healthcheck: Option<HealthCheckRunner>,
     runtime_failures: usize,
     state: ProcessState,
     desired_states: VecDeque<ProcessState>,
@@ -40,15 +34,16 @@ pub struct Process {
 impl Process {
     pub fn from_process_config(conf: conf::proc::ProcessConfig, proc_name: &str) -> Self {
         let is_autostart = conf.autostart();
+        let healthcheck = conf.healthcheck();
         Self {
             id: None,
             name: proc_name.to_string(),
             child: None,
-            conf,
+            conf: conf.clone(),
             startup_failures: 0,
-            healthcheck_failures: 0,
-            healthcheck_task: None,
-            healthcheck_receiver: None,
+            healthcheck: healthcheck
+                .as_ref()
+                .map(|hc| HealthCheckRunner::new(hc.timeout(), hc.retries())),
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: match is_autostart {
@@ -132,28 +127,27 @@ impl Process {
     }
 
     pub fn healthcheck_failures(&self) -> usize {
-        self.healthcheck_failures
+        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
+        self.healthcheck.as_ref().unwrap().failures()
     }
 
     pub fn increment_healthcheck_failures(&mut self) {
-        self.healthcheck_failures = self.healthcheck_failures.saturating_add(1);
+        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
+        self.healthcheck.as_mut().unwrap().increment_failures();
     }
 
-    pub fn healthcheck_task(&self) -> &Option<tokio::task::JoinHandle<()>> {
-        &self.healthcheck_task
+    pub fn has_healthcheck(&self) -> bool {
+        self.healthcheck.is_some()
     }
 
-    pub fn healthcheck_receiver(&mut self) -> &mut Option<tokio::sync::oneshot::Receiver<HealthCheckEventType>> {
-        &mut self.healthcheck_receiver
+    pub fn healthcheck(&self) -> &HealthCheckRunner {
+        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
+        self.healthcheck.as_ref().unwrap()
     }
 
-    pub fn clear_healthcheck(&mut self) {
-        self.healthcheck_receiver = None;
-        self.healthcheck_task = None;
-    }
-
-    pub fn healthcheck(&self) -> &Option<HealthCheck> {
-        self.conf.healthcheck()
+    pub fn healthcheck_mut(&mut self) -> &mut HealthCheckRunner {
+        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
+        self.healthcheck.as_mut().unwrap()
     }
 
     pub fn retry_at(&self) -> time::Instant {
@@ -164,40 +158,12 @@ impl Process {
         }
     }
 
-    async fn execute_healthcheck(cmd: &str, args: &Vec<String>, timeout: Duration) -> HealthCheckEventType {
-        let mut command = tokio::process::Command::new(&cmd);
-        command.args(args);
-
-        match tokio::time::timeout(timeout, command.status()).await {
-            Ok(Ok(status)) if status.success() => HealthCheckEventType::Passed,
-            Ok(Ok(status)) => HealthCheckEventType::Failed(format!("healthcheck failed with status: {}", status)),
-            Ok(Err(e)) => HealthCheckEventType::Failed(format!("healthcheck failed to execute: {e}")),
-            Err(_) => HealthCheckEventType::TimeOut,
-        }
-    }
-
     pub fn start_healthcheck(&mut self) {
-        let healthcheck = self
-            .config()
-            .healthcheck()
-            .as_ref()
-            .expect("this function should never be called on a process which does not have a healthcheck")
-            .clone();
-
-        let (sender, receiver) = tokio::sync::oneshot::channel::<HealthCheckEventType>();
-        self.healthcheck_receiver = Some(receiver);
-
-        let cmd = healthcheck.cmd().to_string();
-        let args = healthcheck.args().into_iter().map(|s| s.clone()).collect::<Vec<String>>();
-        let timeout = healthcheck.timeout();
-        let proc_name = self.name().to_string();
-
-        let handle: JoinHandle<()> = tokio::task::spawn(async move {
-            let result = Process::execute_healthcheck(&cmd, &args, Duration::from_secs(healthcheck.timeout() as u64)).await;
-            let _ = sender.send(result);
-        });
-
-        self.healthcheck_task = Some(handle);
+        let healthcheck = self.conf.healthcheck().as_ref().unwrap();
+        self.healthcheck
+            .as_mut()
+            .unwrap()
+            .start(healthcheck.cmd(), healthcheck.args(), healthcheck.timeout());
     }
 
     /// Checks whether the process is healthy, according to `started_at` and its
@@ -336,9 +302,7 @@ mod tests {
             child: None,
             conf: conf::proc::ProcessConfig::testconfig(),
             startup_failures: 0,
-            healthcheck_failures: 0,
-            healthcheck_task: None,
-            healthcheck_receiver: None,
+            healthcheck: None,
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: VecDeque::new(),

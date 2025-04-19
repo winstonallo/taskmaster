@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use crate::{
     proc_info, proc_warning,
-    run::{proc::Process, statemachine::healthcheck::HealthCheckEventType},
+    run::{proc::Process, statemachine::healthcheck::HealthCheckEvent},
 };
 
 use super::states::ProcessState;
@@ -41,21 +41,21 @@ pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<Proc
         }
     }
 
-    if let Some(receiver) = p.healthcheck_receiver() {
+    if let Some(receiver) = p.healthcheck_mut().receiver() {
         match receiver.try_recv() {
             Ok(result) => {
-                p.clear_healthcheck();
+                p.healthcheck_mut().clear();
                 match result {
-                    HealthCheckEventType::Passed => {
+                    HealthCheckEvent::Passed => {
                         proc_info!(&p, "healthcheck successful");
                         Some(ProcessState::Healthy)
                     }
-                    HealthCheckEventType::Failed(reason) => {
+                    HealthCheckEvent::Failed(reason) => {
                         proc_warning!(&p, "healthcheck failed: {}", reason);
                         p.increment_healthcheck_failures();
                         Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
                     }
-                    HealthCheckEventType::TimeOut => {
+                    HealthCheckEvent::TimeOut => {
                         proc_warning!(&p, "healthcheck timed out");
                         p.increment_healthcheck_failures();
                         Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
@@ -66,7 +66,7 @@ pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<Proc
                 tokio::sync::oneshot::error::TryRecvError::Empty => None,
                 tokio::sync::oneshot::error::TryRecvError::Closed => {
                     proc_warning!(&p, "healthcheck channel closed unexpectedly");
-                    p.clear_healthcheck();
+                    p.healthcheck_mut().clear();
                     Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
                 }
             },
@@ -139,7 +139,7 @@ pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
         .expect("this function should never be called on a process which does not have a healthcheck");
 
     if p.healthcheck_failures() == healthcheck.retries() {
-        proc_warning!(p, "not healthy after {} tries, killing", healthcheck.retries());
+        proc_warning!(p, "not healthy after {} tries, giving up", healthcheck.retries());
         Some(ProcessState::Stopped)
     } else {
         proc_info!(p, "retrying healthcheck in {} seconds", healthcheck.backoff());
@@ -202,7 +202,7 @@ pub fn monitor_completed(p: &mut Process) -> Option<ProcessState> {
     match p.start() {
         Ok(()) => {
             proc_info!(p, "spawned, PID {}", p.id().expect("if the process started, its id should be set"));
-            if p.healthcheck().is_some() {
+            if p.has_healthcheck() {
                 Some(ProcessState::HealthCheck(Instant::now()))
             } else {
                 Some(ProcessState::Starting(Instant::now()))

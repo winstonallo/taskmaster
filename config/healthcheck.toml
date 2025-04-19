@@ -17,7 +17,7 @@ startretries = 3
 starttime = 1
 [processes.sleep.healthcheck]
 cmd = "/usr/bin/sleep"
-args = ["1"]
+args = ["prout"]
 timeout = 10
 retries = 3
 
