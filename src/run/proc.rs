@@ -34,12 +34,12 @@ pub struct Process {
 impl Process {
     pub fn from_process_config(conf: conf::proc::ProcessConfig, proc_name: &str) -> Self {
         let is_autostart = conf.autostart();
-        let healthcheck = conf.healthcheck();
+        let healthcheck = conf.healthcheck().clone();
         Self {
             id: None,
             name: proc_name.to_string(),
             child: None,
-            conf: conf.clone(),
+            conf: conf,
             startup_failures: 0,
             healthcheck: healthcheck.as_ref().map(HealthCheckRunner::from_healthcheck_config),
             runtime_failures: 0,
