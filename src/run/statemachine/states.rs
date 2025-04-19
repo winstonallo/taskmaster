@@ -31,14 +31,15 @@ pub enum ProcessState {
 
 impl Display for ProcessState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let now = Instant::now();
         match self {
             ProcessState::Idle => write!(f, "idle"),
             ProcessState::Ready => write!(f, "ready"),
-            ProcessState::Starting(started_at) => write!(f, "starting up since {} seconds", Instant::now().duration_since(*started_at).as_secs()),
-            ProcessState::HealthCheck(started_at) => write!(f, "in healthcheck since {} seconds", Instant::now().duration_since(*started_at).as_secs()),
+            ProcessState::Starting(started_at) => write!(f, "starting up since {} seconds", now.duration_since(*started_at).as_secs()),
+            ProcessState::HealthCheck(started_at) => write!(f, "in healthcheck since {} seconds", now.duration_since(*started_at).as_secs()),
             ProcessState::Healthy => write!(f, "healthy"),
             ProcessState::Failed(prev_state) => write!(f, "failed while in state: {}", *prev_state),
-            ProcessState::WaitingForRetry(retry_at) => write!(f, "retrying in {} seconds", retry_at.duration_since(Instant::now()).as_secs()),
+            ProcessState::WaitingForRetry(retry_at) => write!(f, "retrying in {} seconds", retry_at.duration_since(now).as_secs()),
             ProcessState::Completed => write!(f, "completed successfully"),
             ProcessState::Stopping(_) => write!(f, "stopping"),
             ProcessState::Stopped => write!(f, "stopped"),
