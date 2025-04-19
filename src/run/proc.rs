@@ -39,7 +39,7 @@ impl Process {
             id: None,
             name: proc_name.to_string(),
             child: None,
-            conf: conf,
+            conf,
             startup_failures: 0,
             healthcheck: healthcheck.as_ref().map(HealthCheckRunner::from_healthcheck_config),
             runtime_failures: 0,
