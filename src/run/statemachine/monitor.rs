@@ -30,7 +30,11 @@ pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
     }
 }
 
-pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
+/// Check whether a `p` exited and return the appropriate state based on its
+/// exit code.
+///
+/// Returns `None` if `p` is running.
+fn exited_state(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
     if let Some(code) = p.exited() {
         if !p.config().exitcodes().contains(&code) {
             proc_warning!(&p, "exited while starting with unexpected code ({})", code);
@@ -39,6 +43,16 @@ pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<Proc
             proc_info!(&p, "exited while starting with healthy code ({})", code);
             return Some(ProcessState::Completed);
         }
+    }
+
+    None
+}
+
+pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
+    assert!(p.has_healthcheck(), "a process without configured healthcheck should never be in the `HealthCheck` state");
+
+    if let Some(state) = exited_state(started_at, p) {
+        return Some(state);
     }
 
     if let Some(receiver) = p.healthcheck_mut().receiver() {
@@ -52,11 +66,6 @@ pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<Proc
                     }
                     HealthCheckEvent::Failed(reason) => {
                         proc_warning!(&p, "healthcheck failed: {}", reason);
-                        p.increment_healthcheck_failures();
-                        Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
-                    }
-                    HealthCheckEvent::TimeOut => {
-                        proc_warning!(&p, "healthcheck timed out");
                         p.increment_healthcheck_failures();
                         Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
                     }
@@ -78,22 +87,15 @@ pub fn monitor_healthcheck(started_at: &Instant, p: &mut Process) -> Option<Proc
 }
 
 pub fn monitor_starting(started_at: &Instant, p: &mut Process) -> Option<ProcessState> {
+    assert!(!p.has_healthcheck(), "a process with a configured healthcheck should never be in the `Starting` state");
+
     if p.passed_starttime(*started_at) {
         proc_info!(&p, "has been running for {} seconds, marking as healthy", p.config().starttime());
 
         return Some(ProcessState::Healthy);
     }
 
-    if let Some(code) = p.exited() {
-        if !p.config().exitcodes().contains(&code) {
-            proc_warning!(&p, "exited while starting with unexpected code ({})", code);
-            return Some(ProcessState::Failed(Box::new(ProcessState::Starting(*started_at))));
-        } else {
-            proc_info!(&p, "exited while starting with healthy code ({})", code);
-            return Some(ProcessState::Completed);
-        }
-    }
-    None
+    exited_state(started_at, p)
 }
 
 pub fn monitor_healthy(p: &mut Process) -> Option<ProcessState> {
@@ -132,22 +134,18 @@ pub fn failed_runtime(p: &mut Process) -> Option<ProcessState> {
 }
 
 pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
-    let healthcheck = p
-        .config()
-        .healthcheck()
-        .as_ref()
-        .expect("this function should never be called on a process which does not have a healthcheck");
-
-    if p.healthcheck_failures() == healthcheck.retries() {
-        proc_warning!(p, "not healthy after {} tries, giving up", healthcheck.retries());
+    if p.healthcheck_failures() == p.healthcheck().retries() {
+        proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
         Some(ProcessState::Stopped)
     } else {
-        proc_info!(p, "retrying healthcheck in {} seconds", healthcheck.backoff());
+        proc_info!(p, "retrying healthcheck in {} seconds", p.healthcheck().backoff());
         Some(ProcessState::WaitingForRetry(p.retry_at()))
     }
 }
 
 pub fn failed_starting(p: &mut Process) -> Option<ProcessState> {
+    assert!(!p.has_healthcheck(), "a process with a configured healthcheck should never be in the `Starting` state");
+
     if p.startup_failures() == p.config().startretries() as usize {
         proc_warning!(&p, "reached max startretries, giving up");
         Some(ProcessState::Stopped)

@@ -41,9 +41,7 @@ impl Process {
             child: None,
             conf: conf.clone(),
             startup_failures: 0,
-            healthcheck: healthcheck
-                .as_ref()
-                .map(|hc| HealthCheckRunner::new(hc.timeout(), hc.retries())),
+            healthcheck: healthcheck.as_ref().map(|hc| HealthCheckRunner::from_healthcheck_config(hc)),
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: match is_autostart {
@@ -127,13 +125,15 @@ impl Process {
     }
 
     pub fn healthcheck_failures(&self) -> usize {
-        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
+        assert!(self.healthcheck.is_some());
         self.healthcheck.as_ref().unwrap().failures()
     }
 
     pub fn increment_healthcheck_failures(&mut self) {
-        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
-        self.healthcheck.as_mut().unwrap().increment_failures();
+        self.healthcheck
+            .as_mut()
+            .expect("increment_healthcheck_failures called without a healthcheck configured")
+            .increment_failures();
     }
 
     pub fn has_healthcheck(&self) -> bool {
@@ -141,13 +141,11 @@ impl Process {
     }
 
     pub fn healthcheck(&self) -> &HealthCheckRunner {
-        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
-        self.healthcheck.as_ref().unwrap()
+        self.healthcheck.as_ref().expect("healthcheck called without a healthcheck configured")
     }
 
     pub fn healthcheck_mut(&mut self) -> &mut HealthCheckRunner {
-        assert!(self.healthcheck.is_some(), "this method should never be called on a Process without a configured healthcheck");
-        self.healthcheck.as_mut().unwrap()
+        self.healthcheck.as_mut().expect("healthcheck_mut called without a healthcheck configured")
     }
 
     pub fn retry_at(&self) -> time::Instant {
@@ -159,11 +157,8 @@ impl Process {
     }
 
     pub fn start_healthcheck(&mut self) {
-        let healthcheck = self.conf.healthcheck().as_ref().unwrap();
-        self.healthcheck
-            .as_mut()
-            .unwrap()
-            .start(healthcheck.cmd(), healthcheck.args(), healthcheck.timeout());
+        let mut healthcheck = self.healthcheck_mut();
+        healthcheck.start();
     }
 
     /// Checks whether the process is healthy, according to `started_at` and its

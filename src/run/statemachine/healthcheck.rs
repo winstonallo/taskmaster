@@ -1,35 +1,53 @@
 #![allow(unused)]
-use std::time::{Duration, Instant};
+use std::{
+    time::{Duration, Instant},
+    vec,
+};
+
+use crate::conf::proc::types::HealthCheck;
 
 #[derive(Debug)]
 pub struct HealthCheckRunner {
     failures: usize,
     task: Option<tokio::task::JoinHandle<()>>,
     receiver: Option<tokio::sync::oneshot::Receiver<HealthCheckEvent>>,
+    cmd: String,
+    args: Vec<String>,
     timeout: usize,
     retries: usize,
+    backoff: usize,
 }
 
 #[derive(Debug)]
 pub enum HealthCheckEvent {
     Passed,
     Failed(String),
-    TimeOut,
 }
 
 impl HealthCheckRunner {
-    pub fn new(timeout: usize, retries: usize) -> Self {
+    pub fn from_healthcheck_config(hc: &HealthCheck) -> Self {
         Self {
             failures: 0,
             task: None,
             receiver: None,
-            timeout,
-            retries,
+            cmd: hc.cmd().to_string(),
+            args: hc.args().to_vec(),
+            timeout: hc.timeout(),
+            retries: hc.retries(),
+            backoff: hc.backoff(),
         }
     }
 
     pub fn failures(&self) -> usize {
         self.failures
+    }
+
+    pub fn retries(&self) -> usize {
+        self.retries
+    }
+
+    pub fn backoff(&self) -> usize {
+        self.backoff
     }
 
     pub fn increment_failures(&mut self) {
@@ -55,21 +73,19 @@ impl HealthCheckRunner {
 
         match tokio::time::timeout(timeout, command.output()).await {
             Ok(Ok(output)) if output.status.success() => HealthCheckEvent::Passed,
-            Ok(Ok(output)) => {
-                HealthCheckEvent::Failed(format!("healthcheck failed with status: {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr)))
-            }
-            Ok(Err(e)) => HealthCheckEvent::Failed(format!("healthcheck failed to execute: {e}")),
-            Err(_) => HealthCheckEvent::TimeOut,
+            Ok(Ok(output)) => HealthCheckEvent::Failed(format!("exit code: {}, stderr: {}", output.status, String::from_utf8_lossy(&output.stderr))),
+            Ok(Err(e)) => HealthCheckEvent::Failed(e.to_string()),
+            Err(_) => HealthCheckEvent::Failed(format!("timed out after {} seconds", timeout.as_secs())),
         }
     }
 
-    pub fn start(&mut self, cmd: &str, args: &[String], timeout: usize) {
+    pub fn start(&mut self) {
         let (sender, receiver) = tokio::sync::oneshot::channel::<HealthCheckEvent>();
         self.receiver = Some(receiver);
 
-        let cmd = cmd.to_string();
-        let args = args.to_vec();
-        let timeout = Duration::from_secs(timeout as u64);
+        let cmd = self.cmd.clone();
+        let args = self.args.clone();
+        let timeout = Duration::from_secs(self.timeout as u64);
 
         let handle = tokio::task::spawn(async move {
             let result = HealthCheckRunner::spawn(&cmd, &args, timeout).await;
