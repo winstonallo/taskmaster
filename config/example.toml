@@ -63,6 +63,29 @@ startretries = 3
 # Defaults to 5, max 65536.
 starttime = 1
 
+# List of signals triggering a stop of the process, options are any 
+# FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).
+# Defaults to ["TERM"].
+stopsignals = ["TERM", "USR1"]
+
+# Time (in seconds) to wait for the process to stop. If it does not stop 
+# within this time, it will be forcibly killed.
+# Defaults to 5, max 255.
+stoptime = 5
+
+# File the standard output of the process should be redirected to.
+# Defaults to "/tmp/<process name>.stdout".
+stdout = "/tmp/ls.stdout"
+
+# File the standard error of the process should be redirected to.
+# Defaults to "/tmp/<process name>.stderr".
+stderr = "/tmp/ls.stderr"
+
+# Key value pairs of environment variables to be injected into the process
+# at startup.
+# Defaults to [[]].
+env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
+
 # Optional: configure a specific command to run to determine whether a 
 # process is healthy. Overrides `startttime`.
 [processes.sleep.healthcheck]
@@ -87,28 +110,6 @@ retries = 3
 # How much time to wait after a failed healthcheck before retrying.
 backoff = 5
 
-# List of signals triggering a stop of the process, options are any 
-# FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).
-# Defaults to ["TERM"].
-stopsignals = ["TERM", "USR1"]
-
-# Time (in seconds) to wait for the process to stop. If it does not stop 
-# within this time, it will be forcibly killed.
-# Defaults to 5, max 255.
-stoptime = 5
-
-# File the standard output of the process should be redirected to.
-# Defaults to "/tmp/<process name>.stdout".
-stdout = "/tmp/ls.stdout"
-
-# File the standard error of the process should be redirected to.
-# Defaults to "/tmp/<process name>.stderr".
-stderr = "/tmp/ls.stderr"
-
-# Key value pairs of environment variables to be injected into the process
-# at startup.
-# Defaults to [[]].
-env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
 
 # Process name.
 [processes.ls]

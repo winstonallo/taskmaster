@@ -1,10 +1,10 @@
 #![allow(unused)]
+use crate::conf::proc::types::HealthCheck;
+use serde::Deserialize;
 use std::{
     time::{Duration, Instant},
     vec,
 };
-
-use crate::conf::proc::types::HealthCheck;
 
 #[derive(Debug)]
 pub struct HealthCheckRunner {

@@ -14,6 +14,7 @@ fn dflt_retries() -> usize {
 
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct HealthCheck {
     cmd: String,
     #[serde(default)]
