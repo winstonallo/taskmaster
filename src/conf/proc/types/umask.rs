@@ -35,9 +35,7 @@ impl<'de> Deserialize<'de> for Umask {
         let mask = match u32::from_str_radix(&s, 8) {
             Ok(mask) => mask,
             Err(err) => {
-                return Err(serde::de::Error::custom(format!(
-                    "invalid value for umask: '{s}', expected 3 octal digits: {err}"
-                )));
+                return Err(serde::de::Error::custom(format!("invalid value for umask: '{s}', expected 3 octal digits: {err}")));
             }
         };
 
