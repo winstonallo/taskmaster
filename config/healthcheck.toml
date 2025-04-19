@@ -15,13 +15,11 @@ backoff = 1
 exitcodes = [0, 2]
 startretries = 3
 starttime = 1
-[processes.sleep.healthcheck]
-cmd = "/usr/bin/sleep"
-args = ["1"]
-timeout = 10
-retries = 3
-# default: no, possible values: {yes,no}
-killonfailure = true
+# [processes.sleep.healthcheck]
+# cmd = "/usr/bin/sleep"
+# args = ["1"]
+# timeout = 10
+# retries = 3
 
 stopsignals = ["TERM", "USR1"]
 stoptime = 5

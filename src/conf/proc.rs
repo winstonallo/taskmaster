@@ -133,6 +133,10 @@ impl ProcessConfig {
         self.starttime
     }
 
+    pub fn healthcheck(&self) -> &Option<HealthCheck> {
+        &self.healthcheck
+    }
+
     pub fn stopsignals(&self) -> &Vec<types::StopSignal> {
         &self.stopsignals
     }
