@@ -26,6 +26,7 @@ mod defaults;
 pub mod types;
 
 use serde::Deserialize;
+use types::HealthCheck;
 
 /// # ProcessConfig
 /// `src/conf/proc/mod.rs`
@@ -66,6 +67,8 @@ pub struct ProcessConfig {
 
     #[serde(default = "defaults::dflt_startttime")]
     starttime: u16,
+
+    healthcheck: Option<HealthCheck>,
 
     #[serde(default = "defaults::dflt_stopsignals")]
     stopsignals: Vec<types::StopSignal>,
@@ -174,6 +177,7 @@ impl ProcessConfig {
             exitcodes: vec![0],
             startretries: 1,
             starttime: 5,
+            healthcheck: None,
             stopsignals: vec![types::StopSignal(SIGTERM)],
             stoptime: 5,
             stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),

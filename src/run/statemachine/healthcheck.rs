@@ -1,4 +1,3 @@
-#![allow(unused)]
 use std::time::Instant;
 
 struct CommandResult {
