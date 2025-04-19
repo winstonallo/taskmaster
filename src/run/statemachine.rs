@@ -1,4 +1,4 @@
 mod desired;
-mod healthcheck;
+pub mod healthcheck;
 mod monitor;
 pub mod states;

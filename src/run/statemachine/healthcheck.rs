@@ -1,22 +1,23 @@
 #![allow(unused)]
 use std::time::Instant;
 
-struct CommandResult {
+#[derive(Debug)]
+pub struct CommandResult {
     exitcode: i32,
     msg: String,
 }
 
-struct HealthCheckEvent {
+#[derive(Debug)]
+pub struct HealthCheckEvent {
     process_name: String,
     event_type: HealthCheckEventType,
     timestamp: Instant,
     result: Option<CommandResult>, // only present for Passed/Failed events
 }
 
-enum HealthCheckEventType {
-    Requested,
-    Started,
+#[derive(Debug)]
+pub enum HealthCheckEventType {
     Passed,
-    Failed,
-    TimedOut,
+    Failed(String),
+    TimeOut,
 }

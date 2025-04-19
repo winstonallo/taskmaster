@@ -8,7 +8,7 @@ use crate::run::{
     statemachine::{
         desired::{desire_healthy, desire_idle, desire_ready},
         monitor::{
-            monitor_completed, monitor_failed, monitor_health_check, monitor_healthy, monitor_idle, monitor_ready, monitor_starting, monitor_stopped,
+            monitor_completed, monitor_failed, monitor_healthcheck, monitor_healthy, monitor_idle, monitor_ready, monitor_starting, monitor_stopped,
             monitor_stopping, monitor_waiting_for_retry,
         },
     },
@@ -53,7 +53,7 @@ impl ProcessState {
             Idle => monitor_idle(),
             Ready => monitor_ready(proc),
             Starting(started_at) => monitor_starting(started_at, proc),
-            HealthCheck(started_at) => monitor_health_check(started_at, proc),
+            HealthCheck(started_at) => monitor_healthcheck(started_at, proc),
             Healthy => monitor_healthy(proc),
             Failed(_process_state) => monitor_failed(proc),
             WaitingForRetry(retry_at) => monitor_waiting_for_retry(retry_at, proc),
