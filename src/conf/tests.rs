@@ -30,10 +30,7 @@ mod from_str {
     #[test]
     fn socketpath_default() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(
-            Config::from_str(conf_str).expect("could not parse config").socketpath(),
-            "/tmp/.taskmaster.sock".to_string()
-        )
+        assert_eq!(Config::from_str(conf_str).expect("could not parse config").socketpath(), "/tmp/.taskmaster.sock".to_string())
     }
 
     #[test]
@@ -70,10 +67,7 @@ mod from_str {
     fn args_default() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
         let expected_vec: Vec<String> = vec![];
-        assert_eq!(
-            Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].args(),
-            &expected_vec
-        )
+        assert_eq!(Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].args(), &expected_vec)
     }
 
     #[test]
@@ -193,10 +187,7 @@ mod from_str {
     #[test]
     fn exitcodes_default() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(
-            *Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].exitcodes(),
-            vec![0]
-        );
+        assert_eq!(*Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].exitcodes(), vec![0]);
     }
 
     #[test]
@@ -208,10 +199,7 @@ mod from_str {
     #[test]
     fn startretries_default() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(
-            Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].startretries(),
-            3
-        );
+        assert_eq!(Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].startretries(), 3);
     }
 
     #[test]
@@ -403,10 +391,7 @@ mod from_file {
         assert_eq!(conf.processes()["nginx"].stderr(), ("/tmp/nginx.stderr".to_string()));
         assert_eq!(
             conf.processes()["nginx"].env(),
-            &Some(vec![
-                (("STARTED_BY".to_string()), ("abied-ch".to_string())),
-                (("ANSWER".to_string()), ("42".to_string()))
-            ])
+            &Some(vec![(("STARTED_BY".to_string()), ("abied-ch".to_string())), (("ANSWER".to_string()), ("42".to_string()))])
         );
     }
 }

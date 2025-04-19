@@ -13,7 +13,7 @@ use crate::{
 pub use error::ProcessError;
 use libc::{c_int, signal, umask};
 
-use super::statemachine::states::ProcessState;
+use super::statemachine::{healthcheck::HealthCheckRunner, states::ProcessState};
 
 mod error;
 
@@ -24,8 +24,9 @@ pub struct Process {
     name: String,
     child: Option<Child>,
     conf: ProcessConfig,
-    startup_failures: u8,
-    runtime_failures: u8,
+    startup_failures: usize,
+    healthcheck: Option<HealthCheckRunner>,
+    runtime_failures: usize,
     state: ProcessState,
     desired_states: VecDeque<ProcessState>,
 }
@@ -33,12 +34,14 @@ pub struct Process {
 impl Process {
     pub fn from_process_config(conf: conf::proc::ProcessConfig, proc_name: &str) -> Self {
         let is_autostart = conf.autostart();
+        let healthcheck = conf.healthcheck().clone();
         Self {
             id: None,
             name: proc_name.to_string(),
             child: None,
             conf,
             startup_failures: 0,
+            healthcheck: healthcheck.as_ref().map(HealthCheckRunner::from_healthcheck_config),
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: match is_autostart {
@@ -97,10 +100,6 @@ impl Process {
         &mut self.conf
     }
 
-    pub fn runtime_failures(&self) -> u8 {
-        self.runtime_failures
-    }
-
     pub fn desired_states(&self) -> &VecDeque<ProcessState> {
         &self.desired_states
     }
@@ -109,11 +108,15 @@ impl Process {
         &mut self.desired_states
     }
 
+    pub fn runtime_failures(&self) -> usize {
+        self.runtime_failures
+    }
+
     pub fn increment_runtime_failures(&mut self) {
         self.runtime_failures = self.runtime_failures.saturating_add(1);
     }
 
-    pub fn startup_failures(&self) -> u8 {
+    pub fn startup_failures(&self) -> usize {
         self.startup_failures
     }
 
@@ -121,16 +124,44 @@ impl Process {
         self.startup_failures = self.startup_failures.saturating_add(1);
     }
 
-    /// Returns a `time::Instant` representing the next time the process should
-    /// be retried according to its configured backoff, assuming the failure
-    /// happened at the time of calling this method.
-    pub fn retry_at(&self) -> time::Instant {
-        Instant::now() + Duration::from_secs(self.conf.backoff() as u64)
+    pub fn healthcheck_failures(&self) -> usize {
+        assert!(self.healthcheck.is_some());
+        self.healthcheck.as_ref().unwrap().failures()
     }
 
-    /// Checks whether the process is healthy, according to `started_at` and its
-    /// configured healthcheck time.
-    pub fn healthy(&self, started_at: time::Instant) -> bool {
+    pub fn increment_healthcheck_failures(&mut self) {
+        self.healthcheck
+            .as_mut()
+            .expect("increment_healthcheck_failures called without a healthcheck configured")
+            .increment_failures();
+    }
+
+    pub fn has_healthcheck(&self) -> bool {
+        self.healthcheck.is_some()
+    }
+
+    pub fn healthcheck(&self) -> &HealthCheckRunner {
+        self.healthcheck.as_ref().expect("healthcheck called without a healthcheck configured")
+    }
+
+    pub fn healthcheck_mut(&mut self) -> &mut HealthCheckRunner {
+        self.healthcheck.as_mut().expect("healthcheck_mut called without a healthcheck configured")
+    }
+
+    pub fn retry_at(&self) -> time::Instant {
+        if self.config().healthcheck().is_some() {
+            Instant::now() + Duration::from_secs(self.conf.healthcheck().as_ref().unwrap().backoff() as u64)
+        } else {
+            Instant::now() + Duration::from_secs(self.conf.backoff() as u64)
+        }
+    }
+
+    pub fn start_healthcheck(&mut self) {
+        let mut healthcheck = self.healthcheck_mut();
+        healthcheck.start();
+    }
+
+    pub fn passed_starttime(&self, started_at: time::Instant) -> bool {
         Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
     }
 
@@ -227,7 +258,7 @@ impl Process {
         unsafe {
             libc::kill(child.id() as i32, libc::SIGTERM);
         }
-        proc_info!(self.name(), "shutting down, PID {} gracefully", child.id());
+        proc_info!(self, "shutting down, PID {} gracefully", child.id());
 
         Ok(())
     }
@@ -245,7 +276,7 @@ impl Process {
         };
 
         child.kill();
-        proc_info!(self.name(), "killed, PID {}", child.id());
+        proc_info!(self, "killed, PID {}", child.id());
         self.id.take();
 
         Ok(())
@@ -264,6 +295,7 @@ mod tests {
             child: None,
             conf: conf::proc::ProcessConfig::testconfig(),
             startup_failures: 0,
+            healthcheck: None,
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: VecDeque::new(),

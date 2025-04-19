@@ -127,14 +127,14 @@ macro_rules! log_fatal {
 #[macro_export]
 macro_rules! proc_info {
     ($proc:expr, $($arg:tt)*) => {
-        $crate::log::prefix_info($proc, format_args!($($arg)*))
+        $crate::log::prefix_info($proc.name(), format_args!($($arg)*))
     };
 }
 
 #[macro_export]
 macro_rules! proc_warning {
     ($proc:expr, $($arg:tt)*) => {
-        $crate::log::prefix_warning($proc, format_args!($($arg)*))
+        $crate::log::prefix_warning($proc.name(), format_args!($($arg)*))
     };
 }
 
