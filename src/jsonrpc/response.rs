@@ -114,6 +114,7 @@ impl Serialize for ErrorCode {
         serializer.serialize_i16(n)
     }
 }
+
 #[derive(Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ResponseErrorData {}

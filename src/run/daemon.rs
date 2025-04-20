@@ -76,7 +76,59 @@ impl Daemon {
     pub fn shutdown(&mut self) {
         self.shutting_down = true;
     }
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+
+    #[cfg(test)]
+    pub async fn run_once(&mut self) -> Result<(), Box<dyn Error + Send>> {
+        let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
+
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
+        let sender = Arc::new(sender);
+
+        tokio::select! {
+            accept_result = listener.accept() => {
+
+                if let Err(e) = accept_result {
+                    log_error!("Failed to accept connection: {}", e);
+                }
+
+                let mut socket = listener;
+                let clone = sender.clone();
+
+                let shutting_down = self.shutting_down;
+                tokio::spawn(async move {
+                    if shutting_down {
+
+                        let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
+                    } else {
+                        handle_client(socket, clone).await;
+                    }
+                });
+            },
+
+            Some((request, mut socket)) = receiver.recv() => {
+                let response = handle_request(self, request);
+
+                let msg = serde_json::to_string(&response).unwrap();
+
+                tokio::spawn(async move {
+                    if let Err(e) = socket.write(msg.as_bytes()).await {
+                        log_error!("error sending to socket: {}", e);
+                    }
+                });
+            },
+
+            _ = sleep(Duration::from_nanos(1)) => {
+                monitor_state(self.processes_mut());
+
+                if  self.shutting_down && self.no_process_running(){
+                    return Ok(());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
@@ -104,7 +156,7 @@ impl Daemon {
                         }
                     });
 
-                    listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group())?;
+                    listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).map_err(|e| Box::<dyn Error + Send>::from(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))))?;
                 },
 
                 Some((request, mut socket)) = receiver.recv() => {
@@ -185,5 +237,60 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
         Err(e) => {
             log_error!("Error reading from socket: {}", e);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::conf::Config;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn shutdown() {
+        let config_path = "tests/configs/sleep.toml";
+        let conf = Config::from_file(config_path).unwrap();
+        let daemon_handle = tokio::spawn(async move {
+            let mut daemon = Daemon::from_config(conf, config_path.to_string());
+            let result = daemon.run().await;
+            daemon.shutdown();
+            result
+        });
+
+        daemon_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn idle_to_healthcheck() {
+        let config_path = "tests/configs/sleep.toml";
+        let conf = Config::from_file(config_path).unwrap();
+        let mut d = Daemon::from_config(conf, config_path.to_string());
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_healthy() {
+        let config_path = "tests/configs/sleep.toml";
+        let conf = Config::from_file(config_path).unwrap();
+        let mut d = Daemon::from_config(conf, config_path.to_string());
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthy_to_completed() {
+        let config_path = "tests/configs/sleep.toml";
+        let conf = Config::from_file(config_path).unwrap();
+        let mut d = Daemon::from_config(conf, config_path.to_string());
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
+        d.shutdown();
     }
 }

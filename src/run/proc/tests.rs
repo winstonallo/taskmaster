@@ -3,8 +3,6 @@ use super::*;
 
 #[cfg(test)]
 mod tests {
-    use crate::conf::proc::types::HealthCheck;
-
     use super::*;
 
     #[test]
@@ -14,7 +12,7 @@ mod tests {
             name: "name".to_string(),
             child: None,
             conf: ProcessConfig::testconfig(),
-            healthcheck: HealthCheckRunner::from_healthcheck_config(&HealthCheck::default()),
+            healthcheck: HealthCheckRunner::uptime(),
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: VecDeque::new(),
