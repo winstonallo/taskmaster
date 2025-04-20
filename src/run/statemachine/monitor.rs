@@ -210,7 +210,7 @@ pub fn monitor_completed(p: &mut Process) -> Option<ProcessState> {
     }
 }
 
-pub fn monitor_stopping(p: &mut Process) -> Option<ProcessState> {
+pub fn monitor_stopping(killed_at: Instant, p: &mut Process) -> Option<ProcessState> {
     if let Some(code) = p.exited() {
         if !p.config().exitcodes().contains(&code) {
             proc_warning!(&p, "exited with unexpected code ({})", code);
@@ -219,6 +219,9 @@ pub fn monitor_stopping(p: &mut Process) -> Option<ProcessState> {
             proc_info!(&p, "exited with healthy code ({})", code);
             return Some(ProcessState::Completed);
         }
+    } else if killed_at.elapsed().as_secs() > p.config().stoptime() as u64 {
+        let _ = p.kill_forcefully();
+        return Some(ProcessState::Stopped);
     }
     None
 }
