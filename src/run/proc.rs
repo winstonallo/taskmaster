@@ -162,6 +162,7 @@ impl Process {
         match unsafe {
             Command::new(cmd_path)
                 .args(args)
+                .envs(self.conf.env().clone())
                 .stdout(stdout_file)
                 .stderr(stderr_file)
                 .current_dir(working_dir)
