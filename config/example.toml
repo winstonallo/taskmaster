@@ -50,14 +50,8 @@ autorestart = "always"
 # Defaults to [0].
 exitcodes = [0, 2]
 
-# Optional: configure a specific command to run to determine whether a 
-# process is healthy. Overrides `startttime`.
 [processes.sleep.healthcheck]
 
-# Time (in seconds) given for the program to startup - if the program 
-# runs for this time, it will be considered healthy.
-# Defaults to 5, max 65536.
-starttime = 1
 
 # Command to run in order to start this process.
 # Must be an absolute path.

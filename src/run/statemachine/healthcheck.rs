@@ -13,7 +13,6 @@ pub struct HealthCheckRunner {
     task: Option<tokio::task::JoinHandle<()>>,
     receiver: Option<tokio::sync::oneshot::Receiver<HealthCheckEvent>>,
     check: HealthCheckType,
-    timeout: usize,
     retries: usize,
     backoff: usize,
 }
@@ -31,7 +30,6 @@ impl HealthCheckRunner {
             task: None,
             receiver: None,
             check: hc.healthcheck().clone(),
-            timeout: hc.timeout(),
             retries: hc.retries(),
             backoff: hc.backoff(),
         }
@@ -50,12 +48,19 @@ impl HealthCheckRunner {
 
     pub fn args(&self) -> Vec<String> {
         match &self.check {
-            HealthCheckType::Command { cmd: _, args } => args.clone(),
+            HealthCheckType::Command { cmd: _, args, .. } => args.clone(),
             _ => panic!("args() called on an Uptime HealthCheck"),
         }
     }
 
-    pub fn starttime(&self) -> u8 {
+    pub fn timeout(&self) -> usize {
+        match &self.check {
+            HealthCheckType::Command { cmd: _, args: _, timeout } => *timeout,
+            _ => panic!("args() called on an Uptime HealthCheck"),
+        }
+    }
+
+    pub fn starttime(&self) -> u16 {
         match &self.check {
             HealthCheckType::Uptime { starttime } => *starttime,
             _ => panic!("starttime() called on a Command HealthCheck"),
@@ -104,12 +109,14 @@ impl HealthCheckRunner {
     }
 
     pub fn start(&mut self) {
+        assert!(matches!(self.check, HealthCheckType::Command { .. }));
+
         let (sender, receiver) = tokio::sync::oneshot::channel::<HealthCheckEvent>();
         self.receiver = Some(receiver);
 
         let cmd = self.cmd().clone();
         let args = self.args().to_vec();
-        let timeout = Duration::from_secs(self.timeout as u64);
+        let timeout = Duration::from_secs(self.timeout() as u64);
 
         let handle = tokio::task::spawn(async move {
             let result = HealthCheckRunner::spawn(&cmd, &args, timeout).await;

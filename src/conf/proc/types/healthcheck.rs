@@ -16,23 +16,37 @@ fn dflt_retries() -> usize {
 #[serde(untagged)]
 pub enum HealthCheckType {
     Command {
+        /// Command to run as a healthcheck.
+        ///
+        /// Required.
         cmd: String,
+
+        /// Arguments to pass to `cmd`.
+        ///
+        /// Defaults to `[]`.
         #[serde(default)]
         args: Vec<String>,
+
+        /// Time, in seconds, to let the healthcheck command run through before considering
+        /// it failed.
+        ///
+        /// Defaults to 10 seconds.
+        #[serde(default = "dflt_timeout")]
+        timeout: usize,
     },
     Uptime {
-        starttime: u8,
+        /// Time (in seconds) after which the process will be deemed healthy.
+        ///
+        /// Defaults to `5`, max `65536`.
+        starttime: u16,
     },
 }
 
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
-#[serde(deny_unknown_fields)]
 pub struct HealthCheck {
     #[serde(flatten)]
     check: HealthCheckType,
-    #[serde(default = "dflt_timeout")]
-    timeout: usize,
     #[serde(default = "dflt_retries")]
     retries: usize,
     #[serde(default = "dflt_backoff")]
@@ -43,7 +57,6 @@ impl Default for HealthCheck {
     fn default() -> Self {
         Self {
             check: HealthCheckType::Uptime { starttime: 5 },
-            timeout: dflt_timeout(),
             retries: dflt_retries(),
             backoff: dflt_backoff(),
         }
@@ -64,12 +77,12 @@ impl HealthCheck {
 
     pub fn args(&self) -> &[String] {
         match &self.check {
-            HealthCheckType::Command { cmd: _, args } => args,
+            HealthCheckType::Command { cmd: _, args, timeout: _ } => args,
             _ => panic!("args() called on an Uptime HealthCheck"),
         }
     }
 
-    pub fn starttime(&self) -> u8 {
+    pub fn starttime(&self) -> u16 {
         match &self.check {
             HealthCheckType::Uptime { starttime } => *starttime,
             _ => panic!("starttime() called on a Command HealthCheck"),
@@ -77,7 +90,10 @@ impl HealthCheck {
     }
 
     pub fn timeout(&self) -> usize {
-        self.timeout
+        match &self.check {
+            HealthCheckType::Command { cmd: _, args: _, timeout } => *timeout,
+            _ => panic!("timeout() called on an Uptime HealthCheck"),
+        }
     }
 
     pub fn retries(&self) -> usize {

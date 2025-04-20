@@ -76,9 +76,14 @@ pub struct ProcessConfig {
     /// - `on-failure[:max-retries]`: Try to restart the process `max-retries` times
     ///   when it exits unexpectedly.
     /// - `always`: Always restart when exiting.
+    ///
+    /// Defaults to `no`.
     #[serde(default = "defaults::dflt_autorestart")]
     autorestart: types::AutoRestart,
 
+    /// List of exit codes to be interpreted as successful.
+    ///
+    /// Defaults to `[0]`.
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
