@@ -27,7 +27,7 @@ pub enum HealthCheckType {
         #[serde(default)]
         args: Vec<String>,
 
-        /// Time, in seconds, to let the healthcheck command run through before considering
+        /// Time (in seconds) to let the healthcheck command run through before considering
         /// it failed.
         ///
         /// Defaults to 10 seconds.
@@ -47,8 +47,16 @@ pub enum HealthCheckType {
 pub struct HealthCheck {
     #[serde(flatten)]
     check: HealthCheckType,
+
+    /// How many times to retry the healthcheck before giving up.
+    ///
+    /// Defaults to `5`.
     #[serde(default = "dflt_retries")]
     retries: usize,
+
+    /// Time (in seconds) to wait after a failed healthcheck before retrying.
+    ///
+    /// Defaults to `5`.
     #[serde(default = "dflt_backoff")]
     backoff: usize,
 }

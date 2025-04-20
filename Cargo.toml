@@ -16,6 +16,8 @@ tokio = { version = "1.44.1", features = ["full"] }
 
 [[bin]]
 name = "taskmaster"
+path = "src/bin/taskmaster.rs"
 
 [[bin]]
 name = "taskshell"
+path = "src/bin/taskshell.rs"

@@ -87,22 +87,60 @@ pub struct ProcessConfig {
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
+    /// Healthcheck configuration. Must be one of:
+    /// - Command HealthCheck:
+    /// ```toml
+    /// cmd = <string>
+    /// args = <<string>>
+    /// timeout = <int>
+    /// retries = <int>
+    /// backoff = <int>
+    /// ```
+    /// - Uptime HealthCheck:
+    ///
+    /// ```toml
+    /// starttime = <int>
+    /// timeout = <int>
+    /// retries = <int>
+    /// backoff = <int>
+    /// ```
+    ///
+    /// Defaults to `{starttime = 5, retries = 5, backoff = 5}`
     #[serde(default)]
     healthcheck: HealthCheck,
 
+    /// List of signals triggering able to stop the process, options are any
+    /// FreeBSD signal (<https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html>).
+    ///
+    /// Defaults to `["TERM"]`.
     #[serde(default = "defaults::dflt_stopsignals")]
     stopsignals: Vec<types::StopSignal>,
 
+    /// Time (in seconds) to wait for the process to stop. If it does not stop within
+    /// this time, it will be killed forcibly.
+    ///
+    /// Defaults to `5`, max `255`.
     #[serde(default = "defaults::dflt_stoptime")]
     stoptime: u8,
 
+    /// File the standard output of the process should be redirected to.
+    ///
+    /// Defaults to `/tmp/<process_name>.stdout`.
     #[serde(default = "defaults::dflt_stdout")]
     stdout: types::WritableFile,
 
+    /// File the standard error of the process should be redirected to.
+    ///
+    /// Defaults to `/tmp/<process_name>.stderr`.
     #[serde(default = "defaults::dflt_stderr")]
     stderr: types::WritableFile,
 
-    env: Option<Vec<(String, String)>>,
+    /// Key value pairs of environment variables to be injected into the process
+    /// at startup.
+    ///
+    /// Defaults to an empty list.
+    #[serde(default)]
+    env: Vec<(String, String)>,
 }
 
 #[allow(unused)]
@@ -159,7 +197,7 @@ impl ProcessConfig {
         self.stderr.path()
     }
 
-    pub fn env(&self) -> &Option<Vec<(String, String)>> {
+    pub fn env(&self) -> &Vec<(String, String)> {
         &self.env
     }
 
@@ -189,7 +227,7 @@ impl ProcessConfig {
             stoptime: 5,
             stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
             stderr: types::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
-            env: None,
+            env: Vec::new(),
         }
     }
 }

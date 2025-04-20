@@ -22,7 +22,7 @@ mod from_str {
         assert_eq!(conf.processes()["nginx"].stoptime(), defaults::dflt_stoptime());
         assert_eq!(conf.processes()["nginx"].stdout(), "/tmp/nginx.stdout");
         assert_eq!(conf.processes()["nginx"].stderr(), "/tmp/nginx.stderr");
-        assert_eq!(conf.processes()["nginx"].env(), &None);
+        assert_eq!(conf.processes()["nginx"].env(), &Vec::new());
     }
 
     #[test]
@@ -311,7 +311,7 @@ mod from_str {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nenv = [[\"KEY\", \"VALUE\"]]";
         let conf = Config::from_str(conf_str).expect("could not parse config");
         let env = conf.processes().get("nginx").unwrap().env();
-        assert_eq!(env, &Some(vec![("KEY".to_string(), "VALUE".to_string())]));
+        assert_eq!(env, &vec![("KEY".to_string(), "VALUE".to_string())]);
     }
 
     #[test]
@@ -376,7 +376,7 @@ mod from_file {
         assert_eq!(conf.processes()["sleep"].stderr(), ("/tmp/sleep.stderr".to_string()));
         assert_eq!(
             conf.processes()["sleep"].env(),
-            &Some(vec![(("STARTED_BY".to_string()), ("abied-ch".to_string())), (("ANSWER".to_string()), ("42".to_string()))])
+            &vec![(("STARTED_BY".to_string()), ("abied-ch".to_string())), (("ANSWER".to_string()), ("42".to_string()))]
         );
     }
 }

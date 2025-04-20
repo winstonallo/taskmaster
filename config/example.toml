@@ -52,7 +52,6 @@ exitcodes = [0, 2]
 
 [processes.sleep.healthcheck]
 
-
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
@@ -65,7 +64,6 @@ args = ["2"]
 # Time, in seconds, given for the healthcheck to run through. If it runs for longer,
 # it will be considered failed.
 timeout = 1
-
 
 # How many times to retry the healthcheck.
 retries = 3
