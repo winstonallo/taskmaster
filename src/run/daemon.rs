@@ -303,4 +303,33 @@ mod tests {
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
         d.shutdown();
     }
+
+    #[tokio::test]
+    async fn healthy_to_stopped() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["10".to_string()]).set_stoptime(1);
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        // Run once to start the process and wait for `starttime`.
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+
+        // Run once to update the state.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+
+        // Push desired Stopped state, run once to update state.
+        let _ = d.processes_mut().get_mut("sleep").unwrap().push_desired_state(ProcessState::Stopped);
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
+
+        // Wait for `stoptime` and run once to update state.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        d.shutdown();
+    }
 }
