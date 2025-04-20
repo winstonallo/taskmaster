@@ -59,6 +59,7 @@ fn healthcheck_command(started_at: &Instant, p: &mut Process) -> Option<ProcessS
     assert!(p.has_command_healthcheck(), "a process without configured healthcheck should never be used here");
 
     if let Some(exited_state) = exited_state(p) {
+        p.healthcheck_mut().clear();
         return Some(exited_state);
     }
 
