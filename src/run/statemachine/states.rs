@@ -56,7 +56,7 @@ impl ProcessState {
             Failed(_process_state) => monitor_failed(proc),
             WaitingForRetry(retry_at) => monitor_waiting_for_retry(retry_at, proc),
             Completed => monitor_completed(proc),
-            Stopping(_) => monitor_stopping(proc),
+            Stopping(killed_at) => monitor_stopping(*killed_at, proc),
             Stopped => monitor_stopped(proc),
         }
     }
