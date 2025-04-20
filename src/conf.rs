@@ -11,10 +11,19 @@ mod tests;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
+    /// Path to the socket used for communication between taskmaster and its client.
+    ///
+    /// Defaults to `/tmp/.taskmaster.sock`
     #[serde(default = "defaults::dflt_socketpath")]
     socketpath: String,
+
+    /// Name of the group to be used for authenticating the client (similarly to
+    /// the docker group).
+    ///
+    /// Defaults to `taskmaster`.
     #[serde(default = "defaults::dflt_authgroup")]
     authgroup: String,
+
     #[serde(default)]
     processes: HashMap<String, ProcessConfig>,
 }

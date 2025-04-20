@@ -37,22 +37,45 @@ use types::HealthCheck;
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessConfig {
+    /// Command to run in order to start this process.
+    ///
+    /// Required.
     cmd: types::ExecutableFile,
 
+    /// Args to pass to `cmd`.
+    ///
+    /// Defaults to `Vec::new()`.
     #[serde(default = "defaults::dflt_args")]
     args: Vec<String>,
 
+    /// Number of copies of this process to start.
+    ///
+    /// Defaults to `1`.
     #[serde(default = "defaults::dflt_processes")]
     processes: u8,
 
+    /// Mask for files created by the process.
+    ///
+    /// Defaults to `022`.
     #[serde(default = "defaults::dflt_umask")]
     umask: types::Umask,
 
+    /// Working directory for the process. Must be an absolute path.
+    ///
+    /// Required.
     workingdir: types::AccessibleDirectory,
 
+    /// Whether to start the process automatically when starting `taskmaster`.
+    ///
+    /// Defaults to `false`.
     #[serde(default = "defaults::dflt_autostart")]
     autostart: bool,
 
+    /// Restart the process when it quits, options are:
+    /// - `no`: Never restart the process automatically.
+    /// - `on-failure[:max-retries]`: Try to restart the process `max-retries` times
+    ///   when it exits unexpectedly.
+    /// - `always`: Always restart when exiting.
     #[serde(default = "defaults::dflt_autorestart")]
     autorestart: types::AutoRestart,
 
