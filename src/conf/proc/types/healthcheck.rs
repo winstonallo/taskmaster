@@ -30,7 +30,7 @@ pub enum HealthCheckType {
         /// Time (in seconds) to let the healthcheck command run through before considering
         /// it failed.
         ///
-        /// Defaults to 10 seconds.
+        /// Defaults to `10`.
         #[serde(default = "dflt_timeout")]
         timeout: usize,
     },
