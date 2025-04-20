@@ -136,7 +136,8 @@ impl Process {
             .increment_failures();
     }
 
-    pub fn has_healthcheck(&self) -> bool {
+    /// Returns `true` if a dynamic healthcheck is configured for this process.
+    pub fn has_command_healthcheck(&self) -> bool {
         self.healthcheck.is_some()
     }
 
@@ -149,8 +150,8 @@ impl Process {
     }
 
     pub fn retry_at(&self) -> time::Instant {
-        if self.config().healthcheck().is_some() {
-            Instant::now() + Duration::from_secs(self.conf.healthcheck().as_ref().unwrap().backoff() as u64)
+        if self.has_command_healthcheck() {
+            Instant::now() + Duration::from_secs(self.healthcheck().backoff() as u64)
         } else {
             Instant::now() + Duration::from_secs(self.conf.backoff() as u64)
         }
@@ -197,6 +198,10 @@ impl Process {
     }
 
     pub fn start(&mut self) -> Result<(), ProcessError> {
+        if self.child.is_some() {
+            return Err(ProcessError::AlreadyRunning);
+        }
+
         assert_ne!(self.state(), ProcessState::Healthy);
 
         self.child = match self.spawn() {
@@ -246,7 +251,7 @@ impl Process {
     pub fn kill_gracefully(&mut self) -> Result<(), &str> {
         use ProcessState::*;
         match self.state() {
-            HealthCheck(_) | Healthy => {}
+            HealthCheck(_) | Healthy | Failed(_) => {}
             _ => return Err("process not running"),
         }
 

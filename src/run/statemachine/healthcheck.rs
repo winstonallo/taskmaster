@@ -38,6 +38,14 @@ impl HealthCheckRunner {
         }
     }
 
+    pub fn cmd(&self) -> &str {
+        &self.cmd
+    }
+
+    pub fn args(&self) -> &Vec<String> {
+        &self.args
+    }
+
     pub fn failures(&self) -> usize {
         self.failures
     }

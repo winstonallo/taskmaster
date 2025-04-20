@@ -45,7 +45,6 @@ impl State {
         match process_state {
             ProcessState::Idle => Self::Idle,
             ProcessState::Ready => Self::Ready,
-            ProcessState::Starting(instant) => Self::Starting(instant.elapsed().as_secs()),
             ProcessState::HealthCheck(instant) => Self::HealthCheck(instant.elapsed().as_secs()),
             ProcessState::Healthy => Self::Healthy,
             ProcessState::Failed(_) => Self::Failed,

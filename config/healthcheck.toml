@@ -5,7 +5,7 @@ authgroup = "winstonallo"
 [processes.sleep]
 
 cmd = "/usr/bin/sleep"
-args = ["1"]
+args = ["60"]
 processes = 1
 umask = "022"
 workingdir = "/tmp"
@@ -19,7 +19,7 @@ starttime = 1
 cmd = "/usr/bin/sleep"
 args = ["2"]
 timeout = 1
-retries = 3
+retries = 1
 
 stopsignals = ["TERM", "USR1"]
 stoptime = 5
