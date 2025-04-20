@@ -15,14 +15,7 @@ pub fn desire_idle(proc: &mut Process) -> (Option<ProcessState>, bool) {
             let _ = proc.kill_gracefully();
             (Some(Stopping(Instant::now())), RETAIN_DESIRED_STATE)
         }
-        Stopping(stopped_at) => {
-            if proc.config().stoptime() <= stopped_at.elapsed().as_secs() as u8 {
-                let _ = proc.kill_forcefully();
-                (Some(Idle), RETAIN_DESIRED_STATE)
-            } else {
-                (None, RETAIN_DESIRED_STATE)
-            }
-        }
+        Stopping(_) => (None, RETAIN_DESIRED_STATE),
         _ => (Some(Idle), REMOVE_DESIRED_STATE),
     }
 }
@@ -35,14 +28,7 @@ pub fn desire_ready(proc: &mut Process) -> (Option<ProcessState>, bool) {
             let _ = proc.kill_gracefully();
             (Some(Stopping(Instant::now())), RETAIN_DESIRED_STATE)
         }
-        Stopping(stopped_at) => {
-            if proc.config().stoptime() <= stopped_at.elapsed().as_secs() as u8 {
-                let _ = proc.kill_forcefully();
-                (Some(Ready), REMOVE_DESIRED_STATE)
-            } else {
-                (None, RETAIN_DESIRED_STATE)
-            }
-        }
+        Stopping(_) => (None, RETAIN_DESIRED_STATE),
         _ => (Some(Ready), REMOVE_DESIRED_STATE),
     }
 }
@@ -51,14 +37,7 @@ pub fn desire_healthy(proc: &mut Process) -> (Option<ProcessState>, bool) {
     match proc.state().clone() {
         Idle => (Some(Ready), REMOVE_DESIRED_STATE),
         Ready | HealthCheck(_) | Healthy => (None, REMOVE_DESIRED_STATE),
-        Stopping(stopped_at) => {
-            if proc.config().stoptime() <= stopped_at.elapsed().as_secs() as u8 {
-                let _ = proc.kill_forcefully();
-                (Some(Ready), REMOVE_DESIRED_STATE)
-            } else {
-                (None, RETAIN_DESIRED_STATE)
-            }
-        }
+        Stopping(_) => (None, RETAIN_DESIRED_STATE),
         _ => (Some(Ready), REMOVE_DESIRED_STATE),
     }
 }
