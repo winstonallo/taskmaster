@@ -57,7 +57,7 @@ pub enum HealthCheckType {
         ///
         /// starttime = 10
         ///
-        /// Defaults to `5`, max `65536`.
+        /// Defaults to `1`, max `65536`.
         starttime: u16,
     },
 }
@@ -111,7 +111,7 @@ pub struct HealthCheck {
 impl Default for HealthCheck {
     fn default() -> Self {
         Self {
-            check: HealthCheckType::Uptime { starttime: 5 },
+            check: HealthCheckType::Uptime { starttime: 1 },
             retries: dflt_retries(),
             backoff: dflt_backoff(),
         }

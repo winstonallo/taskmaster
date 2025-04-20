@@ -261,37 +261,45 @@ mod tests {
     #[tokio::test]
     async fn idle_to_healthcheck() {
         let mut proc = ProcessConfig::default();
-        proc.set_cmd("/usr/bin/sleep");
-        proc.set_args(vec!["2".to_string()]);
+        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["2".to_string()]);
         let mut conf = Config::random();
-        conf.add_process("sleep", proc);
-        conf.set_authgroup("root");
-        let mut d = Daemon::from_config(conf, "idc".to_string());
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
         let _ = d.run_once().await;
+
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
         d.shutdown();
     }
 
     #[tokio::test]
     async fn healthcheck_to_healthy() {
-        let config_path = "tests/configs/sleep.toml";
-        let conf = Config::from_file(config_path).unwrap();
-        let mut d = Daemon::from_config(conf, config_path.to_string());
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["2".to_string()]);
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
         let _ = d.run_once().await;
         tokio::time::sleep(Duration::from_secs(1)).await;
         let _ = d.run_once().await;
+
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
         d.shutdown();
     }
 
     #[tokio::test]
     async fn healthy_to_completed() {
-        let config_path = "tests/configs/sleep.toml";
-        let conf = Config::from_file(config_path).unwrap();
-        let mut d = Daemon::from_config(conf, config_path.to_string());
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["2".to_string()]);
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
         let _ = d.run_once().await;
         tokio::time::sleep(Duration::from_secs(2)).await;
         let _ = d.run_once().await;
+
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
         d.shutdown();
     }

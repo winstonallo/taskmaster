@@ -111,17 +111,17 @@ impl Default for Config {
 
 #[cfg(test)]
 impl Config {
-    pub fn set_socketpath(&mut self, socketpath: &str) -> &Self {
+    pub fn set_socketpath(&mut self, socketpath: &str) -> &mut Self {
         self.socketpath = socketpath.to_string();
         self
     }
 
-    pub fn set_authgroup(&mut self, authgroup: &str) -> &Self {
+    pub fn set_authgroup(&mut self, authgroup: &str) -> &mut Self {
         self.authgroup = authgroup.to_string();
         self
     }
 
-    pub fn add_process(&mut self, name: &str, process: ProcessConfig) -> &Self {
+    pub fn add_process(&mut self, name: &str, process: ProcessConfig) -> &mut Self {
         self.processes.insert(name.to_string(), process);
         self
     }

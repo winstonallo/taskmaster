@@ -330,72 +330,72 @@ impl Default for ProcessConfig {
 
 #[cfg(test)]
 impl ProcessConfig {
-    pub fn set_cmd(&mut self, cmd: &str) -> &Self {
+    pub fn set_cmd(&mut self, cmd: &str) -> &mut Self {
         self.cmd = ExecutableFile::new(cmd);
         self
     }
 
-    pub fn set_args(&mut self, args: Vec<String>) -> &Self {
+    pub fn set_args(&mut self, args: Vec<String>) -> &mut Self {
         self.args = args;
         self
     }
 
-    pub fn set_processes(&mut self, processes: u8) -> &Self {
+    pub fn set_processes(&mut self, processes: u8) -> &mut Self {
         self.processes = processes;
         self
     }
 
-    pub fn set_umask(&mut self, mask: u32) -> &Self {
+    pub fn set_umask(&mut self, mask: u32) -> &mut Self {
         self.umask = Umask::new(mask);
         self
     }
 
-    pub fn set_workingdir(&mut self, dir: &str) -> &Self {
+    pub fn set_workingdir(&mut self, dir: &str) -> &mut Self {
         self.workingdir = AccessibleDirectory::new(dir);
         self
     }
 
-    pub fn set_autostart(&mut self, autostart: bool) -> &Self {
+    pub fn set_autostart(&mut self, autostart: bool) -> &mut Self {
         self.autostart = autostart;
         self
     }
 
-    pub fn set_autorestart(&mut self, autorestart: AutoRestart) -> &Self {
+    pub fn set_autorestart(&mut self, autorestart: AutoRestart) -> &mut Self {
         self.autorestart = autorestart;
         self
     }
 
-    pub fn set_exitcodes(&mut self, exitcodes: &Vec<i32>) -> &Self {
+    pub fn set_exitcodes(&mut self, exitcodes: &Vec<i32>) -> &mut Self {
         self.exitcodes = exitcodes.to_owned();
         self
     }
 
-    pub fn set_healthcheck(&mut self, hc: HealthCheck) -> &Self {
+    pub fn set_healthcheck(&mut self, hc: HealthCheck) -> &mut Self {
         self.healthcheck = hc;
         self
     }
 
-    pub fn set_stopsignals(&mut self, stopsignals: Vec<StopSignal>) -> &Self {
+    pub fn set_stopsignals(&mut self, stopsignals: Vec<StopSignal>) -> &mut Self {
         self.stopsignals = stopsignals;
         self
     }
 
-    pub fn set_stoptime(&mut self, stoptime: u8) -> &Self {
+    pub fn set_stoptime(&mut self, stoptime: u8) -> &mut Self {
         self.stoptime = stoptime;
         self
     }
 
-    pub fn set_test_stdout(&mut self, path: &str) -> &Self {
+    pub fn set_test_stdout(&mut self, path: &str) -> &mut Self {
         self.stdout = WritableFile::from_path(path);
         self
     }
 
-    pub fn set_test_stderr_test(&mut self, path: &str) -> &Self {
+    pub fn set_test_stderr_test(&mut self, path: &str) -> &mut Self {
         self.stderr = WritableFile::from_path(path);
         self
     }
 
-    pub fn set_env(&mut self, env: Vec<(String, String)>) -> &Self {
+    pub fn set_env(&mut self, env: Vec<(String, String)>) -> &mut Self {
         self.env = env;
         self
     }
