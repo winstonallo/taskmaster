@@ -22,20 +22,8 @@ pub fn dflt_autorestart() -> types::AutoRestart {
     types::AutoRestart::default()
 }
 
-pub fn dflt_backoff() -> u8 {
-    5
-}
-
 pub fn dflt_exitcodes() -> Vec<i32> {
     vec![0i32]
-}
-
-pub fn dflt_startretries() -> u8 {
-    3
-}
-
-pub fn dflt_startttime() -> u16 {
-    5
 }
 
 pub fn dflt_stopsignals() -> Vec<types::StopSignal> {

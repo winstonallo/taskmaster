@@ -46,23 +46,20 @@ autostart = true
 # - "always": Always restart when exiting, no matter the status.
 autorestart = "on-failure[:5]"
 
-# Backoff time (in seconds) for retries.
-# Defaults to 5, max 255.
-backoff = 1
-
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
 exitcodes = [0, 2]
 
-# Number of attempts to start the program before giving up.
-# Defaults to 3, max 255.
-startretries = 3
+# Optional: configure a specific command to run to determine whether a 
+# process is healthy. Overrides `startttime`.
+[processes.sleep.healthcheck]
 
 # Time (in seconds) given for the program to startup - if the program 
 # runs for this time, it will be considered healthy.
 # Defaults to 5, max 65536.
 starttime = 1
 
+<<<<<<< HEAD
 # List of signals triggering a stop of the process, options are any 
 # FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).
 # Defaults to ["TERM"].
@@ -90,10 +87,11 @@ env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
 # process is healthy. Overrides `startttime`.
 [processes.sleep.healthcheck]
 
+=======
+>>>>>>> @{-1}
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-
 cmd = "/usr/bin/sleep"
 
 # Arguments to pass to 'cmd'.
@@ -103,6 +101,7 @@ args = ["2"]
 # Time, in seconds, given for the healthcheck to run through. If it runs for longer,
 # it will be considered failed.
 timeout = 1
+
 
 # How many times to retry the healthcheck.
 retries = 3
@@ -148,22 +147,10 @@ autostart = true
 # - "always": Always restart when exiting, no matter the status.
 autorestart = "on-failure[:1]"
 
-# Backoff time (in seconds) for retries.
-# Defaults to 5, max 255.
-backoff = 2
-
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
 exitcodes = [0]
 
-# Number of attempts to start the program before giving up.
-# Defaults to 3, max 255.
-startretries = 3
-
-# Time (in seconds) given for the program to startup - if the program 
-# does not start within this time, it will be considered a failure.
-# Defaults to 5, max 65536.
-starttime = 2
 
 # List of signals triggering a stop of the process, options are any 
 # FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).

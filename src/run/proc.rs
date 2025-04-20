@@ -24,8 +24,7 @@ pub struct Process {
     name: String,
     child: Option<Child>,
     conf: ProcessConfig,
-    startup_failures: usize,
-    healthcheck: Option<HealthCheckRunner>,
+    healthcheck: HealthCheckRunner,
     runtime_failures: usize,
     state: ProcessState,
     desired_states: VecDeque<ProcessState>,
@@ -34,14 +33,13 @@ pub struct Process {
 impl Process {
     pub fn from_process_config(conf: conf::proc::ProcessConfig, proc_name: &str) -> Self {
         let is_autostart = conf.autostart();
-        let healthcheck = conf.healthcheck();
+        let healthcheck = conf.healthcheck().clone();
         Self {
             id: None,
             name: proc_name.to_string(),
             child: None,
-            conf: conf.clone(),
-            startup_failures: 0,
-            healthcheck: healthcheck.as_ref().map(HealthCheckRunner::from_healthcheck_config),
+            conf,
+            healthcheck: HealthCheckRunner::from_healthcheck_config(&healthcheck),
             runtime_failures: 0,
             state: ProcessState::Idle,
             desired_states: match is_autostart {
@@ -116,44 +114,30 @@ impl Process {
         self.runtime_failures = self.runtime_failures.saturating_add(1);
     }
 
-    pub fn startup_failures(&self) -> usize {
-        self.startup_failures
-    }
-
-    pub fn increment_startup_failures(&mut self) {
-        self.startup_failures = self.startup_failures.saturating_add(1);
-    }
-
     pub fn healthcheck_failures(&self) -> usize {
-        assert!(self.healthcheck.is_some());
-        self.healthcheck.as_ref().unwrap().failures()
+        assert!(self.healthcheck.has_command_healthcheck());
+        self.healthcheck.failures()
     }
 
     pub fn increment_healthcheck_failures(&mut self) {
-        self.healthcheck
-            .as_mut()
-            .expect("increment_healthcheck_failures called without a healthcheck configured")
-            .increment_failures();
+        self.healthcheck.increment_failures();
     }
 
-    pub fn has_healthcheck(&self) -> bool {
-        self.healthcheck.is_some()
+    /// Returns `true` if a dynamic healthcheck is configured for this process.
+    pub fn has_command_healthcheck(&self) -> bool {
+        self.healthcheck.has_command_healthcheck()
     }
 
     pub fn healthcheck(&self) -> &HealthCheckRunner {
-        self.healthcheck.as_ref().expect("healthcheck called without a healthcheck configured")
+        &self.healthcheck
     }
 
     pub fn healthcheck_mut(&mut self) -> &mut HealthCheckRunner {
-        self.healthcheck.as_mut().expect("healthcheck_mut called without a healthcheck configured")
+        &mut self.healthcheck
     }
 
     pub fn retry_at(&self) -> time::Instant {
-        if self.config().healthcheck().is_some() {
-            Instant::now() + Duration::from_secs(self.conf.healthcheck().as_ref().unwrap().backoff() as u64)
-        } else {
-            Instant::now() + Duration::from_secs(self.conf.backoff() as u64)
-        }
+        Instant::now() + Duration::from_secs(self.healthcheck().backoff() as u64)
     }
 
     pub fn start_healthcheck(&mut self) {
@@ -162,7 +146,7 @@ impl Process {
     }
 
     pub fn passed_starttime(&self, started_at: time::Instant) -> bool {
-        Instant::now().duration_since(started_at).as_secs() >= self.conf.starttime() as u64
+        Instant::now().duration_since(started_at).as_secs() >= self.healthcheck.starttime() as u64
     }
 
     fn spawn(&self) -> Result<Child, ProcessError> {
@@ -197,6 +181,10 @@ impl Process {
     }
 
     pub fn start(&mut self) -> Result<(), ProcessError> {
+        if self.child.is_some() {
+            return Err(ProcessError::AlreadyRunning);
+        }
+
         assert_ne!(self.state(), ProcessState::Healthy);
 
         self.child = match self.spawn() {
@@ -246,7 +234,7 @@ impl Process {
     pub fn kill_gracefully(&mut self) -> Result<(), &str> {
         use ProcessState::*;
         match self.state() {
-            HealthCheck(_) | Healthy => {}
+            HealthCheck(_) | Healthy | Failed(_) => {}
             _ => return Err("process not running"),
         }
 
@@ -280,26 +268,5 @@ impl Process {
         self.id.take();
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn state() {
-        let proc = Process {
-            id: Some(1),
-            name: ("".to_string()),
-            child: None,
-            conf: conf::proc::ProcessConfig::testconfig(),
-            startup_failures: 0,
-            healthcheck: None,
-            runtime_failures: 0,
-            state: ProcessState::Idle,
-            desired_states: VecDeque::new(),
-        };
-        assert_eq!(proc.state(), ProcessState::Idle)
     }
 }

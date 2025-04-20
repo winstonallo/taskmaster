@@ -12,13 +12,25 @@ fn dflt_retries() -> usize {
     5
 }
 
+#[derive(Deserialize, Debug, Clone)]
+#[serde(untagged)]
+pub enum HealthCheckType {
+    Command {
+        cmd: String,
+        #[serde(default)]
+        args: Vec<String>,
+    },
+    Uptime {
+        starttime: u8,
+    },
+}
+
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct HealthCheck {
-    cmd: String,
-    #[serde(default)]
-    args: Vec<String>,
+    #[serde(flatten)]
+    check: HealthCheckType,
     #[serde(default = "dflt_timeout")]
     timeout: usize,
     #[serde(default = "dflt_retries")]
@@ -27,13 +39,41 @@ pub struct HealthCheck {
     backoff: usize,
 }
 
+impl Default for HealthCheck {
+    fn default() -> Self {
+        Self {
+            check: HealthCheckType::Uptime { starttime: 5 },
+            timeout: dflt_timeout(),
+            retries: dflt_retries(),
+            backoff: dflt_backoff(),
+        }
+    }
+}
+
 impl HealthCheck {
+    pub fn healthcheck(&self) -> &HealthCheckType {
+        &self.check
+    }
+
     pub fn cmd(&self) -> &str {
-        &self.cmd
+        match &self.check {
+            HealthCheckType::Command { cmd, .. } => cmd,
+            _ => panic!("cmd() called on an Uptime HealthCheck"),
+        }
     }
 
     pub fn args(&self) -> &[String] {
-        &self.args
+        match &self.check {
+            HealthCheckType::Command { cmd: _, args } => args,
+            _ => panic!("args() called on an Uptime HealthCheck"),
+        }
+    }
+
+    pub fn starttime(&self) -> u8 {
+        match &self.check {
+            HealthCheckType::Uptime { starttime } => *starttime,
+            _ => panic!("starttime() called on a Command HealthCheck"),
+        }
     }
 
     pub fn timeout(&self) -> usize {
