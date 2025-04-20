@@ -4,7 +4,6 @@ use proc::ProcessConfig;
 use serde::Deserialize;
 
 mod defaults;
-pub mod help;
 pub mod proc;
 mod tests;
 

@@ -16,6 +16,7 @@ use libc::{c_int, signal, umask};
 use super::statemachine::{healthcheck::HealthCheckRunner, states::ProcessState};
 
 mod error;
+mod tests;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -141,8 +142,7 @@ impl Process {
     }
 
     pub fn start_healthcheck(&mut self) {
-        let mut healthcheck = self.healthcheck_mut();
-        healthcheck.start();
+        self.healthcheck.start();
     }
 
     pub fn passed_starttime(&self, started_at: time::Instant) -> bool {
