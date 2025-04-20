@@ -63,6 +63,7 @@ impl AsyncUnixSocket {
             }
         };
 
+        #[cfg(not(test))]
         set_permissions(socketpath, authgroup)?;
 
         Ok(Self {

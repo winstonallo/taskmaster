@@ -7,7 +7,7 @@ mod defaults;
 pub mod proc;
 mod tests;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Path to the socket used for communication between taskmaster and its client.
@@ -95,5 +95,34 @@ impl Config {
 
     pub fn authgroup(&self) -> &str {
         &self.authgroup
+    }
+}
+
+#[cfg(test)]
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            socketpath: "socketpath".to_string(),
+            authgroup: "authgroup".to_string(),
+            processes: HashMap::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Config {
+    pub fn set_socketpath(&mut self, socketpath: &str) -> &Self {
+        self.socketpath = socketpath.to_string();
+        self
+    }
+
+    pub fn set_authgroup(&mut self, authgroup: &str) -> &Self {
+        self.authgroup = authgroup.to_string();
+        self
+    }
+
+    pub fn add_process(&mut self, name: &str, process: ProcessConfig) -> &Self {
+        self.processes.insert(name.to_string(), process);
+        self
     }
 }

@@ -242,15 +242,31 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
 
 #[cfg(test)]
 mod tests {
-    use crate::conf::Config;
+    use rand::{Rng, distr::Alphanumeric};
+
+    use crate::conf::proc::ProcessConfig;
+
+    use super::conf::Config;
 
     use super::*;
 
+    impl Config {
+        fn random() -> Config {
+            let socketpath = rand::rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>();
+
+            Self::default().set_socketpath(&format!("/tmp/{socketpath}.sock")).to_owned()
+        }
+    }
+
     #[tokio::test]
     async fn idle_to_healthcheck() {
-        let config_path = "tests/configs/sleep.toml";
-        let conf = Config::from_file(config_path).unwrap();
-        let mut d = Daemon::from_config(conf, config_path.to_string());
+        let mut proc = ProcessConfig::default();
+        proc.set_cmd("/usr/bin/sleep");
+        proc.set_args(vec!["2".to_string()]);
+        let mut conf = Config::random();
+        conf.add_process("sleep", proc);
+        conf.set_authgroup("root");
+        let mut d = Daemon::from_config(conf, "idc".to_string());
         let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
         d.shutdown();

@@ -30,6 +30,10 @@ pub struct AccessibleDirectory {
 
 #[allow(unused)]
 impl AccessibleDirectory {
+    pub fn new(path: &str) -> Self {
+        Self { path: path.to_string() }
+    }
+
     pub fn path(&self) -> &str {
         &self.path
     }
@@ -88,6 +92,10 @@ pub struct ExecutableFile {
 
 #[allow(unused)]
 impl ExecutableFile {
+    pub fn new(path: &str) -> Self {
+        Self { path: path.to_string() }
+    }
+
     pub fn path(&self) -> &str {
         &self.path
     }
