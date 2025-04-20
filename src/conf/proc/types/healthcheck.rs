@@ -71,7 +71,7 @@ impl HealthCheck {
     pub fn starttime(&self) -> u8 {
         match &self.check {
             HealthCheckType::Uptime { starttime } => *starttime,
-            _ => panic!("startime() called on a Command HealthCheck"),
+            _ => panic!("starttime() called on a Command HealthCheck"),
         }
     }
 
