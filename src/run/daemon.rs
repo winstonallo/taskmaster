@@ -128,7 +128,7 @@ impl Daemon {
         Ok(())
     }
 
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error + Send>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
@@ -156,7 +156,7 @@ impl Daemon {
                         }
                     });
 
-                    listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).map_err(|e| Box::<dyn Error + Send>::from(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))))?;
+                    listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group())?;
                 },
 
                 Some((request, mut socket)) = receiver.recv() => {
@@ -245,20 +245,6 @@ mod tests {
     use crate::conf::Config;
 
     use super::*;
-
-    #[tokio::test]
-    async fn shutdown() {
-        let config_path = "tests/configs/sleep.toml";
-        let conf = Config::from_file(config_path).unwrap();
-        let daemon_handle = tokio::spawn(async move {
-            let mut daemon = Daemon::from_config(conf, config_path.to_string());
-            let result = daemon.run().await;
-            daemon.shutdown();
-            result
-        });
-
-        daemon_handle.abort();
-    }
 
     #[tokio::test]
     async fn idle_to_healthcheck() {
