@@ -113,3 +113,18 @@ impl AsyncUnixSocket {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_group_id_success() {
+        assert_eq!(get_group_id("root").unwrap(), 0);
+    }
+
+    #[test]
+    fn get_group_id_nonexisting() {
+        assert!(get_group_id("randomaaaahgroup").is_err());
+    }
+}
