@@ -159,3 +159,95 @@ impl HealthCheck {
         self.backoff
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    impl HealthCheck {
+        pub fn command() -> Self {
+            Self {
+                check: HealthCheckType::Command {
+                    cmd: "/usr/bin/echo".to_string(),
+                    args: Vec::new(),
+                    timeout: 5,
+                },
+                retries: 5,
+                backoff: 5,
+            }
+        }
+
+        pub fn uptime() -> Self {
+            Self {
+                check: HealthCheckType::Uptime { starttime: 5 },
+                retries: 5,
+                backoff: 5,
+            }
+        }
+    }
+
+    #[test]
+    fn cmd_on_command_healthcheck() {
+        let hc = HealthCheck::command();
+        assert_eq!(hc.cmd(), "/usr/bin/echo".to_string());
+    }
+
+    #[test]
+    fn retries() {
+        let hc = HealthCheck::command();
+        assert_eq!(hc.retries(), 5);
+    }
+
+    #[test]
+    fn backoff() {
+        let hc = HealthCheck::command();
+        assert_eq!(hc.backoff(), 5);
+    }
+
+    #[test]
+    fn args_on_command_healthcheck() {
+        let hc = HealthCheck::command();
+        assert_eq!(hc.args(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn timeout_on_command_healthcheck() {
+        let hc = HealthCheck::command();
+        assert_eq!(hc.timeout(), 5);
+    }
+
+    #[test]
+    fn starttime_on_uptime_healthcheck() {
+        let hc = HealthCheck::uptime();
+        assert_eq!(hc.starttime(), 5);
+    }
+
+    #[test]
+    #[should_panic]
+    fn cmd_on_uptime_healthcheck() {
+        let healthcheck = HealthCheck::uptime();
+        healthcheck.cmd();
+    }
+
+    #[test]
+    #[should_panic]
+    fn args_on_uptime_healthcheck() {
+        let healthcheck = HealthCheck::uptime();
+        healthcheck.args();
+    }
+
+    #[test]
+    #[should_panic]
+    fn timeout_on_uptime_healthcheck() {
+        let healthcheck = HealthCheck::uptime();
+        healthcheck.timeout();
+    }
+
+    #[test]
+    #[should_panic]
+    fn starttime_on_command_healthcheck() {
+        let healthcheck = HealthCheck::command();
+        healthcheck.starttime();
+    }
+}
