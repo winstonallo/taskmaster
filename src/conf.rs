@@ -13,17 +13,33 @@ mod tests;
 pub struct Config {
     /// Path to the socket used for communication between taskmaster and its client.
     ///
-    /// Defaults to `/tmp/.taskmaster.sock`
+    /// Default:
+    /// ```toml
+    /// socketpath = "/tmp/.taskmaster.sock"
+    /// ```
     #[serde(default = "defaults::dflt_socketpath")]
     socketpath: String,
 
     /// Name of the group to be used for authenticating the client (similarly to
     /// the docker group).
     ///
-    /// Defaults to `taskmaster`.
+    /// Default:
+    /// ```toml
+    /// authgroup = "taskmaster"
+    /// ```
     #[serde(default = "defaults::dflt_authgroup")]
     authgroup: String,
 
+    /// Map of processes to configure individually. For process-level configuration,
+    /// see [`crate::conf::proc::ProcessConfig`].
+    ///
+    /// Example:
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www/"
+    /// ```
+    /// At least one process must be defined for `taskmaster`to run.
     #[serde(default)]
     processes: HashMap<String, ProcessConfig>,
 }

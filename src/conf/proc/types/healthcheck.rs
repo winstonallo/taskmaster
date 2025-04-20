@@ -18,17 +18,35 @@ pub enum HealthCheckType {
     Command {
         /// Command to run as a healthcheck.
         ///
+        /// ```toml
+        /// cmd = "/usr/bin/ping"
+        /// ```
+        ///
         /// Required.
         cmd: String,
 
         /// Arguments to pass to `cmd`.
         ///
+        /// ```toml
+        /// cmd = "/usr/bin/ping"
+        /// args = ["-v"]
+        /// ```
+        ///
         /// Defaults to `[]`.
         #[serde(default)]
         args: Vec<String>,
 
-        /// Time (in seconds) to let the healthcheck command run through before considering
-        /// it failed.
+        /// Time (in seconds) to let the healthcheck command run through before
+        /// considering it failed.
+        ///
+        /// Arguments to pass to `cmd`.
+        ///
+        /// ```toml
+        /// cmd = "/usr/bin/ping"
+        /// timeout = 10
+        /// ```
+        ///
+        /// Defaults to `[]`.
         ///
         /// Defaults to `10`.
         #[serde(default = "dflt_timeout")]
@@ -36,6 +54,8 @@ pub enum HealthCheckType {
     },
     Uptime {
         /// Time (in seconds) after which the process will be deemed healthy.
+        ///
+        /// starttime = 10
         ///
         /// Defaults to `5`, max `65536`.
         starttime: u16,
@@ -45,16 +65,43 @@ pub enum HealthCheckType {
 #[allow(unused)]
 #[derive(Deserialize, Debug, Clone)]
 pub struct HealthCheck {
+    /// Inferred from the configured fields.
+    ///
+    /// Must be one of:
+    /// - Command: Pass/fail based on `cmd`'s exit status.
+    /// ```toml
+    /// cmd = <string>
+    /// args = <<string>>
+    /// timeout = <int>
+    /// ```
+    /// - Uptime: Consider healthy after running for `startttime` seconds.
+    ///
+    /// ```toml
+    /// starttime = <int>
+    /// ```
     #[serde(flatten)]
     check: HealthCheckType,
 
     /// How many times to retry the healthcheck before giving up.
+    ///
+    /// ```toml
+    /// [processes.nginx.healthcheck]
+    /// cmd = "/usr/bin/ping"
+    /// args = ["localhost"]
+    /// retries = 3
+    /// ```
     ///
     /// Defaults to `5`.
     #[serde(default = "dflt_retries")]
     retries: usize,
 
     /// Time (in seconds) to wait after a failed healthcheck before retrying.
+    ///
+    /// ```toml
+    /// [processes.nginx.healthcheck]
+    /// starttime = 3
+    /// backoff = 3
+    /// ```
     ///
     /// Defaults to `5`.
     #[serde(default = "dflt_backoff")]

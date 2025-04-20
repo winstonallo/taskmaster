@@ -39,16 +39,36 @@ use types::HealthCheck;
 pub struct ProcessConfig {
     /// Command to run in order to start this process.
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// ```
+    ///
     /// Required.
     cmd: types::ExecutableFile,
 
     /// Args to pass to `cmd`.
     ///
-    /// Defaults to `Vec::new()`.
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// args = ["-v"]
+    /// ```
+    ///
+    /// Defaults to no arguments.
     #[serde(default = "defaults::dflt_args")]
     args: Vec<String>,
 
     /// Number of copies of this process to start.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// processes = 4
+    /// ```
     ///
     /// Defaults to `1`.
     #[serde(default = "defaults::dflt_processes")]
@@ -56,16 +76,36 @@ pub struct ProcessConfig {
 
     /// Mask for files created by the process.
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// umask = 011
+    /// ```
+    ///
     /// Defaults to `022`.
     #[serde(default = "defaults::dflt_umask")]
     umask: types::Umask,
 
     /// Working directory for the process. Must be an absolute path.
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/tmp"
+    /// ```
+    ///
     /// Required.
     workingdir: types::AccessibleDirectory,
 
     /// Whether to start the process automatically when starting `taskmaster`.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// autostart = true
+    /// ```
     ///
     /// Defaults to `false`.
     #[serde(default = "defaults::dflt_autostart")]
@@ -77,32 +117,43 @@ pub struct ProcessConfig {
     ///   when it exits unexpectedly.
     /// - `always`: Always restart when exiting.
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// autorestart = on-failure[:5]
+    /// ```
+    ///
     /// Defaults to `no`.
     #[serde(default = "defaults::dflt_autorestart")]
     autorestart: types::AutoRestart,
 
     /// List of exit codes to be interpreted as successful.
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// exitcodes = [0, 2, 42]
+    /// ```
+    ///
     /// Defaults to `[0]`.
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
-    /// Healthcheck configuration. Must be one of:
+    /// Healthcheck configuration. See [`types::HealthCheck`] for
+    /// more details.
+    ///
+    /// Must be one of:
     /// - Command HealthCheck:
     /// ```toml
     /// cmd = <string>
     /// args = <<string>>
-    /// timeout = <int>
-    /// retries = <int>
-    /// backoff = <int>
     /// ```
     /// - Uptime HealthCheck:
     ///
     /// ```toml
     /// starttime = <int>
-    /// timeout = <int>
-    /// retries = <int>
-    /// backoff = <int>
     /// ```
     ///
     /// Defaults to `{starttime = 5, retries = 5, backoff = 5}`
@@ -112,6 +163,13 @@ pub struct ProcessConfig {
     /// List of signals triggering able to stop the process, options are any
     /// FreeBSD signal (<https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html>).
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stopsignals = ["TERM", "USR1"]
+    /// ```
+    ///
     /// Defaults to `["TERM"]`.
     #[serde(default = "defaults::dflt_stopsignals")]
     stopsignals: Vec<types::StopSignal>,
@@ -119,11 +177,25 @@ pub struct ProcessConfig {
     /// Time (in seconds) to wait for the process to stop. If it does not stop within
     /// this time, it will be killed forcibly.
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stoptime = 20
+    /// ```
+    ///
     /// Defaults to `5`, max `255`.
     #[serde(default = "defaults::dflt_stoptime")]
     stoptime: u8,
 
     /// File the standard output of the process should be redirected to.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stdout = "nginx.stdout"
+    /// ```
     ///
     /// Defaults to `/tmp/<process_name>.stdout`.
     #[serde(default = "defaults::dflt_stdout")]
@@ -131,12 +203,26 @@ pub struct ProcessConfig {
 
     /// File the standard error of the process should be redirected to.
     ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stderr = "nginx.stderr"
+    /// ```
+    ///
     /// Defaults to `/tmp/<process_name>.stderr`.
     #[serde(default = "defaults::dflt_stderr")]
     stderr: types::WritableFile,
 
     /// Key value pairs of environment variables to be injected into the process
     /// at startup.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// env = [["HOME", "/home/abied-ch"], ["ANSWER", "42"]]
+    /// ```
     ///
     /// Defaults to an empty list.
     #[serde(default)]
