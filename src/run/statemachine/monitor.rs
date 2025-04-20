@@ -23,7 +23,7 @@ pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
         }
         Err(err) => {
             proc_warning!(&p, "failed to start: {}", err);
-            p.increment_startup_failures();
+            p.increment_healthcheck_failures();
             Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))))
         }
     }

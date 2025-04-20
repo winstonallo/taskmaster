@@ -24,7 +24,6 @@ pub struct Process {
     name: String,
     child: Option<Child>,
     conf: ProcessConfig,
-    startup_failures: usize,
     healthcheck: HealthCheckRunner,
     runtime_failures: usize,
     state: ProcessState,
@@ -40,7 +39,6 @@ impl Process {
             name: proc_name.to_string(),
             child: None,
             conf,
-            startup_failures: 0,
             healthcheck: HealthCheckRunner::from_healthcheck_config(&healthcheck),
             runtime_failures: 0,
             state: ProcessState::Idle,
@@ -114,14 +112,6 @@ impl Process {
 
     pub fn increment_runtime_failures(&mut self) {
         self.runtime_failures = self.runtime_failures.saturating_add(1);
-    }
-
-    pub fn startup_failures(&self) -> usize {
-        self.startup_failures
-    }
-
-    pub fn increment_startup_failures(&mut self) {
-        self.startup_failures = self.startup_failures.saturating_add(1);
     }
 
     pub fn healthcheck_failures(&self) -> usize {
