@@ -4,15 +4,14 @@ use std::{
     vec,
 };
 
-use crate::conf::proc::types::HealthCheck;
+use crate::conf::proc::types::{HealthCheck, HealthCheckType};
 
 #[derive(Debug)]
 pub struct HealthCheckRunner {
     failures: usize,
     task: Option<tokio::task::JoinHandle<()>>,
     receiver: Option<tokio::sync::oneshot::Receiver<HealthCheckEvent>>,
-    cmd: String,
-    args: Vec<String>,
+    check: HealthCheckType,
     timeout: usize,
     retries: usize,
     backoff: usize,
@@ -30,20 +29,36 @@ impl HealthCheckRunner {
             failures: 0,
             task: None,
             receiver: None,
-            cmd: hc.cmd().to_string(),
-            args: hc.args().to_vec(),
+            check: hc.healthcheck().clone(),
             timeout: hc.timeout(),
             retries: hc.retries(),
             backoff: hc.backoff(),
         }
     }
 
-    pub fn cmd(&self) -> &str {
-        &self.cmd
+    pub fn has_command_healthcheck(&self) -> bool {
+        matches!(self.check, HealthCheckType::Command { .. })
     }
 
-    pub fn args(&self) -> &Vec<String> {
-        &self.args
+    pub fn cmd(&self) -> String {
+        match &self.check {
+            HealthCheckType::Command { cmd, .. } => cmd.to_string(),
+            _ => panic!("cmd() called on an Uptime HealthCheck"),
+        }
+    }
+
+    pub fn args(&self) -> Vec<String> {
+        match &self.check {
+            HealthCheckType::Command { cmd: _, args } => args.clone(),
+            _ => panic!("args() called on an Uptime HealthCheck"),
+        }
+    }
+
+    pub fn starttime(&self) -> u8 {
+        match &self.check {
+            HealthCheckType::Uptime { starttime } => *starttime,
+            _ => panic!("startime() called on a Command HealthCheck"),
+        }
     }
 
     pub fn failures(&self) -> usize {
@@ -91,8 +106,8 @@ impl HealthCheckRunner {
         let (sender, receiver) = tokio::sync::oneshot::channel::<HealthCheckEvent>();
         self.receiver = Some(receiver);
 
-        let cmd = self.cmd.clone();
-        let args = self.args.clone();
+        let cmd = self.cmd().clone();
+        let args = self.args().to_vec();
         let timeout = Duration::from_secs(self.timeout as u64);
 
         let handle = tokio::task::spawn(async move {

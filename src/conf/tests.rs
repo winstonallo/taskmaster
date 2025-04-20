@@ -18,8 +18,6 @@ mod from_str {
         assert_eq!(conf.processes()["nginx"].autostart(), defaults::dflt_autostart());
         assert_eq!(conf.processes()["nginx"].autorestart().mode(), defaults::dflt_autorestart().mode());
         assert_eq!(conf.processes()["nginx"].exitcodes(), &defaults::dflt_exitcodes());
-        assert_eq!(conf.processes()["nginx"].startretries(), defaults::dflt_startretries());
-        assert_eq!(conf.processes()["nginx"].starttime(), defaults::dflt_startttime());
         assert_eq!(conf.processes()["nginx"].stopsignals(), &defaults::dflt_stopsignals());
         assert_eq!(conf.processes()["nginx"].stoptime(), defaults::dflt_stoptime());
         assert_eq!(conf.processes()["nginx"].stdout(), "/tmp/nginx.stdout");
@@ -197,21 +195,9 @@ mod from_str {
     }
 
     #[test]
-    fn startretries_default() {
-        let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].startretries(), 3);
-    }
-
-    #[test]
     fn starttime_out_of_range() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\nstarttime = 70000";
         assert!(Config::from_str(conf_str).is_err());
-    }
-
-    #[test]
-    fn starttime_default() {
-        let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(Config::from_str(conf_str).expect("could not parse config").processes()["nginx"].starttime(), 5);
     }
 
     #[test]
@@ -383,8 +369,6 @@ mod from_file {
         assert_eq!(conf.processes()["nginx"].autorestart().mode(), "on-failure");
         assert_eq!(conf.processes()["nginx"].autorestart().max_retries(), 5);
         assert_eq!(conf.processes()["nginx"].exitcodes(), &vec![0, 2]);
-        assert_eq!(conf.processes()["nginx"].startretries(), 3);
-        assert_eq!(conf.processes()["nginx"].starttime(), 5);
         assert_eq!(conf.processes()["nginx"].stopsignals(), &vec![StopSignal(SIGTERM), StopSignal(SIGUSR1)]);
         assert_eq!(conf.processes()["nginx"].stoptime(), 5);
         assert_eq!(conf.processes()["nginx"].stdout(), ("/tmp/nginx.stdout".to_string()));

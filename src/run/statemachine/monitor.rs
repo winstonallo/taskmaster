@@ -104,7 +104,7 @@ fn healthcheck_starttime(started_at: &Instant, p: &mut Process) -> Option<Proces
     }
 
     if p.passed_starttime(*started_at) {
-        proc_info!(&p, "has been running for {} seconds, marking as healthy", p.config().starttime());
+        proc_info!(&p, "has been running for {} seconds, marking as healthy", p.healthcheck().starttime());
 
         return Some(ProcessState::Healthy);
     }
@@ -135,7 +135,7 @@ pub fn failed_healthy(p: &mut Process) -> Option<ProcessState> {
             }
 
             let rem_attempts = max_retries as usize - p.runtime_failures();
-            let backoff = p.config().backoff();
+            let backoff = p.healthcheck().backoff();
             proc_warning!(&p, "retrying in {} second(s) ({} attempt(s) left)", backoff, rem_attempts);
 
             p.increment_runtime_failures();

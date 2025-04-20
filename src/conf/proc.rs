@@ -56,19 +56,11 @@ pub struct ProcessConfig {
     #[serde(default = "defaults::dflt_autorestart")]
     autorestart: types::AutoRestart,
 
-    #[serde(default = "defaults::dflt_backoff")]
-    backoff: u8,
-
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
-    #[serde(default = "defaults::dflt_startretries")]
-    startretries: u8,
-
-    #[serde(default = "defaults::dflt_startttime")]
-    starttime: u16,
-
-    healthcheck: Option<HealthCheck>,
+    #[serde(default)]
+    healthcheck: HealthCheck,
 
     #[serde(default = "defaults::dflt_stopsignals")]
     stopsignals: Vec<types::StopSignal>,
@@ -115,25 +107,11 @@ impl ProcessConfig {
         &self.autorestart
     }
 
-    pub fn backoff(&self) -> u8 {
-        assert_eq!(self.autorestart.mode(), "on-failure");
-
-        self.backoff
-    }
-
     pub fn exitcodes(&self) -> &Vec<i32> {
         &self.exitcodes
     }
 
-    pub fn startretries(&self) -> u8 {
-        self.startretries
-    }
-
-    pub fn starttime(&self) -> u16 {
-        self.starttime
-    }
-
-    pub fn healthcheck(&self) -> &Option<HealthCheck> {
+    pub fn healthcheck(&self) -> &HealthCheck {
         &self.healthcheck
     }
 
@@ -177,11 +155,8 @@ impl ProcessConfig {
             workingdir: types::AccessibleDirectory::default(),
             autostart: true,
             autorestart: types::AutoRestart::default(),
-            backoff: 5,
             exitcodes: vec![0],
-            startretries: 1,
-            starttime: 5,
-            healthcheck: None,
+            healthcheck: HealthCheck::default(),
             stopsignals: vec![types::StopSignal(SIGTERM)],
             stoptime: 5,
             stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),

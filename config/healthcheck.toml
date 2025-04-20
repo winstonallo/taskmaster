@@ -11,13 +11,12 @@ umask = "022"
 workingdir = "/tmp"
 autostart = true
 autorestart = "always"
-backoff = 1
 exitcodes = [0, 2]
-startretries = 3
-starttime = 1
 [processes.sleep.healthcheck]
 cmd = "/usr/bin/sleep"
+# starttime = 1
 args = ["2"]
+backoff = 1
 timeout = 1
 retries = 1
 
