@@ -151,7 +151,7 @@ fn monitor_state(procs: &mut HashMap<String, Process>) {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct MininamRequest {
+pub struct MininumRequest {
     pub id: u32,
 }
 
@@ -165,7 +165,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                 let _ = sender.send((request, socket)).await;
             }
             Err(e) => {
-                let error_msg = match serde_json::from_str::<MininamRequest>(&line) {
+                let error_msg = match serde_json::from_str::<MininumRequest>(&line) {
                     Ok(m_r) => serde_json::to_string(&Response::new(
                         m_r.id,
                         ResponseType::Error(ResponseError {
