@@ -56,14 +56,14 @@ impl HealthCheck {
 
     pub fn cmd(&self) -> &str {
         match &self.check {
-            HealthCheckType::Command { cmd, .. } => &cmd,
+            HealthCheckType::Command { cmd, .. } => cmd,
             _ => panic!("cmd() called on an Uptime HealthCheck"),
         }
     }
 
     pub fn args(&self) -> &[String] {
         match &self.check {
-            HealthCheckType::Command { cmd: _, args } => &args,
+            HealthCheckType::Command { cmd: _, args } => args,
             _ => panic!("args() called on an Uptime HealthCheck"),
         }
     }
