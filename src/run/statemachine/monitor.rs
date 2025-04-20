@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    log_error, proc_info, proc_warning,
+    proc_info, proc_warning,
     run::{
         proc::{Process, ProcessError},
         statemachine::healthcheck::HealthCheckEvent,
@@ -150,10 +150,7 @@ pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
 
     if p.healthcheck_failures() == p.healthcheck().retries() {
         proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
-        match p.kill_gracefully() {
-            Ok(()) => {}
-            Err(e) => log_error!("{}", e),
-        }
+        let _ = p.kill_gracefully();
         Some(ProcessState::Stopping(Instant::now()))
     } else {
         proc_info!(p, "retrying healthcheck in {} seconds", p.healthcheck().backoff());
@@ -225,6 +222,9 @@ pub fn monitor_stopping(p: &mut Process) -> Option<ProcessState> {
     None
 }
 
-pub fn monitor_stopped(_p: &mut Process) -> Option<ProcessState> {
+pub fn monitor_stopped(p: &mut Process) -> Option<ProcessState> {
+    // When a process is killed, its entry in the process table is kept
+    // until the parent either exits or calls wait() on it.
+    let _ = p.exited();
     None
 }
