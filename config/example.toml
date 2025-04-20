@@ -44,7 +44,7 @@ autostart = true
 #   <max-retries> times when it exits unexpectedly. Maximum value for 
 #   max-retries is 255.
 # - "always": Always restart when exiting, no matter the status.
-autorestart = "on-failure[:5]"
+autorestart = "always"
 
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
