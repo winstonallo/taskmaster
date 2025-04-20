@@ -29,7 +29,7 @@ pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
     }
 }
 
-/// Check whether a `p` exited and return the appropriate state based on its
+/// Check whether `p` exited and return the appropriate state based on its
 /// exit code.
 ///
 /// Returns `None` if `p` is running.

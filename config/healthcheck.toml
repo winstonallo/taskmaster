@@ -14,7 +14,6 @@ autorestart = "always"
 exitcodes = [0, 2]
 [processes.sleep.healthcheck]
 cmd = "/usr/bin/sleep"
-# starttime = 1
 args = ["2"]
 backoff = 1
 timeout = 1
