@@ -219,6 +219,44 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn reload_change_in_process() {
+        let conf = r#"
+        [processes.sleep]
+        cmd = "/usr/bin/sleep"
+        args = ["2"]
+        workingdir = "/tmp"
+        autostart = true
+        "#;
+        let path = format!("/tmp/{}.toml", randstring());
+        let mut file = File::create(&path).unwrap();
+        let _ = File::write(&mut file, conf.as_bytes());
+        let conf = Config::from_file(&path).unwrap();
+        let mut d = Daemon::from_config(conf.to_owned(), path.to_owned());
+
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().config().autostart(), true);
+
+        let _ = fs::remove_file(&path);
+
+        let changed_conf = r#"
+        [processes.sleep]
+        cmd = "/usr/bin/sleep"
+        args = ["2"]
+        workingdir = "/tmp"
+        autostart = false
+        "#;
+        let mut file = File::create(&path).unwrap();
+        let _ = File::write(&mut file, changed_conf.as_bytes());
+
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload()));
+
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().config().autostart(), false);
+    }
+
+    #[tokio::test]
     async fn stop() {
         let mut conf = Config::random();
         let mut proc = ProcessConfig::default();
