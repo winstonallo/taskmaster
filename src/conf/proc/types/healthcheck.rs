@@ -202,7 +202,7 @@ mod tests {
 
         pub fn uptime() -> Self {
             Self {
-                check: HealthCheckType::Uptime { starttime: 5 },
+                check: HealthCheckType::Uptime { starttime: 1 },
                 retries: 5,
                 backoff: 5,
             }
