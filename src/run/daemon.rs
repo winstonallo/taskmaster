@@ -245,7 +245,7 @@ mod tests {
     use rand::{Rng, distr::Alphanumeric};
 
     use crate::conf::proc::ProcessConfig;
-    use crate::conf::proc::types::{HealthCheck, HealthCheckType};
+    use crate::conf::proc::types::{AutoRestart, HealthCheck, HealthCheckType};
 
     use super::conf::Config;
 
@@ -418,6 +418,76 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn idle_no_autostart() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_autostart(false);
+        let mut conf = Config::random();
+        conf.add_process("process", proc.to_owned());
+        let mut d = Daemon::from_config(conf, "path".to_string());
+
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("process").unwrap().state(), ProcessState::Idle);
+
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("process").unwrap().state(), ProcessState::Idle);
+    }
+
+    #[tokio::test]
+    async fn healthy_to_failed_max_retries_reached() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 }).set_retries(1).set_backoff(1);
+        let mut proc = ProcessConfig::default();
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 2; exit 1".to_string()])
+            .set_autorestart(AutoRestart {
+                mode: "on-failure".to_string(),
+                max_retries: Some(1),
+            })
+            .set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+
+        // Wait for process to be healthy.
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+
+        // Wait for the process to exit with bad status.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+
+        // Run again to enter WaitingForRetry state.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::WaitingForRetry(_)));
+        assert_eq!(d.processes().get("sleep").unwrap().runtime_failures(), 1);
+
+        // Return to healthcheck.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+
+        // Wait for the process to exit with bad status.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        d.shutdown();
+    }
+
+    #[tokio::test]
     async fn healthy_to_completed() {
         let mut proc = ProcessConfig::default();
         let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
@@ -430,6 +500,30 @@ mod tests {
         let _ = d.run_once().await;
 
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthy_to_completed_autorestart() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]).set_autorestart(AutoRestart {
+            mode: "always".to_string(),
+            max_retries: None,
+        });
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
+
+        // Run again to trigger restart.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
         d.shutdown();
     }
 
@@ -456,6 +550,10 @@ mod tests {
 
         // Wait for `stoptime` and run once to update state.
         tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        // Assert that the process stays in Stopped state.
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
 

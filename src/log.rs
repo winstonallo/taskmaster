@@ -139,7 +139,7 @@ macro_rules! proc_warning {
 }
 
 fn get_logger() -> &'static Logger {
-    // #[cfg(not(test))]
+    #[cfg(not(test))]
     INIT.call_once(|| {
         let logger = Logger::new(Box::new(stdout()), Box::new(stderr()));
         unsafe {

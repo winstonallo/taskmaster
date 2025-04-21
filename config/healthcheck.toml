@@ -24,3 +24,4 @@ stoptime = 5
 stdout = "/tmp/ls.stdout"
 stderr = "/tmp/ls.stderr"
 env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
+
