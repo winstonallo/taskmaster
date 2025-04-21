@@ -369,34 +369,23 @@ mod tests {
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
 
+        // Start process and healthcheck.
         let _ = d.run_once().await;
-
         tokio::time::sleep(Duration::from_millis(500)).await;
-
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
         tokio::time::sleep(Duration::from_millis(600)).await;
-        let _ = d.run_once().await;
 
+        // Run to catch failure.
+        let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
-        println!("{:?}", d.processes().get("sleep").unwrap());
 
+        // Run to enter monitor_failed and increment failure count and push desired Stopped state.
         let _ = d.run_once().await;
-
         assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 1);
-        println!("{:?}", d.processes().get("sleep").unwrap());
 
-        // Run once to push desired Stopping state, then once again for it to take effect.
+        // Run one last time to catch Stopped state (the Stopping -> Stopped transition is done
+        // in the same iteration of the state machine).
         let _ = d.run_once().await;
-        println!("{:?}", d.processes().get("sleep").unwrap());
-
-        let _ = d.run_once().await;
-
-        tokio::time::sleep(Duration::from_millis(600)).await;
-
-        let _ = d.run_once().await;
-        tokio::time::sleep(Duration::from_millis(600)).await;
-        let _ = d.run_once().await;
-        println!("{:?}", d.processes().get("sleep").unwrap());
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
 
         d.shutdown();
