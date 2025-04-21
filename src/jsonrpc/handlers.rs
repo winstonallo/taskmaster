@@ -193,6 +193,20 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn different_requests_same_id() {
+        let mut conf = Config::random();
+        let mut proc = ProcessConfig::default();
+        let conf = conf.add_process("process", proc.set_autostart(false).to_owned());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        let _ = handle_request(&mut d, Request::new(1, RequestType::new_status()));
+        let response = handle_request(&mut d, Request::new(1, RequestType::new_halt()));
+        assert!(matches!(response.response_type(), ResponseType::Result(_)));
+    }
+
+    #[tokio::test]
     async fn halt() {
         let mut conf = Config::random();
         let conf = conf.add_process("process", ProcessConfig::default());
@@ -242,7 +256,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn stopt_process_not_running() {
+    async fn stop_process_not_running() {
         let mut conf = Config::random();
         let mut proc = ProcessConfig::default();
         let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_autostart(false);
