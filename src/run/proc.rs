@@ -111,6 +111,10 @@ impl Process {
         self.runtime_failures
     }
 
+    pub fn clear_runtime_failures(&mut self) {
+        self.runtime_failures = 0;
+    }
+
     pub fn increment_runtime_failures(&mut self) {
         self.runtime_failures = self.runtime_failures.saturating_add(1);
     }
@@ -121,6 +125,10 @@ impl Process {
 
     pub fn increment_healthcheck_failures(&mut self) {
         self.healthcheck.increment_failures();
+    }
+
+    pub fn clear_healthcheck_failures(&mut self) {
+        self.healthcheck.clear_failures();
     }
 
     /// Returns `true` if a dynamic healthcheck is configured for this process.

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Deserializer, Serialize, de::Error};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
     id: u32,
     #[serde(deserialize_with = "json_rpc")]
@@ -54,6 +54,7 @@ pub enum RequestType {
     Restart(RequestRestart),
     Reload,
     Halt,
+    Attach(RequestAttach),
 }
 
 impl RequestType {
@@ -92,6 +93,12 @@ impl RequestType {
     pub fn new_halt() -> Self {
         Self::Halt
     }
+
+    pub fn new_attach(name: &str) -> Self {
+        Self::Attach(RequestAttach {
+            params: ParamsName { name: name.to_owned() },
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
@@ -126,6 +133,17 @@ pub struct RequestStop {
 }
 
 impl RequestStop {
+    pub fn name(&self) -> &str {
+        &self.params.name
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
+pub struct RequestAttach {
+    params: ParamsName,
+}
+
+impl RequestAttach {
     pub fn name(&self) -> &str {
         &self.params.name
     }

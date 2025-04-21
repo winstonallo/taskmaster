@@ -59,6 +59,10 @@ fn build_request_stop(name: &str) -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop(name))
 }
 
+fn build_request_attach(name: &str) -> Request {
+    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_attach(name))
+}
+
 fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     let method = *arguments.first().unwrap();
 
@@ -107,6 +111,13 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
                 return Err("usage: halt");
             }
         }
+        "attach" => {
+            if arguments.len() == 2 {
+                build_request_attach(arguments[1])
+            } else {
+                return Err("usage: attach PROCESS_NAME");
+            }
+        }
         "exit" => exit(0),
         _ => {
             return Err("method not implemented");
@@ -129,11 +140,12 @@ fn print_response(response: Response) {
                     str
                 }
                 StatusSingle(short_process) => format!("Name: {}, State: {}\n", short_process.name(), short_process.state()),
-                Start(name) => format!("staring: {}\n", name),
+                Start(name) => format!("starting: {}\n", name),
                 Stop(name) => format!("stopping: {}\n", name),
                 Restart(name) => format!("restarting: {}\n", name),
                 Reload => "reloading configuration\n".to_owned(),
                 Halt => "shutting down taskmaster\n".to_owned(),
+                Attach(name) => format!("attaching to process {name}"),
             };
 
             print!("response from daemon: \n{}", str)
@@ -187,6 +199,8 @@ fn main() {
             }
         };
 
+        println!("{}", response);
+
         let response = match serde_json::from_str::<Response>(&response) {
             Ok(resp) => resp,
             Err(_) => {
@@ -194,7 +208,7 @@ fn main() {
                 continue;
             }
         };
-
+        println!("got response: {:?}", response);
         print_response(response);
     }
 }

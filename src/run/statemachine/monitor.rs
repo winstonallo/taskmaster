@@ -152,8 +152,9 @@ pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
     p.increment_healthcheck_failures();
 
     if p.healthcheck_failures() == p.healthcheck().retries() {
-        proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
         p.push_desired_state(ProcessState::Stopped);
+
+        proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
         None
     } else {
         proc_info!(p, "retrying healthcheck in {} seconds", p.healthcheck().backoff());
@@ -243,8 +244,13 @@ pub fn monitor_stopping(killed_at: Instant, p: &mut Process) -> Option<ProcessSt
 }
 
 pub fn monitor_stopped(p: &mut Process) -> Option<ProcessState> {
+    // Clear failures to start again from 0 if the process gets restarted by the shell.
+    p.clear_runtime_failures();
+    p.clear_healthcheck_failures();
+
     // When a process is killed, its entry in the process table is kept
     // until the parent either exits or calls wait() on it.
     let _ = p.exited();
+
     None
 }

@@ -83,6 +83,10 @@ impl HealthCheckRunner {
         self.failures = self.failures.saturating_add(1);
     }
 
+    pub fn clear_failures(&mut self) {
+        self.failures = 0;
+    }
+
     pub fn task(&self) -> &Option<tokio::task::JoinHandle<()>> {
         &self.task
     }

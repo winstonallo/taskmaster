@@ -106,7 +106,7 @@ impl Daemon {
             },
 
             Some((request, mut socket)) = receiver.recv() => {
-                let response = handle_request(self, request);
+                let response = handle_request(self, request).await;
 
                 let msg = serde_json::to_string(&response).unwrap();
 
@@ -160,10 +160,12 @@ impl Daemon {
                 },
 
                 Some((request, mut socket)) = receiver.recv() => {
-                    let response = handle_request(self, request);
+                    let response = handle_request(self, request).await;
+                    println!("response in daemon loop: {:?}", response);
 
                     let msg = serde_json::to_string(&response).unwrap();
 
+                    println!("msg in daemon loop: {:?}", msg);
                     tokio::spawn(async move {
                         if let Err(e) = socket.write(msg.as_bytes()).await {
                             log_error!("error sending to socket: {}", e);
@@ -374,10 +376,15 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 1);
 
-        // Run one last time to catch Stopped state (the Stopping -> Stopped transition is done
+        // Run to catch Stopped state (the Stopping -> Stopped transition is done
         // in the same iteration of the state machine).
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        // Run last time to trigger monitor_stopped, which will clear failure counts for eventual
+        // future restarts.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 0);
 
         d.shutdown();
     }
@@ -474,6 +481,10 @@ mod tests {
 
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        // Run again to go into monitor_stopped, which will clear failure counters.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().runtime_failures(), 0);
 
         d.shutdown();
     }

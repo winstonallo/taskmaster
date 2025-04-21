@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize, Serializer, ser::Error};
 
 use super::{request::Request, short_process::ShortProcess};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Response {
     id: u32,
     #[serde(serialize_with = "json_rpc")]
@@ -44,7 +44,7 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseType {
     Result(ResponseResult),
@@ -61,6 +61,7 @@ pub enum ResponseResult {
     Restart(String),
     Reload,
     Halt,
+    Attach(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
