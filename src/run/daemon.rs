@@ -261,7 +261,7 @@ mod tests {
     #[tokio::test]
     async fn idle_to_healthcheck() {
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["2".to_string()]);
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -275,7 +275,7 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_healthy() {
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["2".to_string()]);
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -291,7 +291,7 @@ mod tests {
     #[tokio::test]
     async fn healthy_to_completed() {
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["2".to_string()]);
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -307,7 +307,7 @@ mod tests {
     #[tokio::test]
     async fn healthy_to_stopped() {
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("/usr/bin/sleep").set_args(vec!["10".to_string()]).set_stoptime(1);
+        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_stoptime(1);
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
