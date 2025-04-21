@@ -242,7 +242,7 @@ mod tests {
     #[test]
     fn starttime_on_uptime_healthcheck() {
         let hc = HealthCheck::uptime();
-        assert_eq!(hc.starttime(), 5);
+        assert_eq!(hc.starttime(), 1);
     }
 
     #[test]
