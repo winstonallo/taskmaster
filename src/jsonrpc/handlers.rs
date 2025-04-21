@@ -169,3 +169,88 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
 
     ResponseType::Result(ResponseResult::Halt)
 }
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::AtomicU32;
+
+    use crate::{
+        conf::{Config, proc::ProcessConfig},
+        jsonrpc::{request::RequestType, short_process},
+    };
+    static ID_COUNTER: AtomicU32 = AtomicU32::new(1);
+    use super::*;
+
+    #[tokio::test]
+    async fn halt_request() {
+        let mut conf = Config::random();
+        let conf = conf.add_process("process", ProcessConfig::default());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt()));
+        assert_eq!(d.shutting_down(), true);
+    }
+
+    #[tokio::test]
+    async fn status_request() {
+        let mut conf = Config::random();
+        let mut proc = ProcessConfig::default();
+        let conf = conf.add_process("process", proc.set_autostart(false).to_owned());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status()));
+        assert!(matches!(response.response_type(), ResponseType::Result(_)));
+
+        match response.response_type() {
+            ResponseType::Result(res) => match res {
+                ResponseResult::Status(status) => assert_eq!(*status.get(0).unwrap().state(), short_process::State::Idle),
+                _ => panic!("received unexpected response: {:?}", res),
+            },
+            ResponseType::Error(e) => panic!("handle_request returned an error: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn status_single_request() {
+        let mut conf = Config::random();
+        let mut proc = ProcessConfig::default();
+        let conf = conf.add_process("process", proc.set_autostart(false).to_owned());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        let response = handle_request(
+            &mut d,
+            Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single("process")),
+        );
+        assert!(matches!(response.response_type(), ResponseType::Result(_)));
+
+        match response.response_type() {
+            ResponseType::Result(res) => match res {
+                ResponseResult::StatusSingle(status) => assert_eq!(*status.state(), short_process::State::Idle),
+                _ => panic!("received unexpected response: {:?}", res),
+            },
+            ResponseType::Error(e) => panic!("handle_request returned an error: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn status_single_request_error() {
+        let mut conf = Config::random();
+        let mut proc = ProcessConfig::default();
+        let conf = conf.add_process("process", proc.set_autostart(false).to_owned());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        let response = handle_request(
+            &mut d,
+            Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single("notaprocess")),
+        );
+        assert!(matches!(response.response_type(), ResponseType::Error(_)));
+    }
+}

@@ -125,4 +125,13 @@ impl Config {
         self.processes.insert(name.to_string(), process);
         self
     }
+
+    #[cfg(test)]
+    pub fn random() -> Config {
+        use rand::{Rng, distr::Alphanumeric};
+
+        let socketpath = rand::rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>();
+
+        Self::default().set_socketpath(&format!("/tmp/{socketpath}.sock")).to_owned()
+    }
 }
