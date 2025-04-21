@@ -242,14 +242,21 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
 
 #[cfg(test)]
 mod tests {
+    use std::sync::atomic::AtomicU32;
+
     use rand::{Rng, distr::Alphanumeric};
 
     use crate::conf::proc::ProcessConfig;
     use crate::conf::proc::types::{AutoRestart, HealthCheck, HealthCheckType};
+    use crate::jsonrpc::request::RequestType;
+    use crate::jsonrpc::response::ResponseResult;
+    use crate::jsonrpc::short_process::{self};
 
     use super::conf::Config;
 
     use super::*;
+
+    static ID_COUNTER: AtomicU32 = AtomicU32::new(1);
 
     impl Config {
         fn random() -> Config {
@@ -488,22 +495,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn healthy_to_completed() {
-        let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
-        let mut conf = Config::random();
-        let conf = conf.add_process("sleep", proc.clone());
-        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
-
-        let _ = d.run_once().await;
-        tokio::time::sleep(Duration::from_secs(2)).await;
-        let _ = d.run_once().await;
-
-        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
-        d.shutdown();
-    }
-
-    #[tokio::test]
     async fn healthy_to_completed_autorestart() {
         let mut proc = ProcessConfig::default();
         let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]).set_autorestart(AutoRestart {
@@ -669,7 +660,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn health_to_completed() {
+    async fn healthy_to_completed() {
         let mut hc = HealthCheck::default();
         let hc = hc.set_check(HealthCheckType::Command {
             cmd: "sleep".to_string(),
@@ -693,5 +684,38 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(1100)).await;
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
+    }
+
+    #[tokio::test]
+    async fn halt_request() {
+        let mut conf = Config::random();
+        let conf = conf.add_process("process", ProcessConfig::default());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt()));
+        assert_eq!(d.shutting_down, true);
+    }
+
+    #[tokio::test]
+    async fn status_request() {
+        let mut conf = Config::random();
+        let mut proc = ProcessConfig::default();
+        let conf = conf.add_process("process", proc.set_autostart(false).to_owned());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status()));
+        assert!(matches!(response.response_type(), ResponseType::Result(_)));
+
+        match response.response_type() {
+            ResponseType::Result(res) => match res {
+                ResponseResult::Status(status) => assert_eq!(*status.get(0).unwrap().state(), short_process::State::Idle),
+                _ => panic!("received unexpected response: {:?}", res),
+            },
+            ResponseType::Error(e) => panic!("handle_request returned an error: {:?}", e),
+        }
     }
 }

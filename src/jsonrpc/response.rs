@@ -51,7 +51,7 @@ pub enum ResponseType {
     Error(ResponseError),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ResponseResult {
     Status(Vec<ShortProcess>),
@@ -63,7 +63,7 @@ pub enum ResponseResult {
     Halt,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ResponseError {
     pub code: ErrorCode,
     pub message: String,
@@ -115,6 +115,6 @@ impl Serialize for ErrorCode {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum ResponseErrorData {}
