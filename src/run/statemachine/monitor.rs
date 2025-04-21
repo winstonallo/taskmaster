@@ -151,8 +151,10 @@ pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
 
     if p.healthcheck_failures() == p.healthcheck().retries() {
         proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
-        let _ = p.kill_gracefully();
-        Some(ProcessState::Stopping(Instant::now()))
+        // let _ = p.kill_gracefully();
+        p.push_desired_state(ProcessState::Stopped);
+        None
+        // Some(ProcessState::Stopping(Instant::now()))
     } else {
         proc_info!(p, "retrying healthcheck in {} seconds", p.healthcheck().backoff());
         Some(ProcessState::WaitingForRetry(p.retry_at()))
