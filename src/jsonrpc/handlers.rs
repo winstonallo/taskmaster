@@ -253,4 +253,42 @@ mod tests {
         );
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
+
+    #[tokio::test]
+    async fn status_start() {
+        let mut conf = Config::random();
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
+        let conf = conf.add_process("sleep", proc.set_autostart(false).to_owned());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Idle);
+
+        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep")));
+        assert!(matches!(response.response_type(), ResponseType::Result(_)));
+
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+    }
+
+    #[tokio::test]
+    async fn status_start_error() {
+        let mut conf = Config::random();
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
+        let conf = conf.add_process("sleep", proc.set_autostart(false).to_owned());
+        let mut d = Daemon::from_config(conf.to_owned(), "path".to_string());
+
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Idle);
+
+        let response = handle_request(
+            &mut d,
+            Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("notaprocess")),
+        );
+        assert!(matches!(response.response_type(), ResponseType::Error(_)));
+    }
 }
