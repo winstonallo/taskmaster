@@ -116,7 +116,6 @@ impl Process {
     }
 
     pub fn healthcheck_failures(&self) -> usize {
-        assert!(self.healthcheck.has_command_healthcheck());
         self.healthcheck.failures()
     }
 

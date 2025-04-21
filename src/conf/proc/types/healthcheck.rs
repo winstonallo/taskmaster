@@ -161,6 +161,28 @@ impl HealthCheck {
 }
 
 #[cfg(test)]
+impl HealthCheck {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn set_check(&mut self, check: HealthCheckType) -> &mut Self {
+        self.check = check;
+        self
+    }
+
+    pub fn set_backoff(&mut self, backoff: usize) -> &mut Self {
+        self.backoff = backoff;
+        self
+    }
+
+    pub fn set_retries(&mut self, retries: usize) -> &mut Self {
+        self.retries = retries;
+        self
+    }
+}
+
+#[cfg(test)]
 mod tests {
 
     use super::*;
