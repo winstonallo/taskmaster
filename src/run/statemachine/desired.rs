@@ -11,11 +11,12 @@ pub fn desire_idle(proc: &mut Process) -> (Option<ProcessState>, bool) {
     use ProcessState::*;
     match proc.state().clone() {
         Idle => (None, REMOVE_DESIRED_STATE),
-        Healthy | HealthCheck(_) => {
+        Healthy | HealthCheck(_) | Failed(_) => {
             let _ = proc.kill_gracefully();
             (Some(Stopping(Instant::now())), RETAIN_DESIRED_STATE)
         }
         Stopping(_) => (None, RETAIN_DESIRED_STATE),
+        Stopped => (Some(Stopped), REMOVE_DESIRED_STATE),
         _ => (Some(Idle), REMOVE_DESIRED_STATE),
     }
 }

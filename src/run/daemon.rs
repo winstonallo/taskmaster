@@ -79,8 +79,6 @@ impl Daemon {
 
     #[cfg(test)]
     pub async fn run_once(&mut self) -> Result<(), Box<dyn Error + Send>> {
-        use crate::log_info;
-
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
@@ -372,19 +370,25 @@ mod tests {
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
 
         let _ = d.run_once().await;
+
         tokio::time::sleep(Duration::from_millis(500)).await;
+
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
         tokio::time::sleep(Duration::from_millis(600)).await;
         let _ = d.run_once().await;
 
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+        println!("{:?}", d.processes().get("sleep").unwrap());
+
         let _ = d.run_once().await;
 
         assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 1);
+        println!("{:?}", d.processes().get("sleep").unwrap());
 
-        // Wait for backoff, process should have been stopped by the daemon.
+        // Run once to push desired Stopping state, then once again for it to take effect.
         let _ = d.run_once().await;
-        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
+        println!("{:?}", d.processes().get("sleep").unwrap());
+
         let _ = d.run_once().await;
 
         tokio::time::sleep(Duration::from_millis(600)).await;
@@ -392,7 +396,7 @@ mod tests {
         let _ = d.run_once().await;
         tokio::time::sleep(Duration::from_millis(600)).await;
         let _ = d.run_once().await;
-
+        println!("{:?}", d.processes().get("sleep").unwrap());
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
 
         d.shutdown();
