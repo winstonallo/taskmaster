@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize, Serializer, ser::Error};
 
-use super::{request::Request, short_process::ShortProcess};
+use super::{
+    request::{Request, RequestType},
+    short_process::ShortProcess,
+};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Response {
@@ -30,6 +33,28 @@ impl Response {
 
     pub fn response_type(&self) -> &ResponseType {
         &self.response_type
+    }
+
+    pub fn set_response_result(&mut self, request_type: &RequestType) -> &Self {
+        match &self.response_type {
+            ResponseType::Error(_) => {}
+            ResponseType::Result(res) => match res {
+                ResponseResult::Status(_) | ResponseResult::StatusSingle(_) => {}
+                ResponseResult::Start(msg) | ResponseResult::Stop(msg) | ResponseResult::Restart(msg) | ResponseResult::Attach(msg) => match request_type {
+                    RequestType::Start(_) => self.response_type = ResponseType::Result(ResponseResult::Start(msg.to_owned())),
+                    RequestType::Stop(_) => self.response_type = ResponseType::Result(ResponseResult::Stop(msg.to_owned())),
+                    RequestType::Restart(_) => self.response_type = ResponseType::Result(ResponseResult::Restart(msg.to_owned())),
+                    RequestType::Attach(_) => self.response_type = ResponseType::Result(ResponseResult::Attach(msg.to_owned())),
+                    _ => {}
+                },
+                ResponseResult::Reload | ResponseResult::Halt => match request_type {
+                    RequestType::Reload => self.response_type = ResponseType::Result(ResponseResult::Reload),
+                    RequestType::Halt => self.response_type = ResponseType::Result(ResponseResult::Halt),
+                    _ => {}
+                },
+            },
+        }
+        self
     }
 }
 

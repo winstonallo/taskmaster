@@ -127,7 +127,7 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     Ok(request)
 }
 
-fn print_response(response: Response) {
+fn print_response(response: &Response) {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
@@ -145,7 +145,7 @@ fn print_response(response: Response) {
                 Restart(name) => format!("restarting: {}\n", name),
                 Reload => "reloading configuration\n".to_owned(),
                 Halt => "shutting down taskmaster\n".to_owned(),
-                Attach(name) => format!("attaching to process {name}"),
+                Attach(name) => format!("attaching to process {name}\n"),
             };
 
             print!("response from daemon: \n{}", str)
@@ -184,9 +184,9 @@ fn main() {
             }
         };
 
-        let request = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
+        let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
-        if let Err(e) = write_request(&mut unix_stream, request.as_bytes()) {
+        if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()) {
             println!("error while writing request: {}", e);
             continue;
         }
@@ -201,14 +201,15 @@ fn main() {
 
         println!("{}", response);
 
-        let response = match serde_json::from_str::<Response>(&response) {
+        let mut response = match serde_json::from_str::<Response>(&response) {
             Ok(resp) => resp,
             Err(_) => {
                 println!("non json_rpc formatted message: {}", response);
                 continue;
             }
         };
-        println!("got response: {:?}", response);
+
+        let response = response.set_response_result(request.request_type());
         print_response(response);
     }
 }
