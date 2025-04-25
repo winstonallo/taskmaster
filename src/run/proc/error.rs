@@ -11,8 +11,8 @@ pub enum ProcessError {
 impl fmt::Display for ProcessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProcessError::Internal(msg) => write!(f, "internal error: {}", msg),
-            ProcessError::CouldNotSpawn(msg) => write!(f, "could not spawn child process: {}", msg),
+            ProcessError::Internal(msg) => write!(f, "internal error: {msg}"),
+            ProcessError::CouldNotSpawn(msg) => write!(f, "could not spawn child process: {msg}"),
             ProcessError::AlreadyRunning => write!(f, "process is already running"),
             ProcessError::NoChildProcess => write!(f, "no child process running"),
             ProcessError::NoExitInformation => write!(f, "no exit information available"),

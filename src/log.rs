@@ -92,15 +92,15 @@ pub fn fatal(args: fmt::Arguments) {
 }
 
 pub fn prefix_info(prefix: &str, args: fmt::Arguments) {
-    let prefix = format!("\x1b[1m{}\x1b[22m", prefix);
+    let prefix = format!("\x1b[1m{prefix}\x1b[22m");
 
-    get_logger().info(format_args!("{} {}", prefix, args));
+    get_logger().info(format_args!("{prefix} {args}"));
 }
 
 pub fn prefix_warning(prefix: &str, args: fmt::Arguments) {
-    let prefix = format!("\x1b[1m{}\x1b[22m", prefix);
+    let prefix = format!("\x1b[1m{prefix}\x1b[22m");
 
-    get_logger().warning(format_args!("{} {}", prefix, args));
+    get_logger().warning(format_args!("{prefix} {args}"));
 }
 
 #[macro_export]

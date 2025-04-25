@@ -125,7 +125,7 @@ fn handle_request_reload(daemon: &mut Daemon) -> ResponseType {
         Err(e) => {
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InternalError,
-                message: format!("error while parsing config file: {}", e),
+                message: format!("error while parsing config file: {e}"),
                 data: None,
             });
         }

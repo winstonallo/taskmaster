@@ -35,6 +35,7 @@ impl Response {
         &self.response_type
     }
 
+    // Ugly solution
     pub fn set_response_result(&mut self, request_type: &RequestType) -> &Self {
         match &self.response_type {
             ResponseType::Error(_) => {}
@@ -120,7 +121,7 @@ impl<'de> Deserialize<'de> for ErrorCode {
             -32602 => Ok(ErrorCode::InvalidParams),
             -32603 => Ok(ErrorCode::InternalError),
             -32700 => Ok(ErrorCode::ParseError),
-            _ => Err(serde::de::Error::custom(format!("unknown error code: {}", code))),
+            _ => Err(serde::de::Error::custom(format!("unknown error code: {code}"))),
         }
     }
 }

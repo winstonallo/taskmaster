@@ -13,7 +13,7 @@ fn get_random_string(len: usize) -> String {
     let mut file = File::open("/dev/urandom").expect("could not open /dev/urandom");
     file.read_exact(&mut buf).expect("could not read from /dev/urandom");
     buf.iter().fold("".to_string(), |mut acc, byte| {
-        write!(&mut acc, "{:02x}", byte).expect("failed to write");
+        write!(&mut acc, "{byte:02x}").expect("failed to write");
         acc
     })
 }
