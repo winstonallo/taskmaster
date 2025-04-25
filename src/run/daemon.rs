@@ -31,7 +31,7 @@ impl Daemon {
             .flat_map(|(proc_name, proc)| {
                 (0..proc.processes()).map(move |id| {
                     let key = if proc.processes() > 1 {
-                        format!("{}_{}", proc_name, id)
+                        format!("{proc_name}_{id}")
                     } else {
                         proc_name.to_owned()
                     };
@@ -165,7 +165,7 @@ impl Daemon {
 
                     let msg = serde_json::to_string(&response).unwrap();
 
-                    println!("msg in daemon loop: {:?}", msg);
+                    println!("msg in daemon loop: {msg:?}");
                     tokio::spawn(async move {
                         if let Err(e) = socket.write(msg.as_bytes()).await {
                             log_error!("error sending to socket: {e}");
@@ -224,7 +224,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                         m_r.id,
                         ResponseType::Error(ResponseError {
                             code: crate::jsonrpc::response::ErrorCode::InvalidRequest,
-                            message: format!("{}", e).to_owned(),
+                            message: format!("{e}").to_owned(),
                             data: None,
                         }),
                     ))

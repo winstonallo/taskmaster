@@ -21,7 +21,7 @@ pub struct AsyncUnixSocket {
 }
 
 fn get_group_id(group_name: &str) -> Result<u32, String> {
-    let c_group = CString::new(group_name).map_err(|e| format!("{}", e))?;
+    let c_group = CString::new(group_name).map_err(|e| format!("{e}"))?;
 
     unsafe {
         let grp_ptr = getgrnam(c_group.as_ptr());
@@ -47,7 +47,7 @@ fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
         }
     }
 
-    fs::set_permissions(socketpath, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {}", e))
+    fs::set_permissions(socketpath, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {e}"))
 }
 
 impl AsyncUnixSocket {
