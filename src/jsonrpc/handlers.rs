@@ -14,7 +14,7 @@ use crate::{
     },
     run::{daemon::Daemon, proc::Process, statemachine::states::ProcessState},
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, error::Error};
 
 use super::{
     request::{Request, RequestStatusSingle},
@@ -31,7 +31,7 @@ pub async fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
         Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
         Reload => handle_request_reload(daemon),
         Halt => handle_request_halt(daemon),
-        Attach(request_attach) => handle_request_attach(daemon.processes(), request_attach, daemon.auth_group()).await,
+        Attach(request_attach) => handle_request_attach(daemon.processes(), request_attach, daemon.auth_group(), daemon.attachment_manager()).await,
     };
 
     Response::from_request(request, response_type)
@@ -206,8 +206,8 @@ async fn attach(socketpath: String, stdout_path: String, authgroup: String) -> R
                     let mut buffer = Vec::new();
                     match file.read_to_end(&mut buffer).await {
                         Ok(bytes_read) => {
-                    if bytes_read > 0 {
-                        position += bytes_read as u64;
+                            if bytes_read > 0 {
+                                position += bytes_read as u64;
 
                                 match listener.write(&buffer).await {
                                     Ok(_) => {}
@@ -226,15 +226,12 @@ async fn attach(socketpath: String, stdout_path: String, authgroup: String) -> R
                 } else if size < position {
                     position = 0;
                 }
-            },
-        }
+            }
             Err(e) => {
                 let error_msg = format!("could not get file metadata: {}", e);
                 eprintln!("{}", error_msg);
-    }
-}
-        //     },
-        // }
+            }
+        }
     }
 }
 
@@ -310,13 +307,19 @@ async fn handle_request_attach(
             });
         }
     };
-    let socket_path = format!("/tmp/{}.sock", rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>());
+    let socketpath = format!("/tmp/{}.sock", rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>());
 
-    let _ = attach(&socket_path, process, authgroup).await;
+    let _socketpath_clone = socketpath.clone();
+    let stdout_clone = process.config().stdout().to_string();
+    let authgroup_clone = authgroup.to_string();
+
+    let _ = attachment_manager
+        .attach(process.name().to_string(), socketpath.to_owned(), stdout_clone, authgroup_clone)
+        .await;
 
     ResponseType::Result(ResponseResult::Attach {
         name: process.name().to_owned(),
-        socket_path,
+        socketpath,
     })
 }
 
