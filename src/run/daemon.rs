@@ -295,7 +295,10 @@ mod tests {
         let mut hc = HealthCheck::default();
         let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -313,7 +316,10 @@ mod tests {
         let mut hc = HealthCheck::default();
         let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -331,9 +337,15 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_failed_retry() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 }).set_backoff(1).set_retries(2);
+        let hc = hc
+            .set_check(HealthCheckType::Uptime { starttime: 2 })
+            .set_backoff(1)
+            .set_retries(2);
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -359,7 +371,10 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_stopped_max_retries_reached() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 }).set_backoff(1).set_retries(1);
+        let hc = hc
+            .set_check(HealthCheckType::Uptime { starttime: 2 })
+            .set_backoff(1)
+            .set_retries(1);
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")
@@ -402,7 +417,10 @@ mod tests {
         let mut hc = HealthCheck::default();
         let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 2; exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 2; exit 1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -441,7 +459,10 @@ mod tests {
     #[tokio::test]
     async fn healthy_to_failed_max_retries_reached() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 }).set_retries(1).set_backoff(1);
+        let hc = hc
+            .set_check(HealthCheckType::Uptime { starttime: 1 })
+            .set_retries(1)
+            .set_backoff(1);
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")
@@ -500,10 +521,13 @@ mod tests {
     #[tokio::test]
     async fn healthy_to_completed_autorestart() {
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]).set_autorestart(AutoRestart {
-            mode: "always".to_string(),
-            max_retries: None,
-        });
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["2".to_string()])
+            .set_autorestart(AutoRestart {
+                mode: "always".to_string(),
+                max_retries: None,
+            });
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -538,7 +562,11 @@ mod tests {
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
         // Push desired Stopped state, run once to update state.
-        let _ = d.processes_mut().get_mut("sleep").unwrap().push_desired_state(ProcessState::Stopped);
+        let _ = d
+            .processes_mut()
+            .get_mut("sleep")
+            .unwrap()
+            .push_desired_state(ProcessState::Stopped);
         let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
 
@@ -563,7 +591,10 @@ mod tests {
             timeout: 10,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["10".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -590,7 +621,10 @@ mod tests {
             timeout: 1,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["10".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -617,7 +651,10 @@ mod tests {
             timeout: 1,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["10".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -644,7 +681,10 @@ mod tests {
             timeout: 10,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -671,7 +711,10 @@ mod tests {
             timeout: 10,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
