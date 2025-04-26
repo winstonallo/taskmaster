@@ -175,16 +175,13 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
-async fn attach(socket_path: &str, process: &Process, authgroup: &str) -> Result<ResponseResult, ResponseError> {
-    let mut listener = AsyncUnixSocket::new(socket_path, authgroup).map_err(|e| ResponseError {
-        code: ErrorCode::InternalError,
-        message: format!("could not create new socket stream: {e}"),
-        data: None,
-    })?;
+async fn attach(socketpath: String, stdout_path: String, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut listener =
+        AsyncUnixSocket::new(&socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
 
-    let (_sender, mut receiver) = tokio::sync::mpsc::channel::<String>(32);
+    let (_sender, mut _receiver) = tokio::sync::mpsc::channel::<String>(32);
 
-    let mut file = tokio::fs::File::open(&process.config().stdout()).await.map_err(|e| ResponseError {
+    let mut file = tokio::fs::File::open(stdout_path).await.map_err(|e| ResponseError {
         code: ErrorCode::InternalError,
         message: format!("could not open process stdout: {e}"),
         data: None,
@@ -193,43 +190,37 @@ async fn attach(socket_path: &str, process: &Process, authgroup: &str) -> Result
     let mut position = 0;
 
     loop {
-        tokio::select! {
-            _accept_result = listener.accept() => {
-                // handle new client
-            },
-            Some(_stdin) = receiver.recv() => {
-                // write to process stdin
-            },
-            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
-                let metadata = match file.metadata().await {
-                    Ok(m) => m,
-                    Err(e) => {
-                        eprintln!("could not get file metadata: {e}");
-                        continue;
-                    }
-                };
-
+        match file.metadata().await {
+            Ok(metadata) => {
                 let size = metadata.len();
                 if size > position {
-                    if let Err(e) = file.seek(std::io::SeekFrom::Start(position)).await {
-                        eprintln!("could not seek file: {e}");
-                        continue;
+                    match file.seek(std::io::SeekFrom::Start(position)).await {
+                        Ok(_) => {}
+                        Err(e) => {
+                            let error_msg = format!("could not seek file: {}", e);
+                            eprintln!("{}", error_msg);
+                            continue;
+                        }
                     }
 
                     let mut buffer = Vec::new();
-                    let bytes_read = match file.read_to_end(&mut buffer).await {
-                        Ok(n) => n,
-                        Err(e) => {
-                            eprintln!("could not read file: {e}");
-                            continue;
-                        }
-                    };
-
+                    match file.read_to_end(&mut buffer).await {
+                        Ok(bytes_read) => {
                     if bytes_read > 0 {
                         position += bytes_read as u64;
 
-                        if let Ok(output) = String::from_utf8(buffer) {
-                            print!("{output}");
+                                match listener.write(&buffer).await {
+                                    Ok(_) => {}
+                                    Err(e) => {
+                                        let error_msg = format!("error writing to socket: {}", e);
+                                        eprintln!("{}", error_msg);
+                                    }
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            let error_msg = format!("could not read file: {}", e);
+                            eprintln!("{}", error_msg);
                         }
                     }
                 } else if size < position {
@@ -237,10 +228,78 @@ async fn attach(socket_path: &str, process: &Process, authgroup: &str) -> Result
                 }
             },
         }
+            Err(e) => {
+                let error_msg = format!("could not get file metadata: {}", e);
+                eprintln!("{}", error_msg);
+    }
+}
+        //     },
+        // }
     }
 }
 
-async fn handle_request_attach(processes: &HashMap<String, Process>, request: &RequestAttach, authgroup: &str) -> ResponseType {
+pub struct AttachmentManager {
+    tx: tokio::sync::mpsc::Sender<AttachmentRequest>,
+}
+
+enum AttachmentRequest {
+    New {
+        process_name: String,
+        socketpath: String,
+        stdout_path: String,
+        authgroup: String,
+    },
+}
+
+impl AttachmentManager {
+    pub fn new() -> Self {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+
+        tokio::spawn(async move {
+            let mut active_attachments = HashMap::new();
+
+            while let Some(req) = rx.recv().await {
+                match req {
+                    AttachmentRequest::New {
+                        process_name,
+                        socketpath,
+                        stdout_path,
+                        authgroup,
+                    } => {
+                        let attachment_handler = tokio::spawn(async move {
+                            if let Err(e) = attach(socketpath, stdout_path, authgroup).await {
+                                eprintln!("could not attach: {e}");
+                            }
+                        });
+
+                        active_attachments.insert(process_name, attachment_handler);
+                    }
+                }
+            }
+        });
+
+        Self { tx }
+    }
+
+    pub async fn attach(&self, process_name: String, socketpath: String, stdout_path: String, authgroup: String) -> Result<(), Box<dyn Error + Send>> {
+        self.tx
+            .send(AttachmentRequest::New {
+                process_name,
+                socketpath,
+                stdout_path,
+                authgroup,
+            })
+            .await
+            .map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+    }
+}
+
+async fn handle_request_attach(
+    processes: &HashMap<String, Process>,
+    request: &RequestAttach,
+    authgroup: &str,
+    attachment_manager: &AttachmentManager,
+) -> ResponseType {
     let process = match processes.get(request.name()) {
         Some(p) => p,
         None => {

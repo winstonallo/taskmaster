@@ -6,6 +6,7 @@ use tokio::time::sleep;
 
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
+use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
 use crate::{
     conf,
@@ -21,6 +22,7 @@ pub struct Daemon {
     auth_group: String,
     config_path: String,
     shutting_down: bool,
+    attachment_manager: AttachmentManager,
 }
 
 impl Daemon {
@@ -46,6 +48,7 @@ impl Daemon {
             auth_group: conf.authgroup().to_owned(),
             config_path,
             shutting_down: false,
+            attachment_manager: AttachmentManager::new(),
         }
     }
 
@@ -75,6 +78,14 @@ impl Daemon {
 
     pub fn shutdown(&mut self) {
         self.shutting_down = true;
+    }
+
+    pub fn attachment_manager(&self) -> &AttachmentManager {
+        &self.attachment_manager
+    }
+
+    pub fn attachment_manager_mut(&mut self) -> &mut AttachmentManager {
+        &mut self.attachment_manager
     }
 
     #[cfg(test)]
