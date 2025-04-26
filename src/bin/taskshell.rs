@@ -173,7 +173,7 @@ fn main() {
 
         let arguments: Vec<&str> = line.split_ascii_whitespace().collect();
         if arguments.is_empty() {
-            continue;
+            break;
         }
 
         let request = match build_request(&arguments) {
