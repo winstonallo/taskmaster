@@ -15,11 +15,12 @@ use tasklib::jsonrpc::request::Request;
 const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
 
 fn read_from_stream(unix_stream: &mut UnixStream) -> Result<String, String> {
-    let mut buf = String::new();
+    let mut buffer = [0; 1024]; // Use a fixed-size buffer for reading
+    let bytes_read = unix_stream.read(&mut buffer).map_err(|e| format!("{e}"))?;
 
-    unix_stream.read_to_string(&mut buf).map_err(|e| format!("{e}"))?;
+    let s = String::from_utf8_lossy(&buffer[0..bytes_read]).to_string();
 
-    Ok(buf)
+    Ok(s)
 }
 
 fn write_request(unix_stream: &mut UnixStream, request: &[u8]) -> Result<(), String> {
@@ -128,6 +129,17 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
 }
 
 fn attach(name: &str, socket_path: &str) {
+    let mut stream = match UnixStream::connect(socket_path) {
+        Ok(stream) => stream,
+        Err(e) => {
+            eprintln!("could not establish connection on attach socket at path {socket_path}: {e}");
+            return;
+        }
+    };
+
+    while let Ok(out) = read_from_stream(&mut stream) {
+        print!("{out}")
+    }
     println!("attaching to process {name} on socket {socket_path}");
 }
 
@@ -143,7 +155,7 @@ fn handle_response(response: &Response) {
                 Restart(name) => println!("restarting: {name}"),
                 Reload => println!("reloading configuration"),
                 Halt => println!("shutting down taskmaster\n"),
-                Attach { name, socket_path } => attach(name, socket_path),
+                Attach { name, socketpath } => attach(name, socketpath),
             };
         }
         ResponseType::Error(err) => {
@@ -157,7 +169,7 @@ fn main() {
         let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH) {
             Ok(s) => s,
             Err(e) => {
-                println!("couldn't establish socket connection: {e}");
+                eprintln!("couldn't establish socket connection: {e}");
                 return;
             }
         };
