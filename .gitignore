@@ -1,7 +1,6 @@
-target/
-writetofile.sh
-file.txt
-history.txt
+*.c
+*.sh
+*.py
+*.txt
 a.out
-main.c
-test.c
+target/
