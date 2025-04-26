@@ -161,11 +161,9 @@ impl Daemon {
 
                 Some((request, mut socket)) = receiver.recv() => {
                     let response = handle_request(self, request).await;
-                    println!("response in daemon loop: {response:?}");
 
                     let msg = serde_json::to_string(&response).unwrap();
 
-                    println!("msg in daemon loop: {msg:?}");
                     tokio::spawn(async move {
                         if let Err(e) = socket.write(msg.as_bytes()).await {
                             log_error!("error sending to socket: {e}");
