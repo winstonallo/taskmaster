@@ -2,7 +2,7 @@ use std::{
     collections::VecDeque,
     fs::File,
     os::unix::process::{CommandExt, ExitStatusExt},
-    process::{Child, Command, ExitStatus},
+    process::{Child, Command, ExitStatus, Stdio},
     time::{self, Duration, Instant},
 };
 
@@ -170,6 +170,7 @@ impl Process {
             Command::new(cmd_path)
                 .args(args)
                 .envs(self.conf.env().clone())
+                .stdin(Stdio::piped())
                 .stdout(stdout_file)
                 .stderr(stderr_file)
                 .current_dir(working_dir)
