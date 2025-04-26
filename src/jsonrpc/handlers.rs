@@ -186,7 +186,6 @@ async fn handle_request_attach(processes: &mut HashMap<String, Process>, request
         }
     };
 
-    println!("{}", process.config().stdout());
     let stdout = match tokio::fs::read_to_string(process.config().stdout()).await {
         Ok(stdout) => stdout,
         Err(e) => {
@@ -197,6 +196,7 @@ async fn handle_request_attach(processes: &mut HashMap<String, Process>, request
             });
         }
     };
+
     ResponseType::Result(ResponseResult::Attach(stdout))
 }
 
