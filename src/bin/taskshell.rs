@@ -127,28 +127,24 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     Ok(request)
 }
 
-fn print_response(response: &Response) {
+fn attach(name: &str, socket_path: &str) {
+    println!("attaching to process {name} on socket {socket_path}");
+}
+
+fn handle_response(response: &Response) {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
-            let str = match res {
-                Status(items) => {
-                    let mut str = String::new();
-                    for short_process in items.iter() {
-                        str.push_str(&format!("Name: {}\t State: {}\n", short_process.name(), short_process.state()));
-                    }
-                    str
-                }
-                StatusSingle(short_process) => format!("Name: {}, State: {}\n", short_process.name(), short_process.state()),
-                Start(name) => format!("starting: {name}\n"),
-                Stop(name) => format!("stopping: {name}\n"),
-                Restart(name) => format!("restarting: {name}\n"),
-                Reload => "reloading configuration\n".to_owned(),
-                Halt => "shutting down taskmaster\n".to_owned(),
-                Attach(name) => format!("attaching to process {name}\n"),
+            match res {
+                Status(items) => items.iter().for_each(|sp| println!("{}: {}", sp.name(), sp.state())),
+                StatusSingle(item) => println!("{}: {}", item.name(), item.state()),
+                Start(name) => println!("starting: {name}"),
+                Stop(name) => println!("stopping: {name}"),
+                Restart(name) => println!("restarting: {name}"),
+                Reload => println!("reloading configuration"),
+                Halt => println!("shutting down taskmaster\n"),
+                Attach { name, socket_path } => attach(name, socket_path),
             };
-
-            print!("response from daemon: \n{str}")
         }
         ResponseType::Error(err) => {
             println!("{}", err.message)
@@ -210,6 +206,7 @@ fn main() {
         };
 
         let response = response.set_response_result(request.request_type());
-        print_response(response);
+
+        handle_response(response);
     }
 }

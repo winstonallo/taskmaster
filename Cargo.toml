@@ -13,8 +13,6 @@ serde_json = "1.0.140"
 libc = "0.2.169"
 toml = "0.8.20"
 tokio = { version = "1.44.1", features = ["full"] }
-
-[dev-dependencies]
 rand = "0.9.1"
 
 [[bin]]

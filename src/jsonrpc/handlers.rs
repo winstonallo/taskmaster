@@ -1,7 +1,11 @@
+use rand::{Rng, distr::Alphanumeric, rng};
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
+
 use super::{
     request::{RequestAttach, RequestRestart, RequestStart, RequestStop},
     response::ErrorCode,
 };
+use crate::run::daemon::socket::AsyncUnixSocket;
 use crate::{
     conf::Config,
     jsonrpc::{
@@ -27,7 +31,7 @@ pub async fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
         Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
         Reload => handle_request_reload(daemon),
         Halt => handle_request_halt(daemon),
-        Attach(request_attach) => handle_request_attach(daemon.processes_mut(), request_attach).await,
+        Attach(request_attach) => handle_request_attach(daemon.processes(), request_attach, daemon.auth_group()).await,
     };
 
     Response::from_request(request, response_type)
@@ -73,10 +77,7 @@ fn handle_request_start(processes: &mut HashMap<String, Process>, request: &Requ
 
     use ProcessState::*;
     match process.state() {
-        Healthy | HealthCheck(_) => {
-            // If the process was stopped after reaching max retries, it would go into an infinite restart loop.
-            ResponseType::Result(ResponseResult::Start(format!("process with name {} already running", process.name())))
-        }
+        Healthy | HealthCheck(_) => ResponseType::Result(ResponseResult::Start(format!("process with name {} already running", process.name()))),
         _ => ResponseType::Result(ResponseResult::Start(format!("starting process with name {}", process.name()))),
     }
 }
@@ -174,7 +175,72 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
-async fn handle_request_attach(processes: &mut HashMap<String, Process>, request: &RequestAttach) -> ResponseType {
+async fn attach(socket_path: &str, process: &Process, authgroup: &str) -> Result<ResponseResult, ResponseError> {
+    let mut listener = AsyncUnixSocket::new(socket_path, authgroup).map_err(|e| ResponseError {
+        code: ErrorCode::InternalError,
+        message: format!("could not create new socket stream: {e}"),
+        data: None,
+    })?;
+
+    let (_sender, mut receiver) = tokio::sync::mpsc::channel::<String>(32);
+
+    let mut file = tokio::fs::File::open(&process.config().stdout()).await.map_err(|e| ResponseError {
+        code: ErrorCode::InternalError,
+        message: format!("could not open process stdout: {e}"),
+        data: None,
+    })?;
+
+    let mut position = 0;
+
+    loop {
+        tokio::select! {
+            _accept_result = listener.accept() => {
+                // handle new client
+            },
+            Some(_stdin) = receiver.recv() => {
+                // write to process stdin
+            },
+            _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
+                let metadata = match file.metadata().await {
+                    Ok(m) => m,
+                    Err(e) => {
+                        eprintln!("could not get file metadata: {e}");
+                        continue;
+                    }
+                };
+
+                let size = metadata.len();
+                if size > position {
+                    if let Err(e) = file.seek(std::io::SeekFrom::Start(position)).await {
+                        eprintln!("could not seek file: {e}");
+                        continue;
+                    }
+
+                    let mut buffer = Vec::new();
+                    let bytes_read = match file.read_to_end(&mut buffer).await {
+                        Ok(n) => n,
+                        Err(e) => {
+                            eprintln!("could not read file: {e}");
+                            continue;
+                        }
+                    };
+
+                    if bytes_read > 0 {
+                        position += bytes_read as u64;
+
+                        if let Ok(output) = String::from_utf8(buffer) {
+                            print!("{output}");
+                        }
+                    }
+                } else if size < position {
+                    position = 0;
+                }
+            },
+        }
+    }
+}
+
+async fn handle_request_attach(processes: &HashMap<String, Process>, request: &RequestAttach, authgroup: &str) -> ResponseType {
     let process = match processes.get(request.name()) {
         Some(p) => p,
         None => {
@@ -185,19 +251,14 @@ async fn handle_request_attach(processes: &mut HashMap<String, Process>, request
             });
         }
     };
+    let socket_path = format!("/tmp/{}.sock", rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>());
 
-    let stdout = match tokio::fs::read_to_string(process.config().stdout()).await {
-        Ok(stdout) => stdout,
-        Err(e) => {
-            return ResponseType::Error(ResponseError {
-                code: ErrorCode::InternalError,
-                message: e.to_string(),
-                data: None,
-            });
-        }
-    };
+    let _ = attach(&socket_path, process, authgroup).await;
 
-    ResponseType::Result(ResponseResult::Attach(stdout))
+    ResponseType::Result(ResponseResult::Attach {
+        name: process.name().to_owned(),
+        socket_path,
+    })
 }
 
 #[cfg(test)]

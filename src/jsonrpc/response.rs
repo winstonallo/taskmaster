@@ -40,12 +40,11 @@ impl Response {
         match &self.response_type {
             ResponseType::Error(_) => {}
             ResponseType::Result(res) => match res {
-                ResponseResult::Status(_) | ResponseResult::StatusSingle(_) => {}
-                ResponseResult::Start(msg) | ResponseResult::Stop(msg) | ResponseResult::Restart(msg) | ResponseResult::Attach(msg) => match request_type {
+                ResponseResult::Status(_) | ResponseResult::StatusSingle(_) | ResponseResult::Attach { .. } => {}
+                ResponseResult::Start(msg) | ResponseResult::Stop(msg) | ResponseResult::Restart(msg) => match request_type {
                     RequestType::Start(_) => self.response_type = ResponseType::Result(ResponseResult::Start(msg.to_owned())),
                     RequestType::Stop(_) => self.response_type = ResponseType::Result(ResponseResult::Stop(msg.to_owned())),
                     RequestType::Restart(_) => self.response_type = ResponseType::Result(ResponseResult::Restart(msg.to_owned())),
-                    RequestType::Attach(_) => self.response_type = ResponseType::Result(ResponseResult::Attach(msg.to_owned())),
                     _ => {}
                 },
                 ResponseResult::Reload | ResponseResult::Halt => match request_type {
@@ -87,7 +86,7 @@ pub enum ResponseResult {
     Restart(String),
     Reload,
     Halt,
-    Attach(String),
+    Attach { name: String, socket_path: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

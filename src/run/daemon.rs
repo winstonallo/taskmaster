@@ -13,7 +13,7 @@ use crate::{
     log_error,
 };
 mod error;
-mod socket;
+pub mod socket;
 
 pub struct Daemon {
     processes: HashMap<String, proc::Process>,
@@ -149,7 +149,6 @@ impl Daemon {
                     let shutting_down = self.shutting_down;
                     tokio::spawn(async move {
                         if shutting_down {
-
                             let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
                         } else {
                             handle_client(socket, clone).await;
