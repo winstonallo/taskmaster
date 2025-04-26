@@ -175,6 +175,31 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
+async fn update_attach_stream(file: &mut tokio::fs::File, position: u64, listener: &mut AsyncUnixSocket) -> Result<u64, Box<dyn Error + Send + Sync>> {
+    match file.seek(std::io::SeekFrom::Start(position)).await {
+        Ok(_) => {}
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not seek file: {e}"))),
+    };
+
+    let mut pos = position;
+    let mut buf = Vec::new();
+
+    match file.read_to_end(&mut buf).await {
+        Ok(bytes_read) => {
+            if bytes_read > 0 {
+                pos += bytes_read as u64;
+
+                if let Err(e) = listener.write(&buf).await {
+                    return Err(Box::<dyn Error + Send + Sync>::from(format!("error writing to socket: {e}")));
+                }
+            }
+        }
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not read file: {e}"))),
+    }
+
+    Ok(pos)
+}
+
 async fn attach(socketpath: String, stdout_path: String, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut listener =
         AsyncUnixSocket::new(&socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
@@ -189,48 +214,28 @@ async fn attach(socketpath: String, stdout_path: String, authgroup: String) -> R
 
     let mut position = 0;
 
+    match listener.accept().await {
+        Ok(()) => {}
+        Err(e) => eprintln!("could not accept: {e}"),
+    };
+
     loop {
         match file.metadata().await {
             Ok(metadata) => {
                 let size = metadata.len();
-                if size > position {
-                    match file.seek(std::io::SeekFrom::Start(position)).await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            let error_msg = format!("could not seek file: {}", e);
-                            eprintln!("{}", error_msg);
-                            continue;
-                        }
-                    }
-
-                    let mut buffer = Vec::new();
-                    match file.read_to_end(&mut buffer).await {
-                        Ok(bytes_read) => {
-                            if bytes_read > 0 {
-                                position += bytes_read as u64;
-
-                                match listener.write(&buffer).await {
-                                    Ok(_) => {}
-                                    Err(e) => {
-                                        let error_msg = format!("error writing to socket: {}", e);
-                                        eprintln!("{}", error_msg);
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            let error_msg = format!("could not read file: {}", e);
-                            eprintln!("{}", error_msg);
-                        }
-                    }
-                } else if size < position {
+                if size < position {
                     position = 0;
                 }
+                if size == position {
+                    continue;
+                }
+
+                match update_attach_stream(&mut file, position, &mut listener).await {
+                    Ok(pos) => position = pos,
+                    Err(e) => eprintln!("{e}"),
+                }
             }
-            Err(e) => {
-                let error_msg = format!("could not get file metadata: {}", e);
-                eprintln!("{}", error_msg);
-            }
+            Err(e) => eprintln!("could not get file metadata: {e}"),
         }
     }
 }
@@ -246,6 +251,12 @@ enum AttachmentRequest {
         stdout_path: String,
         authgroup: String,
     },
+}
+
+impl Default for AttachmentManager {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl AttachmentManager {
