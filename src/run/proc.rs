@@ -12,7 +12,7 @@ use crate::{
     log_error, log_info, proc_info,
 };
 pub use error::ProcessError;
-use libc::{c_int, signal, umask};
+use libc::umask;
 
 use super::statemachine::{healthcheck::HealthCheckRunner, states::ProcessState};
 
@@ -65,12 +65,6 @@ impl Process {
             None => return,
         };
         self.state = new_state; // desired state
-    }
-}
-
-extern "C" fn kill(_signum: c_int) {
-    unsafe {
-        libc::_exit(1);
     }
 }
 
@@ -174,15 +168,11 @@ impl Process {
                 .stdin(Stdio::piped())
                 .stdout(stdout_file)
                 .stderr(stderr_file)
-                .current_dir(working_dir)
                 .pre_exec(move || {
-                    for sig in &stop_signals {
-                        signal(sig.signal(), kill as usize);
-                    }
                     umask(umask_val);
-
                     Ok(())
                 })
+                .current_dir(working_dir)
                 .spawn()
                 .map_err(|e| Box::<dyn Error + Send + Sync>::from(e.to_string()))
         }?;
@@ -257,7 +247,14 @@ impl Process {
         };
 
         unsafe {
-            libc::kill(child.id() as i32, libc::SIGTERM);
+            libc::kill(
+                child.id() as i32,
+                self.config()
+                    .stopsignals()
+                    .first()
+                    .expect("something went terribly wrong")
+                    .signal(),
+            );
         }
         proc_info!(self, "shutting down, PID {} gracefully", child.id());
 
