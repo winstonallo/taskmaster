@@ -1,0 +1,23 @@
+socketpath = "/tmp/.taskmaster.sock"
+
+authgroup = "winstonallo"
+
+[processes.sleepwrite]
+cmd = "/usr/bin/python3"
+args = ["/home/winstonallo/mastery/taskmaster/executables/sleepwrite.py"]
+processes = 1
+umask = "022"
+workingdir = "/tmp"
+autostart = true
+autorestart = "always"
+exitcodes = [0, 2]
+stopsignals = ["USR1"]
+stoptime = 5
+stdout = "/tmp/sleepwrite.stdout"
+stderr = "/tmp/sleepwrite.stderr"
+env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
+
+[processes.sleepwrite.healthcheck]
+starttime = 1
+backoff = 1
+retries = 1

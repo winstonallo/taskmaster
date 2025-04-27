@@ -7,7 +7,7 @@ use std::{
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{UnixListener, UnixStream},
+    net::{UnixListener, UnixStream, unix::SocketAddr},
 };
 
 use libc::{chown, getgrnam, gid_t};
@@ -41,9 +41,8 @@ fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
     unsafe {
         if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
             return Err(format!(
-                "could not change group ownership: {} - do you have permissions for group '{}'?",
+                "could not change group ownership: {} - do you have permissions for group '{authgroup}'?",
                 std::io::Error::last_os_error(),
-                authgroup
             ));
         }
     }
@@ -75,13 +74,14 @@ impl AsyncUnixSocket {
         })
     }
 
-    pub async fn accept(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn stream(&self) -> &Option<UnixStream> {
+        &self.stream
+    }
+
+    pub async fn accept(&mut self) -> Result<(UnixStream, SocketAddr), Box<dyn Error + Send + Sync>> {
         if let Some(listener) = &self.listener {
             match listener.accept().await {
-                Ok((stream, _)) => {
-                    self.stream = Some(stream);
-                    Ok(())
-                }
+                Ok((stream, addr)) => Ok((stream, addr)),
                 Err(e) => Err(format!("accept: {e}").into()),
             }
         } else {
@@ -89,20 +89,20 @@ impl AsyncUnixSocket {
         }
     }
 
-    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error + Send>> {
+    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error + Send + Sync>> {
         if self.stream.is_none() {
             self.accept().await.unwrap();
         }
 
         if let Some(ref mut stream) = self.stream {
             let mut reader = BufReader::new(stream);
-            reader.read_line(line).await.map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+            reader.read_line(line).await.map_err(Box::<dyn Error + Send + Sync>::from)
         } else {
-            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
+            Err(Box::<dyn Error + Send + Sync>::from("no connection established"))
         }
     }
 
-    pub async fn write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error + Send>> {
+    pub async fn write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error + Send + Sync>> {
         if self.stream.is_none() {
             self.accept().await.unwrap();
         }
@@ -112,7 +112,7 @@ impl AsyncUnixSocket {
             stream.flush().await.map_err(|e| format!("flush error: {e}")).unwrap();
             Ok(())
         } else {
-            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
+            Err(Box::<dyn Error + Send + Sync>::from("no connection established"))
         }
     }
 }

@@ -14,8 +14,8 @@ pub fn monitor_idle() -> Option<ProcessState> {
     None
 }
 
-pub fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
-    match p.start() {
+pub async fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
+    match p.start().await {
         Ok(()) => {
             let pid = p.id().expect("id should always be set if the process is running");
             proc_info!(&p, "spawned, PID {}", pid);
@@ -152,8 +152,9 @@ pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
     p.increment_healthcheck_failures();
 
     if p.healthcheck_failures() == p.healthcheck().retries() {
-        proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
         p.push_desired_state(ProcessState::Stopped);
+
+        proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
         None
     } else {
         proc_info!(p, "retrying healthcheck in {} seconds", p.healthcheck().backoff());
@@ -175,12 +176,12 @@ pub fn monitor_failed(p: &mut Process) -> Option<ProcessState> {
     }
 }
 
-pub fn monitor_waiting_for_retry(retry_at: &Instant, p: &mut Process) -> Option<ProcessState> {
+pub async fn monitor_waiting_for_retry(retry_at: &Instant, p: &mut Process) -> Option<ProcessState> {
     if retry_at > &Instant::now() {
         return None;
     }
 
-    match p.start() {
+    match p.start().await {
         Ok(()) => {
             proc_info!(&p, "spawned, PID {}", p.id().expect("if the process started, its id should be set"));
             Some(ProcessState::HealthCheck(Instant::now()))
@@ -195,12 +196,12 @@ pub fn monitor_waiting_for_retry(retry_at: &Instant, p: &mut Process) -> Option<
     }
 }
 
-pub fn monitor_completed(p: &mut Process) -> Option<ProcessState> {
+pub async fn monitor_completed(p: &mut Process) -> Option<ProcessState> {
     if p.config().autorestart().mode() != "always" {
         return None;
     }
 
-    match p.start() {
+    match p.start().await {
         Ok(()) => {
             proc_info!(p, "spawned, PID {}", p.id().expect("if the process started, its id should be set"));
             Some(ProcessState::HealthCheck(Instant::now()))
@@ -243,8 +244,13 @@ pub fn monitor_stopping(killed_at: Instant, p: &mut Process) -> Option<ProcessSt
 }
 
 pub fn monitor_stopped(p: &mut Process) -> Option<ProcessState> {
+    // Clear failures to start again from 0 if the process gets restarted by the shell.
+    p.clear_runtime_failures();
+    p.clear_healthcheck_failures();
+
     // When a process is killed, its entry in the process table is kept
     // until the parent either exits or calls wait() on it.
     let _ = p.exited();
+
     None
 }

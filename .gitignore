@@ -1,7 +1,5 @@
-target/
-writetofile.sh
-file.txt
-history.txt
 a.out
-main.c
-test.c
+target/
+*.c
+*.sh
+*.txt

@@ -1,8 +1,11 @@
 use serde::{Deserialize, Serialize, Serializer, ser::Error};
 
-use super::{request::Request, short_process::ShortProcess};
+use super::{
+    request::{Request, RequestType},
+    short_process::ShortProcess,
+};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Response {
     id: u32,
     #[serde(serialize_with = "json_rpc")]
@@ -31,6 +34,28 @@ impl Response {
     pub fn response_type(&self) -> &ResponseType {
         &self.response_type
     }
+
+    // Ugly solution
+    pub fn set_response_result(&mut self, request_type: &RequestType) -> &Self {
+        match &self.response_type {
+            ResponseType::Error(_) => {}
+            ResponseType::Result(res) => match res {
+                ResponseResult::Status(_) | ResponseResult::StatusSingle(_) | ResponseResult::Attach { .. } => {}
+                ResponseResult::Start(msg) | ResponseResult::Stop(msg) | ResponseResult::Restart(msg) => match request_type {
+                    RequestType::Start(_) => self.response_type = ResponseType::Result(ResponseResult::Start(msg.to_owned())),
+                    RequestType::Stop(_) => self.response_type = ResponseType::Result(ResponseResult::Stop(msg.to_owned())),
+                    RequestType::Restart(_) => self.response_type = ResponseType::Result(ResponseResult::Restart(msg.to_owned())),
+                    _ => {}
+                },
+                ResponseResult::Reload | ResponseResult::Halt => match request_type {
+                    RequestType::Reload => self.response_type = ResponseType::Result(ResponseResult::Reload),
+                    RequestType::Halt => self.response_type = ResponseType::Result(ResponseResult::Halt),
+                    _ => {}
+                },
+            },
+        }
+        self
+    }
 }
 
 fn json_rpc<S>(json_rpc: &String, s: S) -> Result<S::Ok, S::Error>
@@ -44,7 +69,7 @@ where
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum ResponseType {
     Result(ResponseResult),
@@ -61,6 +86,7 @@ pub enum ResponseResult {
     Restart(String),
     Reload,
     Halt,
+    Attach { name: String, socketpath: String, to: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -68,6 +94,30 @@ pub struct ResponseError {
     pub code: ErrorCode,
     pub message: String,
     pub data: Option<ResponseErrorData>,
+}
+
+unsafe impl Send for ResponseError {}
+unsafe impl Sync for ResponseError {}
+
+impl std::fmt::Display for ResponseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}: {}", self.code, self.message))
+    }
+}
+
+impl std::error::Error for ResponseError {}
+
+impl ResponseError {
+    pub fn custom<T>(msg: T) -> Self
+    where
+        T: std::fmt::Display,
+    {
+        Self {
+            code: ErrorCode::InternalError,
+            message: msg.to_string(),
+            data: None,
+        }
+    }
 }
 
 #[repr(i16)]

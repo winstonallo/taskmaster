@@ -1,5 +1,11 @@
+use rand::{Rng, distr::Alphanumeric, rng};
+use tokio::{
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+    net::UnixStream,
+};
+
 use super::{
-    request::{RequestRestart, RequestStart, RequestStop},
+    request::{AttachFile, RequestAttach, RequestRestart, RequestStart, RequestStop},
     response::ErrorCode,
 };
 use crate::{
@@ -8,25 +14,28 @@ use crate::{
         response::{ResponseResult, ResponseType},
         short_process::ShortProcess,
     },
+    log_info,
     run::{daemon::Daemon, proc::Process, statemachine::states::ProcessState},
 };
-use std::collections::HashMap;
+use crate::{log_error, run::daemon::socket::AsyncUnixSocket};
+use std::{collections::HashMap, error::Error};
 
 use super::{
     request::{Request, RequestStatusSingle},
     response::{Response, ResponseError},
 };
 
-pub fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
+pub async fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
     use super::request::RequestType::*;
     let response_type = match request.request_type() {
         Status => handle_request_status(daemon.processes_mut()),
-        StatusSingle(request_status_single) => handle_request_status_single(daemon.processes_mut(), request_status_single),
-        Start(request_start) => handle_request_start(daemon.processes_mut(), request_start),
-        Stop(request_stop) => handle_request_stop(daemon.processes_mut(), request_stop),
-        Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
+        StatusSingle(request) => handle_request_status_single(daemon.processes_mut(), request),
+        Start(request) => handle_request_start(daemon.processes_mut(), request),
+        Stop(request) => handle_request_stop(daemon.processes_mut(), request),
+        Restart(request) => handle_request_restart(daemon.processes_mut(), request),
         Reload => handle_request_reload(daemon),
         Halt => handle_request_halt(daemon),
+        Attach(request) => handle_request_attach(daemon, request).await,
     };
 
     Response::from_request(request, response_type)
@@ -170,6 +179,156 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
+async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, listener: &mut UnixStream) -> Result<u64, Box<dyn Error + Send + Sync>> {
+    match file.seek(std::io::SeekFrom::Start(pos)).await {
+        Ok(_) => {}
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not seek file: {e}"))),
+    };
+
+    if len <= pos {
+        return Ok(if len == pos { pos } else { 0 });
+    }
+
+    let mut pos = pos;
+    let mut buf = Vec::new();
+
+    match file.read_to_end(&mut buf).await {
+        Ok(bytes_read) => {
+            if bytes_read > 0 {
+                pos += bytes_read as u64;
+                listener.write_all(&buf).await?;
+            }
+        }
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not read file: {e}"))),
+    }
+
+    Ok(pos)
+}
+
+async fn attach(socketpath: &str, to: &str, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut listener =
+        AsyncUnixSocket::new(socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
+
+    let mut file = tokio::fs::File::open(&to)
+        .await
+        .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not open stdout at path '{to}': {e}")))?;
+
+    let mut pos = 0;
+
+    let (mut sock, _addr) = match listener.accept().await {
+        Ok((sock, addr)) => {
+            log_info!("client attached, sending data on {socketpath}");
+            (sock, addr)
+        }
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not accept client on {socketpath}: {e}"))),
+    };
+
+    loop {
+        tokio::select! {
+            md = file.metadata() => {
+                match md {
+                    Ok(metadata) => pos = update_attach_stream(&mut file, pos, metadata.len(), &mut sock).await?,
+                    Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{to}': {e}"))),
+                }
+            }
+
+        }
+    }
+}
+
+pub struct AttachmentManager {
+    tx: tokio::sync::mpsc::Sender<AttachmentRequest>,
+}
+
+enum AttachmentRequest {
+    New { socketpath: String, to: String, authgroup: String },
+}
+
+impl Default for AttachmentManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AttachmentManager {
+    pub fn new() -> Self {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+
+        tokio::spawn(async move {
+            while let Some(req) = rx.recv().await {
+                match req {
+                    AttachmentRequest::New { socketpath, to, authgroup } => {
+                        tokio::spawn(async move {
+                            if let Err(e) = attach(&socketpath, &to, authgroup).await {
+                                if e.to_string().contains("Broken pipe") {
+                                    log_info!("connection on {socketpath} closed");
+                                } else {
+                                    log_error!("attach: {e}");
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
+        Self { tx }
+    }
+
+    pub async fn attach(&self, socketpath: &str, to: &str, authgroup: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.tx
+            .send(AttachmentRequest::New {
+                socketpath: socketpath.to_owned(),
+                to: to.to_owned(),
+                authgroup: authgroup.to_owned(),
+            })
+            .await
+            .map_err(Box::<dyn Error + Send + Sync>::from)
+    }
+}
+
+async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> ResponseType {
+    let process = match daemon.processes().get(request.name()) {
+        Some(p) => p,
+        None => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InvalidParams,
+                message: format!("process {} not found", request.name()),
+                data: None,
+            });
+        }
+    };
+
+    let socketpath = format!("/tmp/{}.sock", rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>());
+    let attach_path = match request.to {
+        AttachFile::StdOut => process.config().stdout(),
+        AttachFile::StdErr => process.config().stderr(),
+    };
+
+    if let Err(e) = daemon
+        .attachment_manager()
+        .attach(&socketpath, attach_path, daemon.auth_group())
+        .await
+    {
+        let message = format!("could not attach to process {}: {e}", request.name());
+        log_error!("{message}");
+        return ResponseType::Error(ResponseError {
+            code: ErrorCode::InternalError,
+            message,
+            data: None,
+        });
+    }
+
+    ResponseType::Result(ResponseResult::Attach {
+        name: process.name().to_owned(),
+        socketpath,
+        to: match request.to {
+            AttachFile::StdOut => "stdout".to_string(),
+            AttachFile::StdErr => "stderr".to_string(),
+        },
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -202,7 +361,7 @@ mod tests {
         let _ = d.run_once().await;
 
         let _ = handle_request(&mut d, Request::new(1, RequestType::new_status()));
-        let response = handle_request(&mut d, Request::new(1, RequestType::new_halt()));
+        let response = handle_request(&mut d, Request::new(1, RequestType::new_halt())).await;
         assert!(matches!(response.response_type(), ResponseType::Result(_)));
     }
 
@@ -214,7 +373,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt()));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt())).await;
         assert_eq!(d.shutting_down(), true);
     }
 
@@ -228,7 +387,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep"))).await;
 
         let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
@@ -250,7 +409,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("notaprocess")),
-        );
+        )
+        .await;
 
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
@@ -265,7 +425,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep"))).await;
 
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Idle);
     }
@@ -279,8 +439,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status()));
-        assert!(matches!(response.response_type(), ResponseType::Result(_)));
+        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status())).await;
 
         match response.response_type() {
             ResponseType::Result(res) => match res {
@@ -303,7 +462,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single("process")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Result(_)));
 
         match response.response_type() {
@@ -327,7 +487,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single("notaprocess")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
 
@@ -343,7 +504,8 @@ mod tests {
 
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Idle);
 
-        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep")));
+        let response =
+            handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep"))).await;
         assert!(matches!(response.response_type(), ResponseType::Result(_)));
 
         let _ = d.run_once().await;
@@ -382,7 +544,7 @@ mod tests {
         let mut file = File::create(&path).unwrap();
         let _ = File::write(&mut file, changed_conf.as_bytes());
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload()));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload())).await;
         tokio::time::sleep(Duration::from_millis(100)).await;
         let _ = d.run_once().await;
 
@@ -402,7 +564,7 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload()));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload())).await;
 
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
@@ -444,7 +606,7 @@ mod tests {
 
         let _ = fs::remove_file(&path);
 
-        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload()));
+        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload())).await;
 
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
@@ -464,7 +626,7 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_restart("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_restart("sleep"))).await;
         let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
 
@@ -495,7 +657,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_restart("notaprocess")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
 
@@ -515,7 +678,7 @@ mod tests {
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
         // Running start on a running process should have no effect.
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep"))).await;
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
     }
@@ -535,7 +698,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("notaprocess")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
 }

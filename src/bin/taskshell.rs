@@ -1,14 +1,13 @@
-use std::{
-    env::args,
-    io::{Read, Write},
-    os::unix::net::UnixStream,
-    process::exit,
-    sync::atomic::AtomicU32,
+use std::{io::Write, process::exit, sync::atomic::AtomicU32};
+
+use tokio::{
+    io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
+    net::UnixStream,
 };
 
 use tasklib::{
     jsonrpc::{
-        request::RequestType,
+        request::{AttachFile, RequestType},
         response::{Response, ResponseType},
     },
     shell,
@@ -18,17 +17,20 @@ use tasklib::jsonrpc::request::Request;
 
 const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
 
-fn read_from_stream(unix_stream: &mut UnixStream) -> Result<String, String> {
+async fn read_from_stream<R>(reader: &mut BufReader<R>) -> Result<String, String>
+where
+    R: AsyncRead + Unpin,
+{
     let mut buf = String::new();
+    let bytes_read = reader.read_line(&mut buf).await.map_err(|e| e.to_string())?;
 
-    unix_stream.read_to_string(&mut buf).map_err(|e| format!("{e}"))?;
-
-    Ok(buf)
+    let s = String::from_utf8_lossy(&buf.as_bytes()[0..bytes_read]).to_string();
+    Ok(s)
 }
 
-fn write_request(unix_stream: &mut UnixStream, request: &[u8]) -> Result<(), String> {
-    unix_stream.write(request).map_err(|e| format!("{e}"))?;
-    unix_stream.shutdown(std::net::Shutdown::Write).map_err(|e| format!("{e}"))?;
+async fn write_request(unix_stream: &mut UnixStream, request: &[u8]) -> Result<(), String> {
+    unix_stream.write_all(request).await.map_err(|e| e.to_string())?;
+    unix_stream.shutdown().await.map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -61,6 +63,13 @@ fn build_request_restart(name: &str) -> Request {
 
 fn build_request_stop(name: &str) -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop(name))
+}
+
+fn build_request_attach(name: &str, to: &str) -> Request {
+    Request::new(
+        ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        RequestType::new_attach(name, if to == "stdout" { AttachFile::StdOut } else { AttachFile::StdErr }),
+    )
 }
 
 fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
@@ -111,6 +120,20 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
                 return Err("usage: halt\n");
             }
         }
+        "attach" => {
+            if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
+                build_request_attach(arguments[1], arguments[2])
+            } else {
+                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
+            }
+        }
+        "attach" => {
+            if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
+                build_request_attach(arguments[1], arguments[2])
+            } else {
+                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
+            }
+        }
         "exit" => exit(0),
         _ => {
             return Err("method not implemented\n");
@@ -120,25 +143,60 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     Ok(request)
 }
 
+async fn attach(name: &str, socket_path: &str, to: &str) {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+    let tx_clone = tx.clone();
+
+    tokio::spawn(async move {
+        if (tokio::signal::ctrl_c().await).is_ok() {
+            let _ = tx_clone.send(()).await;
+        }
+    });
+
+    let stream = match UnixStream::connect(socket_path).await {
+        Ok(stream) => stream,
+        Err(e) => {
+            eprintln!("could not establish connection on attach socket at path {socket_path}: {e}");
+            return;
+        }
+    };
+
+    let mut reader = BufReader::new(stream);
+
+    loop {
+        tokio::select! {
+            read_result = read_from_stream(&mut reader) => {
+                match read_result {
+                    Ok(data) => print!("[{name}:{to}]: {data}"),
+                    Err(e) => {
+                        eprintln!("attach (process: {name}): {e}");
+                        break;
+                    }
+                }
+            },
+            _ = rx.recv() => {
+                println!("[{name}:{to}]: detached");
+                break;
+            }
+        }
+    }
+}
+
+async fn handle_response(response: &Response) {
 fn response_to_str(response: Response) -> String {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
             match res {
-                Status(items) => {
-                    let mut str = String::new();
-                    for short_process in items.iter() {
-                        str.push_str(&format!("Name: {}\t State: {}\n", short_process.name(), short_process.state()));
-                    }
-                    str
-                }
-                StatusSingle(short_process) => format!("Name: {}, State: {}\n", short_process.name(), short_process.state()),
-                Start(name) => format!("starting: {name}\n"),
-                Stop(name) => format!("stopping: {name}\n"),
-                Restart(name) => format!("restarting: {name}\n"),
-                Reload => "reloading configuration\n".to_owned(),
-                Halt => "shutting down taskmaster\n".to_owned(),
-            }
+                Status(items) => items.iter().for_each(|sp| println!("{}: {}", sp.name(), sp.state())),
+                StatusSingle(item) => println!("{}: {}", item.name(), item.state()),
+                Start(name) => println!("starting: {name}"),
+                Stop(name) => println!("stopping: {name}"),
+                Restart(name) => println!("restarting: {name}"),
+                Reload => println!("reloading configuration"),
+                Halt => println!("shutting down taskmaster\n"),
+                Attach { name, socketpath, to } => attach(name, socketpath, to).await,
+            };
         }
         ResponseType::Error(err) => err.message.clone() + "\n",
     }
@@ -160,7 +218,7 @@ fn handle_input(input: String) -> Result<String, String> {
         Err(e) => return Err(e.to_owned()),
     };
 
-    let request = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
+        let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
     if let Err(e) = write_request(&mut unix_stream, request.as_bytes()) {
         return Err(format!("error while writing request: {e}\n"));

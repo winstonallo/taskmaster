@@ -360,8 +360,20 @@ mod from_file {
     fn valid_config_all_fields_set() {
         let conf = Config::from_file("./tests/configs/example.toml").expect("could not parse config");
 
-        assert!(conf.processes().keys().cloned().collect::<Vec<String>>().contains(&"sleep".to_string()));
-        assert!(conf.processes().keys().cloned().collect::<Vec<String>>().contains(&"ls".to_string()));
+        assert!(
+            conf.processes()
+                .keys()
+                .cloned()
+                .collect::<Vec<String>>()
+                .contains(&"sleep".to_string())
+        );
+        assert!(
+            conf.processes()
+                .keys()
+                .cloned()
+                .collect::<Vec<String>>()
+                .contains(&"ls".to_string())
+        );
         assert_eq!(conf.processes()["sleep"].cmd().path(), "/usr/bin/sleep");
         assert_eq!(conf.processes()["sleep"].processes(), 1);
         assert_eq!(conf.processes()["sleep"].umask(), 0o022);

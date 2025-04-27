@@ -2,10 +2,13 @@ use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use socket::AsyncUnixSocket;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::time::sleep;
 
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
+use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
 use crate::{
     conf,
@@ -13,7 +16,7 @@ use crate::{
     log_error,
 };
 mod error;
-mod socket;
+pub mod socket;
 
 pub struct Daemon {
     processes: HashMap<String, proc::Process>,
@@ -21,6 +24,7 @@ pub struct Daemon {
     auth_group: String,
     config_path: String,
     shutting_down: bool,
+    attachment_manager: AttachmentManager,
 }
 
 impl Daemon {
@@ -46,6 +50,7 @@ impl Daemon {
             auth_group: conf.authgroup().to_owned(),
             config_path,
             shutting_down: false,
+            attachment_manager: AttachmentManager::new(),
         }
     }
 
@@ -77,6 +82,14 @@ impl Daemon {
         self.shutting_down = true;
     }
 
+    pub fn attachment_manager(&self) -> &AttachmentManager {
+        &self.attachment_manager
+    }
+
+    pub fn attachment_manager_mut(&mut self) -> &mut AttachmentManager {
+        &mut self.attachment_manager
+    }
+
     #[cfg(test)]
     pub async fn run_once(&mut self) -> Result<(), Box<dyn Error + Send>> {
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
@@ -87,38 +100,41 @@ impl Daemon {
         tokio::select! {
             accept_result = listener.accept() => {
 
-                if let Err(e) = accept_result {
-                    log_error!("Failed to accept connection: {}", e);
+
+                match accept_result {
+                    Ok((sock, _)) => {
+                        let mut socket = listener;
+                        let clone = sender.clone();
+
+                        let shutting_down = self.shutting_down;
+                        tokio::spawn(async move {
+                            if shutting_down {
+                                let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
+                            } else {
+                                handle_client(sock, clone).await;
+                            }
+                        });
+                    },
+                    Err(e) => log_error!("Failed to accept connection: {e}"),
                 }
 
-                let mut socket = listener;
-                let clone = sender.clone();
 
-                let shutting_down = self.shutting_down;
-                tokio::spawn(async move {
-                    if shutting_down {
-
-                        let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
-                    } else {
-                        handle_client(socket, clone).await;
-                    }
-                });
             },
 
             Some((request, mut socket)) = receiver.recv() => {
-                let response = handle_request(self, request);
+                let response = handle_request(self, request).await;
 
                 let msg = serde_json::to_string(&response).unwrap();
 
                 tokio::spawn(async move {
                     if let Err(e) = socket.write(msg.as_bytes()).await {
-                        log_error!("error sending to socket: {}", e);
+                        log_error!("error sending to socket: {e}");
                     }
                 });
             },
 
             _ = sleep(Duration::from_nanos(1)) => {
-                monitor_state(self.processes_mut());
+                monitor_state(self.processes_mut()).await;
 
                 if  self.shutting_down && self.no_process_running(){
                     return Ok(());
@@ -138,41 +154,42 @@ impl Daemon {
             tokio::select! {
                 accept_result = listener.accept() => {
 
-                    if let Err(e) = accept_result {
-                        log_error!("Failed to accept connection: {}", e);
-                        continue;
+                    match accept_result {
+                        Ok((mut sock, _)) => {
+                            let clone = sender.clone();
+
+                            let shutting_down = self.shutting_down;
+
+                            tokio::spawn(async move {
+                                if shutting_down {
+                                    let _ = sock.write("not accepting requests - currently shutting down".as_bytes()).await;
+                                } else {
+                                    handle_client(sock, clone).await;
+                                }
+                            });
+                        },
+                        Err(e) => {
+                            log_error!("Failed to accept connection: {e}");
+                            continue;
+                        }
                     }
 
-                    let mut socket = listener;
-                    let clone = sender.clone();
-
-                    let shutting_down = self.shutting_down;
-                    tokio::spawn(async move {
-                        if shutting_down {
-
-                            let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
-                        } else {
-                            handle_client(socket, clone).await;
-                        }
-                    });
-
-                    listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group())?;
                 },
 
                 Some((request, mut socket)) = receiver.recv() => {
-                    let response = handle_request(self, request);
+                    let response = handle_request(self, request).await;
 
                     let msg = serde_json::to_string(&response).unwrap();
 
                     tokio::spawn(async move {
                         if let Err(e) = socket.write(msg.as_bytes()).await {
-                            log_error!("error sending to socket: {}", e);
+                            log_error!("error sending to socket: {e}");
                         }
                     });
                 },
 
                 _ = sleep(Duration::from_nanos(1)) => {
-                    monitor_state(self.processes_mut());
+                    monitor_state(self.processes_mut()).await;
 
                     if  self.shutting_down && self.no_process_running(){
                         return Ok(());
@@ -195,10 +212,10 @@ impl Daemon {
     }
 }
 
-fn monitor_state(procs: &mut HashMap<String, Process>) {
+async fn monitor_state(procs: &mut HashMap<String, Process>) {
     for proc in procs.values_mut() {
         proc.desire();
-        proc.monitor();
+        proc.monitor().await;
     }
 }
 
@@ -207,10 +224,13 @@ pub struct MinimumRequest {
     pub id: u32,
 }
 
-async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mpsc::Sender<(Request, AsyncUnixSocket)>>) {
+async fn handle_client(mut socket: UnixStream, sender: Arc<tokio::sync::mpsc::Sender<(Request, UnixStream)>>) {
     let mut line = String::new();
 
-    match socket.read_line(&mut line).await {
+    let (reader_half, mut writer_half) = socket.split();
+    let mut reader = BufReader::new(reader_half);
+
+    match reader.read_line(&mut line).await {
         Ok(0) => { /* connection closed, do nothing */ }
         Ok(_) => match serde_json::from_str(&line) {
             Ok(request) => {
@@ -229,13 +249,13 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                     .unwrap(),
                     Err(_) => "request id not found - can't respond with JsonRPCError".to_owned(),
                 };
-                if let Err(e) = socket.write(error_msg.as_bytes()).await {
-                    log_error!("error writing to socket: {}", e)
+                if let Err(e) = writer_half.write_all(error_msg.as_bytes()).await {
+                    log_error!("error writing to socket: {e}")
                 }
             }
         },
         Err(e) => {
-            log_error!("Error reading from socket: {}", e);
+            log_error!("Error reading from socket: {e}");
         }
     }
 }
@@ -285,7 +305,10 @@ mod tests {
         let mut hc = HealthCheck::default();
         let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -303,7 +326,10 @@ mod tests {
         let mut hc = HealthCheck::default();
         let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -321,9 +347,15 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_failed_retry() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 }).set_backoff(1).set_retries(2);
+        let hc = hc
+            .set_check(HealthCheckType::Uptime { starttime: 2 })
+            .set_backoff(1)
+            .set_retries(2);
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -349,7 +381,10 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_stopped_max_retries_reached() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 }).set_backoff(1).set_retries(1);
+        let hc = hc
+            .set_check(HealthCheckType::Uptime { starttime: 2 })
+            .set_backoff(1)
+            .set_retries(1);
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")
@@ -374,10 +409,15 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 1);
 
-        // Run one last time to catch Stopped state (the Stopping -> Stopped transition is done
+        // Run to catch Stopped state (the Stopping -> Stopped transition is done
         // in the same iteration of the state machine).
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        // Run last time to trigger monitor_stopped, which will clear failure counts for eventual
+        // future restarts.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 0);
 
         d.shutdown();
     }
@@ -387,7 +427,10 @@ mod tests {
         let mut hc = HealthCheck::default();
         let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 2; exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 2; exit 1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -426,7 +469,10 @@ mod tests {
     #[tokio::test]
     async fn healthy_to_failed_max_retries_reached() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 }).set_retries(1).set_backoff(1);
+        let hc = hc
+            .set_check(HealthCheckType::Uptime { starttime: 1 })
+            .set_retries(1)
+            .set_backoff(1);
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")
@@ -475,16 +521,23 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
 
+        // Run again to go into monitor_stopped, which will clear failure counters.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().runtime_failures(), 0);
+
         d.shutdown();
     }
 
     #[tokio::test]
     async fn healthy_to_completed_autorestart() {
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]).set_autorestart(AutoRestart {
-            mode: "always".to_string(),
-            max_retries: None,
-        });
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["2".to_string()])
+            .set_autorestart(AutoRestart {
+                mode: "always".to_string(),
+                max_retries: None,
+            });
         let mut conf = Config::random();
         let conf = conf.add_process("sleep", proc.clone());
         let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
@@ -519,7 +572,11 @@ mod tests {
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
         // Push desired Stopped state, run once to update state.
-        let _ = d.processes_mut().get_mut("sleep").unwrap().push_desired_state(ProcessState::Stopped);
+        let _ = d
+            .processes_mut()
+            .get_mut("sleep")
+            .unwrap()
+            .push_desired_state(ProcessState::Stopped);
         let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
 
@@ -544,7 +601,10 @@ mod tests {
             timeout: 10,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["10".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -571,7 +631,10 @@ mod tests {
             timeout: 1,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["10".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -598,7 +661,10 @@ mod tests {
             timeout: 1,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["10".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -625,7 +691,10 @@ mod tests {
             timeout: 10,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
@@ -652,7 +721,10 @@ mod tests {
             timeout: 10,
         });
         let mut proc = ProcessConfig::default();
-        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let proc = proc
+            .set_cmd("sleep")
+            .set_args(vec!["1".to_string()])
+            .set_healthcheck(hc.to_owned());
         let mut conf = Config::random();
         conf.add_process("sleep", proc.to_owned());
         let mut d = Daemon::from_config(conf, "foo".to_string());
