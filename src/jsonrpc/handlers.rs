@@ -223,15 +223,10 @@ async fn attach(socketpath: String, stdout_path: String, stderr_path: String, au
     let mut stdout_pos = 0;
     let mut stderr_pos = 0;
 
-    loop {
-        match listener.accept().await {
-            Ok(()) => {
-                log_info!("client attached, sending data on {socketpath}");
-                break;
-            }
-            Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not accept client on {socketpath}: {e}"))),
-        };
-    }
+    match listener.accept().await {
+        Ok(()) => log_info!("client attached, sending data on {socketpath}"),
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not accept client on {socketpath}: {e}"))),
+    };
 
     loop {
         tokio::select! {
