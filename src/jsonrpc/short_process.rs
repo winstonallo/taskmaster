@@ -26,7 +26,7 @@ impl ShortProcess {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub enum State {
     Idle,
     Ready,

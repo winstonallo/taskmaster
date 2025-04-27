@@ -32,6 +32,8 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
         }
     }
 }
+
+#[cfg(not(test))]
 fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
     let gid = get_group_id(authgroup)?;
     let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {}", e))?;
@@ -62,6 +64,7 @@ impl AsyncUnixSocket {
             }
         };
 
+        #[cfg(not(test))]
         set_permissions(socketpath, authgroup)?;
 
         Ok(Self {
@@ -111,5 +114,20 @@ impl AsyncUnixSocket {
         } else {
             Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_group_id_success() {
+        assert_eq!(get_group_id("root").unwrap(), 0);
+    }
+
+    #[test]
+    fn get_group_id_nonexisting() {
+        assert!(get_group_id("randomaaaahgroup").is_err());
     }
 }

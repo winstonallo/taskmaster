@@ -91,11 +91,6 @@ cmd = "/usr/bin/sleep"
 # Defaults to [].
 args = ["2"]
 
-# Time, in seconds, given for the healthcheck to run through. If it runs for longer,
-# it will be considered failed.
-timeout = 1
-
-
 # How many times to retry the healthcheck.
 retries = 3
 

@@ -6,7 +6,7 @@ use std::{
 use crate::run::{
     proc::Process,
     statemachine::{
-        desired::{desire_healthy, desire_idle, desire_ready},
+        desired::{desire_healthy, desire_idle, desire_ready, desire_stopped},
         monitor::{
             monitor_completed, monitor_failed, monitor_healthcheck, monitor_healthy, monitor_idle, monitor_ready, monitor_stopped, monitor_stopping,
             monitor_waiting_for_retry,
@@ -69,7 +69,8 @@ impl ProcessState {
 
         use ProcessState::*;
         let (o, remove_desired_state) = match desired_state {
-            Idle | Stopping(_) | Stopped => desire_idle(proc),
+            Idle => desire_idle(proc),
+            Stopping(_) | Stopped => desire_stopped(proc),
             Ready => desire_ready(proc),
             HealthCheck(_) | Healthy => desire_healthy(proc),
             Completed => panic!("target ProcessState `Completed` doesn't make sense"),

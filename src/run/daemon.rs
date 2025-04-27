@@ -76,6 +76,58 @@ impl Daemon {
     pub fn shutdown(&mut self) {
         self.shutting_down = true;
     }
+
+    #[cfg(test)]
+    pub async fn run_once(&mut self) -> Result<(), Box<dyn Error + Send>> {
+        let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
+
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
+        let sender = Arc::new(sender);
+
+        tokio::select! {
+            accept_result = listener.accept() => {
+
+                if let Err(e) = accept_result {
+                    log_error!("Failed to accept connection: {}", e);
+                }
+
+                let mut socket = listener;
+                let clone = sender.clone();
+
+                let shutting_down = self.shutting_down;
+                tokio::spawn(async move {
+                    if shutting_down {
+
+                        let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
+                    } else {
+                        handle_client(socket, clone).await;
+                    }
+                });
+            },
+
+            Some((request, mut socket)) = receiver.recv() => {
+                let response = handle_request(self, request);
+
+                let msg = serde_json::to_string(&response).unwrap();
+
+                tokio::spawn(async move {
+                    if let Err(e) = socket.write(msg.as_bytes()).await {
+                        log_error!("error sending to socket: {}", e);
+                    }
+                });
+            },
+
+            _ = sleep(Duration::from_nanos(1)) => {
+                monitor_state(self.processes_mut());
+
+                if  self.shutting_down && self.no_process_running(){
+                    return Ok(());
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 
@@ -151,7 +203,7 @@ fn monitor_state(procs: &mut HashMap<String, Process>) {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct MininamRequest {
+pub struct MinimumRequest {
     pub id: u32,
 }
 
@@ -165,7 +217,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                 let _ = sender.send((request, socket)).await;
             }
             Err(e) => {
-                let error_msg = match serde_json::from_str::<MininamRequest>(&line) {
+                let error_msg = match serde_json::from_str::<MinimumRequest>(&line) {
                     Ok(m_r) => serde_json::to_string(&Response::new(
                         m_r.id,
                         ResponseType::Error(ResponseError {
@@ -185,5 +237,436 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
         Err(e) => {
             log_error!("Error reading from socket: {}", e);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::conf::proc::ProcessConfig;
+    use crate::conf::proc::types::{AutoRestart, HealthCheck, HealthCheckType};
+
+    use super::conf::Config;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn idle_to_healthcheck() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_healthy_uptime() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]);
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_completed_uptime() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_failed_uptime() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let _ = d.run_once().await;
+
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_failed_retry() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 }).set_backoff(1).set_retries(2);
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        tokio::time::sleep(Duration::from_millis(600)).await;
+        let _ = d.run_once().await;
+
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 1);
+
+        // Wait for backoff, process should then be back in healthcheck.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_stopped_max_retries_reached() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 }).set_backoff(1).set_retries(1);
+        let mut proc = ProcessConfig::default();
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 1 && exit 1".to_string()])
+            .set_healthcheck(hc.to_owned())
+            .set_stoptime(1);
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        // Start process and healthcheck.
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        tokio::time::sleep(Duration::from_millis(600)).await;
+
+        // Run to catch failure.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+
+        // Run to enter monitor_failed and increment failure count and push desired Stopped state.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 1);
+
+        // Run one last time to catch Stopped state (the Stopping -> Stopped transition is done
+        // in the same iteration of the state machine).
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthy_to_failed() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sh").set_args(vec!["-c".to_string(), "sleep 2; exit 1".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+
+        // Wait for process to be healthy.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+
+        // Wait for the process to exit with bad status.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        let _ = d.run_once().await;
+
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn idle_no_autostart() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_autostart(false);
+        let mut conf = Config::random();
+        conf.add_process("process", proc.to_owned());
+        let mut d = Daemon::from_config(conf, "path".to_string());
+
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("process").unwrap().state(), ProcessState::Idle);
+
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("process").unwrap().state(), ProcessState::Idle);
+    }
+
+    #[tokio::test]
+    async fn healthy_to_failed_max_retries_reached() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 }).set_retries(1).set_backoff(1);
+        let mut proc = ProcessConfig::default();
+        let proc = proc
+            .set_cmd("sh")
+            .set_args(vec!["-c".to_string(), "sleep 2; exit 1".to_string()])
+            .set_autorestart(AutoRestart {
+                mode: "on-failure".to_string(),
+                max_retries: Some(1),
+            })
+            .set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+
+        // Wait for process to be healthy.
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+
+        // Wait for the process to exit with bad status.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+
+        // Run again to enter WaitingForRetry state.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::WaitingForRetry(_)));
+        assert_eq!(d.processes().get("sleep").unwrap().runtime_failures(), 1);
+
+        // Return to healthcheck.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+
+        // Wait for the process to exit with bad status.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthy_to_completed_autorestart() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["2".to_string()]).set_autorestart(AutoRestart {
+            mode: "always".to_string(),
+            max_retries: None,
+        });
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_secs(2)).await;
+        let _ = d.run_once().await;
+
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
+
+        // Run again to trigger restart.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthy_to_stopped() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_stoptime(1);
+        let mut conf = Config::random();
+        let conf = conf.add_process("sleep", proc.clone());
+        let mut d = Daemon::from_config(conf.clone(), "idc".to_string());
+
+        // Run once to start the process and wait for `starttime`.
+        let _ = d.run_once().await;
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+
+        // Run once to update the state.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+
+        // Push desired Stopped state, run once to update state.
+        let _ = d.processes_mut().get_mut("sleep").unwrap().push_desired_state(ProcessState::Stopped);
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
+
+        // Wait for `stoptime` and run once to update state.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        // Assert that the process stays in Stopped state.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        d.shutdown();
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_healthy_command() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Command {
+            cmd: "sleep".to_string(),
+            args: vec!["1".to_string()],
+            timeout: 10,
+        });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        conf.add_process("sleep", proc.to_owned());
+        let mut d = Daemon::from_config(conf, "foo".to_string());
+
+        // Run once to get into the HealthCheck state.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        // Run once again to trigger the healthcheck command (happens on the first iteration of HealthCheck).
+        let _ = d.run_once().await;
+
+        // Sleep and run once again to verify that the process is now healthy.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_failed_command_timeout() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Command {
+            cmd: "sleep".to_string(),
+            args: vec!["2".to_string()],
+            timeout: 1,
+        });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        conf.add_process("sleep", proc.to_owned());
+        let mut d = Daemon::from_config(conf, "foo".to_string());
+
+        // Run once to get into the HealthCheck state.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        // Run once again to trigger the healthcheck command (happens on the first iteration of HealthCheck).
+        let _ = d.run_once().await;
+
+        // Sleep and run once again to verify that the process is not healthy.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_failed_command() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Command {
+            cmd: "sleep".to_string(),
+            args: vec!["asd".to_string()], // Will fail right away.
+            timeout: 1,
+        });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["10".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        conf.add_process("sleep", proc.to_owned());
+        let mut d = Daemon::from_config(conf, "foo".to_string());
+
+        // Run once to get into the HealthCheck state.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        // Run once again to trigger the healthcheck command (happens on the first iteration of HealthCheck).
+        let _ = d.run_once().await;
+
+        // Sleep and run once again to verify that the healthcheck failed.
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Failed(_)));
+    }
+
+    #[tokio::test]
+    async fn healthcheck_to_completed() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Command {
+            cmd: "sleep".to_string(),
+            args: vec!["10".to_string()],
+            timeout: 10,
+        });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        conf.add_process("sleep", proc.to_owned());
+        let mut d = Daemon::from_config(conf, "foo".to_string());
+
+        // Run once to get into the HealthCheck state.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        // Run once again to trigger the healthcheck command (happens on the first iteration of HealthCheck).
+        let _ = d.run_once().await;
+
+        // Sleep and run once again to verify that the healthcheck failed.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
+    }
+
+    #[tokio::test]
+    async fn healthy_to_completed() {
+        let mut hc = HealthCheck::default();
+        let hc = hc.set_check(HealthCheckType::Command {
+            cmd: "sleep".to_string(),
+            args: vec!["10".to_string()],
+            timeout: 10,
+        });
+        let mut proc = ProcessConfig::default();
+        let proc = proc.set_cmd("sleep").set_args(vec!["1".to_string()]).set_healthcheck(hc.to_owned());
+        let mut conf = Config::random();
+        conf.add_process("sleep", proc.to_owned());
+        let mut d = Daemon::from_config(conf, "foo".to_string());
+
+        // Run once to get into the HealthCheck state.
+        let _ = d.run_once().await;
+        assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::HealthCheck(_)));
+
+        // Run once again to trigger the healthcheck command (happens on the first iteration of HealthCheck).
+        let _ = d.run_once().await;
+
+        // Sleep and run once again to verify that the healthcheck failed.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Completed);
     }
 }

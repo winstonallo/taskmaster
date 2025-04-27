@@ -4,6 +4,8 @@ pub enum ProcessError {
     Internal(String),
     CouldNotSpawn(String),
     AlreadyRunning,
+    NoChildProcess,
+    NoExitInformation,
 }
 
 impl fmt::Display for ProcessError {
@@ -12,6 +14,8 @@ impl fmt::Display for ProcessError {
             ProcessError::Internal(msg) => write!(f, "internal error: {}", msg),
             ProcessError::CouldNotSpawn(msg) => write!(f, "could not spawn child process: {}", msg),
             ProcessError::AlreadyRunning => write!(f, "process is already running"),
+            ProcessError::NoChildProcess => write!(f, "no child process running"),
+            ProcessError::NoExitInformation => write!(f, "no exit information available"),
         }
     }
 }

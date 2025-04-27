@@ -3,11 +3,7 @@ use std::{
     error::Error,
 };
 
-use tasklib::{
-    conf::{Config, help},
-    log_error, log_info,
-    run::daemon::Daemon,
-};
+use tasklib::{conf::Config, log_error, log_info, run::daemon::Daemon};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -19,10 +15,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let arguments: Vec<String> = env::args().collect();
 
     let arg: String = arguments.get(1).unwrap().to_owned();
-    if arg == "--help" || arg == "-h" {
-        help::print_help();
-        return Ok(());
-    }
 
     let conf = match Config::from_file(&arg) {
         Ok(c) => c,

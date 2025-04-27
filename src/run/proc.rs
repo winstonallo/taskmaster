@@ -16,6 +16,7 @@ use libc::{c_int, signal, umask};
 use super::statemachine::{healthcheck::HealthCheckRunner, states::ProcessState};
 
 mod error;
+mod tests;
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -115,7 +116,6 @@ impl Process {
     }
 
     pub fn healthcheck_failures(&self) -> usize {
-        assert!(self.healthcheck.has_command_healthcheck());
         self.healthcheck.failures()
     }
 
@@ -141,8 +141,7 @@ impl Process {
     }
 
     pub fn start_healthcheck(&mut self) {
-        let mut healthcheck = self.healthcheck_mut();
-        healthcheck.start();
+        self.healthcheck.start();
     }
 
     pub fn passed_starttime(&self, started_at: time::Instant) -> bool {
@@ -208,8 +207,10 @@ impl Process {
         None
     }
 
-    pub fn exited(&mut self) -> Option<i32> {
-        self.child.as_ref()?;
+    pub fn exited(&mut self) -> Result<i32, ProcessError> {
+        if self.child.is_none() {
+            return Err(ProcessError::NoChildProcess);
+        }
 
         let pid = self.id().expect("id should always be set if the program is running");
 
@@ -217,17 +218,18 @@ impl Process {
             Ok(Some(status)) => match status.code() {
                 Some(code) => {
                     self.child = None;
-                    Some(code)
+                    Ok(code)
                 }
                 None => {
                     self.child = None;
-                    self.check_signal(status, pid)
+                    self.check_signal(status, pid);
+                    Err(ProcessError::NoExitInformation)
                 }
             },
-            Ok(None) => None,
+            Ok(None) => Err(ProcessError::AlreadyRunning),
             Err(err) => {
                 log_error!("could not get status for PID {}: {}", self.id().expect("something went very wrong"), err);
-                None
+                Err(ProcessError::Internal("could not get exit status for process".to_string()))
             }
         }
     }

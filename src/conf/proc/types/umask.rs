@@ -11,6 +11,10 @@ pub struct Umask {
 }
 
 impl Umask {
+    pub fn new(mask: u32) -> Self {
+        Self { mask }
+    }
+
     pub fn mask(&self) -> u32 {
         self.mask
     }
