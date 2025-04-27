@@ -139,8 +139,17 @@ macro_rules! proc_warning {
 }
 
 fn get_logger() -> &'static Logger {
+    #[cfg(not(test))]
     INIT.call_once(|| {
         let logger = Logger::new(Box::new(stdout()), Box::new(stderr()));
+        unsafe {
+            INSTANCE = Some(logger);
+        }
+    });
+    #[cfg(test)]
+    INIT.call_once(|| {
+        use std::io::sink;
+        let logger = Logger::new(Box::new(sink()), Box::new(sink()));
         unsafe {
             INSTANCE = Some(logger);
         }

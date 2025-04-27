@@ -7,8 +7,8 @@ use serde::{Deserialize, Deserializer};
 #[allow(unused)]
 #[derive(Debug, Clone)]
 pub struct AutoRestart {
-    mode: String,
-    max_retries: Option<u8>,
+    pub mode: String,
+    pub max_retries: Option<u8>,
 }
 
 #[allow(unused)]
