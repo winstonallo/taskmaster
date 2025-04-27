@@ -1,4 +1,4 @@
-use std::{io::Write, process::exit, sync::atomic::AtomicU32, time::Duration};
+use std::{io::Write, process::exit, sync::atomic::AtomicU32};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
@@ -140,6 +140,7 @@ async fn attach(name: &str, socket_path: &str) {
     };
 
     let mut reader = BufReader::new(stream);
+
     while let Ok(out) = read_from_stream(&mut reader).await {
         print!("{out}")
     }
