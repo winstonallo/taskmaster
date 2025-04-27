@@ -88,30 +88,33 @@ impl AsyncUnixSocket {
         }
     }
 
-    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error + Send>> {
+    pub async fn read_line(&mut self, line: &mut String) -> Result<usize, Box<dyn Error + Send + Sync>> {
         if self.stream.is_none() {
             self.accept().await.unwrap();
         }
 
         if let Some(ref mut stream) = self.stream {
             let mut reader = BufReader::new(stream);
-            reader.read_line(line).await.map_err(|e| Box::new(e) as Box<dyn Error + Send>)
+            reader.read_line(line).await.map_err(Box::<dyn Error + Send + Sync>::from)
         } else {
-            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
+            Err(Box::<dyn Error + Send + Sync>::from("no connection established"))
         }
     }
 
-    pub async fn write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error + Send>> {
+    pub async fn write(&mut self, data: &[u8]) -> Result<(), Box<dyn Error + Send + Sync>> {
         if self.stream.is_none() {
             self.accept().await.unwrap();
         }
 
         if let Some(ref mut stream) = self.stream {
-            stream.write_all(data).await.map_err(|e| format!("write error: {e}")).unwrap();
+            stream
+                .write_all(data)
+                .await
+                .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("write error: {e}")))?;
             stream.flush().await.map_err(|e| format!("flush error: {e}")).unwrap();
             Ok(())
         } else {
-            Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)
+            Err(Box::<dyn Error + Send + Sync>::from("no connection established"))
         }
     }
 }
