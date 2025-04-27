@@ -7,7 +7,7 @@ socketpath = "/tmp/.taskmaster.sock"
 # Name of the group to be created for authenticating client (similarly to 
 # the docker group.
 # Defaults to "taskmaster".
-authgroup = "winstonallo"
+authgroup = "root"
 
 # Process name.
 [processes.ls]
@@ -15,7 +15,7 @@ authgroup = "winstonallo"
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/home/winstonallo/mastery/taskmaster/a.out"
+cmd = "/workspaces/taskmaster/a.out"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
@@ -23,7 +23,7 @@ args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
-processes = 100
+processes = 4
 
 # Mask for files created by the process.
 # Defaults to "022".
@@ -48,7 +48,7 @@ autorestart = "on-failure[:5]"
 
 # Backoff time (in seconds) for retries.
 # Defaults to 5, max 255.
-backoff = 1
+# backoff = 1
 
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
@@ -56,12 +56,12 @@ exitcodes = [0, 2]
 
 # Number of attempts to start the program before giving up.
 # Defaults to 3, max 255.
-startretries = 3
+# startretries = 3
 
 # Time (in seconds) given for the program to startup - if the program 
 # does not start within this time, it will be considered a failure.
 # Defaults to 5, max 65536.
-starttime = 1
+# starttime = 1
 
 # List of signals triggering a stop of the process, options are any 
 # FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).

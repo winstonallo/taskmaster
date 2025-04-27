@@ -108,10 +108,7 @@ impl AsyncUnixSocket {
         }
 
         if let Some(ref mut stream) = self.stream {
-            stream
-                .write_all(data)
-                .await
-                .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("write error: {e}")))?;
+            stream.write_all(data).await.map_err(|e| format!("write error: {e}")).unwrap();
             stream.flush().await.map_err(|e| format!("flush error: {e}")).unwrap();
             Ok(())
         } else {
