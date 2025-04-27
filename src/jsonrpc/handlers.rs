@@ -32,7 +32,7 @@ pub async fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
         Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
         Reload => handle_request_reload(daemon),
         Halt => handle_request_halt(daemon),
-        Attach(request_attach) => handle_request_attach(daemon.processes(), request_attach, daemon.auth_group(), daemon.attachment_manager()).await,
+        Attach(request_attach) => handle_request_attach(daemon, request_attach).await,
     };
 
     Response::from_request(request, response_type)
@@ -296,51 +296,52 @@ impl AttachmentManager {
 
     pub async fn attach(
         &self,
-        process_name: String,
-        socketpath: String,
-        stdout_path: String,
-        stderr_path: String,
-        authgroup: String,
+        process_name: &str,
+        socketpath: &str,
+        stdout_path: &str,
+        stderr_path: &str,
+        authgroup: &str,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.tx
             .send(AttachmentRequest::New {
-                process_name,
-                socketpath,
-                stdout_path,
-                stderr_path,
-                authgroup,
+                process_name: process_name.to_owned(),
+                socketpath: socketpath.to_owned(),
+                stdout_path: stdout_path.to_owned(),
+                stderr_path: stderr_path.to_owned(),
+                authgroup: authgroup.to_owned(),
             })
             .await
             .map_err(Box::<dyn Error + Send + Sync>::from)
     }
 }
 
-async fn handle_request_attach(
-    processes: &HashMap<String, Process>,
-    request: &RequestAttach,
-    authgroup: &str,
-    attachment_manager: &AttachmentManager,
-) -> ResponseType {
-    let process = match processes.get(request.name()) {
+async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> ResponseType {
+    let process = match daemon.processes().get(request.name()) {
         Some(p) => p,
         None => {
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InvalidParams,
-                message: format!("no process with name {} found", request.name()),
+                message: format!("process {} not found", request.name()),
                 data: None,
             });
         }
     };
+
     let socketpath = format!("/tmp/{}.sock", rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>());
 
-    let _socketpath_clone = socketpath.clone();
-    let stdout_clone = process.config().stdout().to_string();
-    let stderr_clone = process.config().stderr().to_string();
-    let authgroup_clone = authgroup.to_string();
-
-    let _ = attachment_manager
-        .attach(process.name().to_string(), socketpath.to_owned(), stdout_clone, stderr_clone, authgroup_clone)
-        .await;
+    if let Err(e) = daemon
+        .attachment_manager()
+        .attach(process.name(), &socketpath, process.config().stdout(), process.config().stderr(), daemon.auth_group())
+        .await
+    {
+        let message = format!("could not attach to process {}: {e}", request.name());
+        log_error!("{message}");
+        return ResponseType::Error(ResponseError {
+            code: ErrorCode::InternalError,
+            message,
+            data: None,
+        });
+    }
 
     ResponseType::Result(ResponseResult::Attach {
         name: process.name().to_owned(),
