@@ -176,13 +176,17 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
-async fn update_attach_stream(file: &mut tokio::fs::File, position: u64, listener: &mut AsyncUnixSocket) -> Result<u64, Box<dyn Error + Send + Sync>> {
-    match file.seek(std::io::SeekFrom::Start(position)).await {
+async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, listener: &mut AsyncUnixSocket) -> Result<u64, Box<dyn Error + Send + Sync>> {
+    match file.seek(std::io::SeekFrom::Start(pos)).await {
         Ok(_) => {}
         Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not seek file: {e}"))),
     };
 
-    let mut pos = position;
+    if len <= pos {
+        return Ok(if len == pos { pos } else { 0 });
+    }
+
+    let mut pos = pos;
     let mut buf = Vec::new();
 
     match file.read_to_end(&mut buf).await {
@@ -225,7 +229,7 @@ async fn attach(socketpath: String, stdout_path: String, stderr_path: String, au
                 log_info!("client attached, sending data on {socketpath}");
                 break;
             }
-            Err(e) => eprintln!("could not accept: {e}"),
+            Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not accept client on {socketpath}: {e}"))),
         };
     }
 
@@ -233,39 +237,13 @@ async fn attach(socketpath: String, stdout_path: String, stderr_path: String, au
         tokio::select! {
             stdout_metadata = stdout.metadata() => {
                 match stdout_metadata {
-                    Ok(metadata) => {
-                        let size = metadata.len();
-                        if size < stdout_pos {
-                            stdout_pos = 0;
-                        }
-                        if size == stdout_pos {
-                            continue;
-                        }
-
-                        match update_attach_stream(&mut stdout, stdout_pos, &mut listener).await {
-                            Ok(pos) => stdout_pos = pos,
-                            Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not update stream: {e}"))),
-                        }
-                    }
+                    Ok(metadata) => stdout_pos = update_attach_stream(&mut stdout, stdout_pos, metadata.len(), &mut listener).await?,
                     Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{stdout_path}': {e}"))),
                 }
             }
             stderr_metadata = stderr.metadata() => {
                 match stderr_metadata {
-                    Ok(metadata) => {
-                        let size = metadata.len();
-                        if size < stderr_pos {
-                            stderr_pos = 0;
-                        }
-                        if size == stderr_pos {
-                            continue;
-                        }
-
-                        match update_attach_stream(&mut stderr, stderr_pos, &mut listener).await {
-                            Ok(pos) => stderr_pos = pos,
-                            Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not update stream: {e}"))),
-                        }
-                    }
+                    Ok(metadata) => stderr_pos = update_attach_stream(&mut stderr, stderr_pos, metadata.len(), &mut listener).await?,
                     Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{stderr_path}': {e}"))),
                 }
             }
