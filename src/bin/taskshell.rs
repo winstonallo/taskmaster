@@ -170,7 +170,7 @@ fn handle_input(input: String) -> Result<String, String> {
 
     let response = match serde_json::from_str::<Response>(&response) {
         Ok(resp) => resp,
-        Err(_) => return Err(format!("non json_rpc formated message: {response}\n")),
+        Err(_) => return Err(format!("non json_rpc formatted message: {response}\n")),
     };
 
     Ok(response_to_str(response))
