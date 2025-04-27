@@ -151,7 +151,7 @@ mod test {
             "json_rpc": "2.0",
             "method": "status"
         }"#;
-        let _request: super::Request = serde_json::from_str(&msg).unwrap();
+        let _request: super::Request = serde_json::from_str(msg).unwrap();
     }
 
     #[test]

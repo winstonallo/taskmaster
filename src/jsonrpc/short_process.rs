@@ -61,15 +61,15 @@ impl fmt::Display for State {
         let s = match self {
             Idle => "idle".to_owned(),
             Ready => "ready".to_owned(),
-            HealthCheck(s) => format!("healthcheck since {} seconds", s),
+            HealthCheck(s) => format!("healthcheck since {s} seconds"),
             Healthy => "healthy".to_owned(),
             Failed => "failed".to_owned(),
-            WaitingForRetry(s) => format!("waiting for retry since {} seconds", s),
+            WaitingForRetry(s) => format!("waiting for retry since {s} seconds"),
             Completed => "completed".to_owned(),
-            Stopping(s) => format!("stopping since {} seconds", s),
+            Stopping(s) => format!("stopping since {s} seconds"),
             Stopped => "stopped".to_owned(),
         };
 
-        write!(f, "{}", s)
+        write!(f, "{s}")
     }
 }

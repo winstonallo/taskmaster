@@ -21,12 +21,12 @@ pub struct AsyncUnixSocket {
 }
 
 fn get_group_id(group_name: &str) -> Result<u32, String> {
-    let c_group = CString::new(group_name).map_err(|e| format!("{}", e))?;
+    let c_group = CString::new(group_name).map_err(|e| format!("{e}"))?;
 
     unsafe {
         let grp_ptr = getgrnam(c_group.as_ptr());
         if grp_ptr.is_null() {
-            Err(format!("group '{}' not found", group_name))
+            Err(format!("group '{group_name}' not found"))
         } else {
             Ok((*grp_ptr).gr_gid)
         }
@@ -34,7 +34,7 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
 }
 fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
     let gid = get_group_id(authgroup)?;
-    let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {}", e))?;
+    let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {e}"))?;
 
     unsafe {
         if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
@@ -46,7 +46,7 @@ fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
         }
     }
 
-    fs::set_permissions(socketpath, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {}", e))
+    fs::set_permissions(socketpath, fs::Permissions::from_mode(0o660)).map_err(|e| format!("could not set permissions: {e}"))
 }
 
 impl AsyncUnixSocket {
@@ -58,7 +58,7 @@ impl AsyncUnixSocket {
         let listener = match UnixListener::bind(socketpath) {
             Ok(listener) => listener,
             Err(e) => {
-                return Err(format!("could not bind to unix socket at path {}: {}", socketpath, e));
+                return Err(format!("could not bind to unix socket at path {socketpath}: {e}"));
             }
         };
 
@@ -105,8 +105,8 @@ impl AsyncUnixSocket {
         }
 
         if let Some(ref mut stream) = self.stream {
-            stream.write_all(data).await.map_err(|e| format!("write error: {}", e)).unwrap();
-            stream.flush().await.map_err(|e| format!("flush error: {}", e)).unwrap();
+            stream.write_all(data).await.map_err(|e| format!("write error: {e}")).unwrap();
+            stream.flush().await.map_err(|e| format!("flush error: {e}")).unwrap();
             Ok(())
         } else {
             Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotConnected, "no connection established")) as Box<dyn Error + Send>)

@@ -31,7 +31,7 @@ impl Daemon {
             .flat_map(|(proc_name, proc)| {
                 (0..proc.processes()).map(move |id| {
                     let key = if proc.processes() > 1 {
-                        format!("{}_{}", proc_name, id)
+                        format!("{proc_name}_{id}")
                     } else {
                         proc_name.to_owned()
                     };
@@ -170,7 +170,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                         m_r.id,
                         ResponseType::Error(ResponseError {
                             code: crate::jsonrpc::response::ErrorCode::InvalidRequest,
-                            message: format!("{}", e).to_owned(),
+                            message: format!("{e}").to_owned(),
                             data: None,
                         }),
                     ))

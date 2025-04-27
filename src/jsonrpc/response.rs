@@ -94,7 +94,7 @@ impl<'de> Deserialize<'de> for ErrorCode {
             -32602 => Ok(ErrorCode::InvalidParams),
             -32603 => Ok(ErrorCode::InternalError),
             -32700 => Ok(ErrorCode::ParseError),
-            _ => Err(serde::de::Error::custom(format!("unknown error code: {}", code))),
+            _ => Err(serde::de::Error::custom(format!("unknown error code: {code}"))),
         }
     }
 }

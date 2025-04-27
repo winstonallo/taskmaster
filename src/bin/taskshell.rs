@@ -18,14 +18,14 @@ const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
 fn read_from_stream(unix_stream: &mut UnixStream) -> Result<String, String> {
     let mut buf = String::new();
 
-    unix_stream.read_to_string(&mut buf).map_err(|e| format!("{}", e))?;
+    unix_stream.read_to_string(&mut buf).map_err(|e| format!("{e}"))?;
 
     Ok(buf)
 }
 
 fn write_request(unix_stream: &mut UnixStream, request: &[u8]) -> Result<(), String> {
-    unix_stream.write(request).map_err(|e| format!("{}", e))?;
-    unix_stream.shutdown(std::net::Shutdown::Write).map_err(|e| format!("{}", e))?;
+    unix_stream.write(request).map_err(|e| format!("{e}"))?;
+    unix_stream.shutdown(std::net::Shutdown::Write).map_err(|e| format!("{e}"))?;
 
     Ok(())
 }
@@ -133,9 +133,9 @@ fn response_to_str(response: Response) -> String {
                     str
                 }
                 StatusSingle(short_process) => format!("Name: {}, State: {}\n", short_process.name(), short_process.state()),
-                Start(name) => format!("starting: {}\n", name),
-                Stop(name) => format!("stopping: {}\n", name),
-                Restart(name) => format!("restarting: {}\n", name),
+                Start(name) => format!("starting: {name}\n"),
+                Stop(name) => format!("stopping: {name}\n"),
+                Restart(name) => format!("restarting: {name}\n"),
                 Reload => "reloading configuration\n".to_owned(),
                 Halt => "shutting down taskmaster\n".to_owned(),
             }
@@ -152,7 +152,7 @@ fn handle_input(input: String) -> Result<String, String> {
 
     let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH) {
         Ok(s) => s,
-        Err(e) => return Err(format!("couldn't establish socket connection: {}\n", e)),
+        Err(e) => return Err(format!("couldn't establish socket connection: {e}\n")),
     };
 
     let request = match build_request(&arguments) {
@@ -163,17 +163,17 @@ fn handle_input(input: String) -> Result<String, String> {
     let request = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
     if let Err(e) = write_request(&mut unix_stream, request.as_bytes()) {
-        return Err(format!("error while writing request: {}\n", e));
+        return Err(format!("error while writing request: {e}\n"));
     }
 
     let response = match read_from_stream(&mut unix_stream) {
         Ok(resp) => resp,
-        Err(e) => return Err(format!("error while reading socket: {}\n", e)),
+        Err(e) => return Err(format!("error while reading socket: {e}\n")),
     };
 
     let response = match serde_json::from_str::<Response>(&response) {
         Ok(resp) => resp,
-        Err(_) => return Err(format!("non json_rpc formated message: {}\n", response)),
+        Err(_) => return Err(format!("non json_rpc formated message: {response}\n")),
     };
 
     Ok(response_to_str(response))
@@ -184,7 +184,7 @@ fn docker(args: Vec<String>) {
         Ok(s) => s,
         Err(s) => s,
     };
-    print!("{}", msg);
+    print!("{msg}");
 }
 
 fn shell() {
@@ -194,7 +194,7 @@ fn shell() {
         let mut line = String::new();
         match std::io::stdin().read_line(&mut line) {
             Err(e) => {
-                println!("{}", e);
+                println!("{e}");
                 return;
             }
             Ok(0) => return,
@@ -205,7 +205,7 @@ fn shell() {
             Ok(s) => s,
             Err(s) => s,
         };
-        print!("{}", msg);
+        print!("{msg}");
     }
 }
 

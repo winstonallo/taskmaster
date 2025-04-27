@@ -8,8 +8,8 @@ pub enum ProcessError {
 impl fmt::Display for ProcessError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            ProcessError::Internal(msg) => write!(f, "internal error: {}", msg),
-            ProcessError::CouldNotSpawn(msg) => write!(f, "could not spawn child process: {}", msg),
+            ProcessError::Internal(msg) => write!(f, "internal error: {msg}"),
+            ProcessError::CouldNotSpawn(msg) => write!(f, "could not spawn child process: {msg}"),
         }
     }
 }

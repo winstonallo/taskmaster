@@ -7,7 +7,7 @@ pub enum DaemonError {
 impl fmt::Display for DaemonError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            DaemonError::Internal(msg) => write!(f, "internal error: {}", msg),
+            DaemonError::Internal(msg) => write!(f, "internal error: {msg}"),
         }
     }
 }
