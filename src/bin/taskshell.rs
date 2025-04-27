@@ -7,9 +7,9 @@ use std::{
 };
 
 use tasklib::jsonrpc::{
-        request::RequestType,
-        response::{Response, ResponseType},
-    };
+    request::RequestType,
+    response::{Response, ResponseType},
+};
 
 use tasklib::jsonrpc::request::Request;
 
