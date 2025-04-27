@@ -124,7 +124,7 @@ fn response_to_str(response: Response) -> String {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
-            let str = match res {
+            match res {
                 Status(items) => {
                     let mut str = String::new();
                     for short_process in items.iter() {
@@ -138,8 +138,7 @@ fn response_to_str(response: Response) -> String {
                 Restart(name) => format!("restarting: {}\n", name),
                 Reload => "reloading configuration\n".to_owned(),
                 Halt => "shutting down taskmaster\n".to_owned(),
-            };
-            str
+            }
         }
         ResponseType::Error(err) => err.message.clone() + "\n",
     }
