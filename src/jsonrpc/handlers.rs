@@ -201,53 +201,73 @@ async fn update_attach_stream(file: &mut tokio::fs::File, position: u64, listene
     Ok(pos)
 }
 
-async fn attach(socketpath: String, stdout_path: String, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn attach(socketpath: String, stdout_path: String, stderr_path: String, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut listener =
         AsyncUnixSocket::new(&socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
 
-    let (_sender, mut receiver) = tokio::sync::mpsc::channel::<(String, AsyncUnixSocket)>(32);
-
-    let mut file = tokio::fs::File::open(&stdout_path).await.map_err(|e| ResponseError {
+    let mut stdout = tokio::fs::File::open(&stdout_path).await.map_err(|e| ResponseError {
+        code: ErrorCode::InternalError,
+        message: format!("could not open process stdout: {e}"),
+        data: None,
+    })?;
+    let mut stderr = tokio::fs::File::open(&stderr_path).await.map_err(|e| ResponseError {
         code: ErrorCode::InternalError,
         message: format!("could not open process stdout: {e}"),
         data: None,
     })?;
 
-    let mut position = 0;
+    let mut stdout_pos = 0;
+    let mut stderr_pos = 0;
 
-    match listener.accept().await {
-        Ok(()) => {}
-        Err(e) => eprintln!("could not accept: {e}"),
-    };
+    loop {
+        match listener.accept().await {
+            Ok(()) => {
+                log_info!("client attached, sending data on {socketpath}");
+                break;
+            }
+            Err(e) => eprintln!("could not accept: {e}"),
+        };
+    }
 
     loop {
         tokio::select! {
-            md = file.metadata() => {
-                match md {
+            stdout_metadata = stdout.metadata() => {
+                match stdout_metadata {
                     Ok(metadata) => {
                         let size = metadata.len();
-                        if size < position {
-                            position = 0;
+                        if size < stdout_pos {
+                            stdout_pos = 0;
                         }
-                        if size == position {
+                        if size == stdout_pos {
                             continue;
                         }
 
-                        match update_attach_stream(&mut file, position, &mut listener).await {
-                            Ok(pos) => position = pos,
+                        match update_attach_stream(&mut stdout, stdout_pos, &mut listener).await {
+                            Ok(pos) => stdout_pos = pos,
                             Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not update stream: {e}"))),
                         }
                     }
                     Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{stdout_path}': {e}"))),
                 }
             }
-            Some((data, mut socket)) = receiver.recv() => {
-                log_info!("got data from client: {data}");
-                tokio::spawn(async move {
-                    if let Err(e) = socket.write("ok".as_bytes()).await {
-                        log_error!("could not send response to socket: {e}");
+            stderr_metadata = stderr.metadata() => {
+                match stderr_metadata {
+                    Ok(metadata) => {
+                        let size = metadata.len();
+                        if size < stderr_pos {
+                            stderr_pos = 0;
+                        }
+                        if size == stderr_pos {
+                            continue;
+                        }
+
+                        match update_attach_stream(&mut stderr, stderr_pos, &mut listener).await {
+                            Ok(pos) => stderr_pos = pos,
+                            Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not update stream: {e}"))),
+                        }
                     }
-                });
+                    Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{stderr_path}': {e}"))),
+                }
             }
         }
     }
@@ -262,6 +282,7 @@ enum AttachmentRequest {
         process_name: String,
         socketpath: String,
         stdout_path: String,
+        stderr_path: String,
         authgroup: String,
     },
 }
@@ -285,10 +306,11 @@ impl AttachmentManager {
                         process_name,
                         socketpath,
                         stdout_path,
+                        stderr_path,
                         authgroup,
                     } => {
                         let attachment_handler = tokio::spawn(async move {
-                            if let Err(e) = attach(socketpath, stdout_path, authgroup).await {
+                            if let Err(e) = attach(socketpath, stdout_path, stderr_path, authgroup).await {
                                 log_error!("attach: {e}");
                             }
                         });
@@ -302,12 +324,20 @@ impl AttachmentManager {
         Self { tx }
     }
 
-    pub async fn attach(&self, process_name: String, socketpath: String, stdout_path: String, authgroup: String) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn attach(
+        &self,
+        process_name: String,
+        socketpath: String,
+        stdout_path: String,
+        stderr_path: String,
+        authgroup: String,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.tx
             .send(AttachmentRequest::New {
                 process_name,
                 socketpath,
                 stdout_path,
+                stderr_path,
                 authgroup,
             })
             .await
@@ -335,10 +365,11 @@ async fn handle_request_attach(
 
     let _socketpath_clone = socketpath.clone();
     let stdout_clone = process.config().stdout().to_string();
+    let stderr_clone = process.config().stderr().to_string();
     let authgroup_clone = authgroup.to_string();
 
     let _ = attachment_manager
-        .attach(process.name().to_string(), socketpath.to_owned(), stdout_clone, authgroup_clone)
+        .attach(process.name().to_string(), socketpath.to_owned(), stdout_clone, stderr_clone, authgroup_clone)
         .await;
 
     ResponseType::Result(ResponseResult::Attach {
