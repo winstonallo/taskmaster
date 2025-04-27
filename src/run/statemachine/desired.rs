@@ -16,7 +16,6 @@ pub fn desire_idle(proc: &mut Process) -> (Option<ProcessState>, bool) {
             (Some(Stopping(Instant::now())), RETAIN_DESIRED_STATE)
         }
         Stopping(_) => (None, RETAIN_DESIRED_STATE),
-        Stopped => (Some(Stopped), REMOVE_DESIRED_STATE),
         _ => (Some(Idle), REMOVE_DESIRED_STATE),
     }
 }
