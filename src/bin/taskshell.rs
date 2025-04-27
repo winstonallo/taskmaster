@@ -1,8 +1,8 @@
-use std::{
-    io::{Read, Write},
-    os::unix::net::UnixStream,
-    process::exit,
-    sync::atomic::AtomicU32,
+use std::{io::Write, process::exit, sync::atomic::AtomicU32, time::Duration};
+
+use tokio::{
+    io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
+    net::UnixStream,
 };
 
 use tasklib::jsonrpc::{
@@ -14,18 +14,20 @@ use tasklib::jsonrpc::request::Request;
 
 const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
 
-fn read_from_stream(unix_stream: &mut UnixStream) -> Result<String, String> {
-    let mut buffer = [0; 1024]; // Use a fixed-size buffer for reading
-    let bytes_read = unix_stream.read(&mut buffer).map_err(|e| format!("{e}"))?;
+async fn read_from_stream<R>(reader: &mut BufReader<R>) -> Result<String, String>
+where
+    R: AsyncRead + Unpin,
+{
+    let mut buf = String::new();
+    let bytes_read = reader.read_line(&mut buf).await.map_err(|e| e.to_string())?;
 
-    let s = String::from_utf8_lossy(&buffer[0..bytes_read]).to_string();
-
+    let s = String::from_utf8_lossy(&buf.as_bytes()[0..bytes_read]).to_string();
     Ok(s)
 }
 
-fn write_request(unix_stream: &mut UnixStream, request: &[u8]) -> Result<(), String> {
-    unix_stream.write(request).map_err(|e| format!("{e}"))?;
-    unix_stream.shutdown(std::net::Shutdown::Write).map_err(|e| format!("{e}"))?;
+async fn write_request(unix_stream: &mut UnixStream, request: &[u8]) -> Result<(), String> {
+    unix_stream.write_all(request).await.map_err(|e| e.to_string())?;
+    unix_stream.shutdown().await.map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -128,8 +130,8 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     Ok(request)
 }
 
-fn attach(name: &str, socket_path: &str) {
-    let mut stream = match UnixStream::connect(socket_path) {
+async fn attach(name: &str, socket_path: &str) {
+    let stream = match UnixStream::connect(socket_path).await {
         Ok(stream) => stream,
         Err(e) => {
             eprintln!("could not establish connection on attach socket at path {socket_path}: {e}");
@@ -137,13 +139,15 @@ fn attach(name: &str, socket_path: &str) {
         }
     };
 
-    while let Ok(out) = read_from_stream(&mut stream) {
+    let mut reader = BufReader::new(stream);
+    while let Ok(out) = read_from_stream(&mut reader).await {
         print!("{out}")
     }
+
     println!("attaching to process {name} on socket {socket_path}");
 }
 
-fn handle_response(response: &Response) {
+async fn handle_response(response: &Response) {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
@@ -155,7 +159,7 @@ fn handle_response(response: &Response) {
                 Restart(name) => println!("restarting: {name}"),
                 Reload => println!("reloading configuration"),
                 Halt => println!("shutting down taskmaster\n"),
-                Attach { name, socketpath } => attach(name, socketpath),
+                Attach { name, socketpath } => attach(name, socketpath).await,
             };
         }
         ResponseType::Error(err) => {
@@ -164,9 +168,10 @@ fn handle_response(response: &Response) {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     loop {
-        let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH) {
+        let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("couldn't establish socket connection: {e}");
@@ -194,12 +199,13 @@ fn main() {
 
         let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
-        if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()) {
+        if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()).await {
             println!("error while writing request: {e}");
             continue;
         }
 
-        let response = match read_from_stream(&mut unix_stream) {
+        let mut reader = BufReader::new(unix_stream);
+        let response = match read_from_stream(&mut reader).await {
             Ok(resp) => resp,
             Err(e) => {
                 println!("error while reading socket: {e}");
@@ -219,6 +225,6 @@ fn main() {
 
         let response = response.set_response_result(request.request_type());
 
-        handle_response(response);
+        handle_response(response).await;
     }
 }
