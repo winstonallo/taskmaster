@@ -1,5 +1,5 @@
 use super::{
-    request::{RequestRestart, RequestStart, RequestStop},
+    request::{RequestAttach, RequestRestart, RequestStart, RequestStop},
     response::ErrorCode,
 };
 use crate::{
@@ -17,7 +17,7 @@ use super::{
     response::{Response, ResponseError},
 };
 
-pub fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
+pub async fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
     use super::request::RequestType::*;
     let response_type = match request.request_type() {
         Status => handle_request_status(daemon.processes_mut()),
@@ -27,6 +27,7 @@ pub fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
         Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
         Reload => handle_request_reload(daemon),
         Halt => handle_request_halt(daemon),
+        Attach(request_attach) => handle_request_attach(daemon.processes_mut(), request_attach).await,
     };
 
     Response::from_request(request, response_type)
@@ -72,7 +73,10 @@ fn handle_request_start(processes: &mut HashMap<String, Process>, request: &Requ
 
     use ProcessState::*;
     match process.state() {
-        Healthy | HealthCheck(_) => ResponseType::Result(ResponseResult::Start(format!("process with name {} already running", process.name()))),
+        Healthy | HealthCheck(_) => {
+            // If the process was stopped after reaching max retries, it would go into an infinite restart loop.
+            ResponseType::Result(ResponseResult::Start(format!("process with name {} already running", process.name())))
+        }
         _ => ResponseType::Result(ResponseResult::Start(format!("starting process with name {}", process.name()))),
     }
 }
@@ -121,7 +125,7 @@ fn handle_request_reload(daemon: &mut Daemon) -> ResponseType {
         Err(e) => {
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InternalError,
-                message: format!("error while parsing config file: {}", e),
+                message: format!("error while parsing config file: {e}"),
                 data: None,
             });
         }
@@ -170,6 +174,32 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
+async fn handle_request_attach(processes: &mut HashMap<String, Process>, request: &RequestAttach) -> ResponseType {
+    let process = match processes.get(request.name()) {
+        Some(p) => p,
+        None => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InvalidParams,
+                message: format!("no process with name {} found", request.name()),
+                data: None,
+            });
+        }
+    };
+
+    println!("{}", process.config().stdout());
+    let stdout = match tokio::fs::read_to_string(process.config().stdout()).await {
+        Ok(stdout) => stdout,
+        Err(e) => {
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InternalError,
+                message: e.to_string(),
+                data: None,
+            });
+        }
+    };
+    ResponseType::Result(ResponseResult::Attach(stdout))
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -202,7 +232,7 @@ mod tests {
         let _ = d.run_once().await;
 
         let _ = handle_request(&mut d, Request::new(1, RequestType::new_status()));
-        let response = handle_request(&mut d, Request::new(1, RequestType::new_halt()));
+        let response = handle_request(&mut d, Request::new(1, RequestType::new_halt())).await;
         assert!(matches!(response.response_type(), ResponseType::Result(_)));
     }
 
@@ -214,7 +244,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt()));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt())).await;
         assert_eq!(d.shutting_down(), true);
     }
 
@@ -228,7 +258,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep"))).await;
 
         let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
@@ -250,7 +280,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("notaprocess")),
-        );
+        )
+        .await;
 
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
@@ -265,7 +296,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop("sleep"))).await;
 
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Idle);
     }
@@ -279,8 +310,7 @@ mod tests {
 
         let _ = d.run_once().await;
 
-        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status()));
-        assert!(matches!(response.response_type(), ResponseType::Result(_)));
+        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status())).await;
 
         match response.response_type() {
             ResponseType::Result(res) => match res {
@@ -303,7 +333,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single("process")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Result(_)));
 
         match response.response_type() {
@@ -327,7 +358,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single("notaprocess")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
 
@@ -343,7 +375,8 @@ mod tests {
 
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Idle);
 
-        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep")));
+        let response =
+            handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep"))).await;
         assert!(matches!(response.response_type(), ResponseType::Result(_)));
 
         let _ = d.run_once().await;
@@ -382,7 +415,7 @@ mod tests {
         let mut file = File::create(&path).unwrap();
         let _ = File::write(&mut file, changed_conf.as_bytes());
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload()));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload())).await;
         tokio::time::sleep(Duration::from_millis(100)).await;
         let _ = d.run_once().await;
 
@@ -402,7 +435,7 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload()));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload())).await;
 
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
@@ -444,7 +477,7 @@ mod tests {
 
         let _ = fs::remove_file(&path);
 
-        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload()));
+        let response = handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_reload())).await;
 
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
@@ -464,7 +497,7 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_restart("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_restart("sleep"))).await;
         let _ = d.run_once().await;
         assert!(matches!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopping(_)));
 
@@ -495,7 +528,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_restart("notaprocess")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
 
@@ -515,7 +549,7 @@ mod tests {
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
 
         // Running start on a running process should have no effect.
-        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep")));
+        handle_request(&mut d, Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("sleep"))).await;
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Healthy);
     }
@@ -535,7 +569,8 @@ mod tests {
         let response = handle_request(
             &mut d,
             Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_start("notaprocess")),
-        );
+        )
+        .await;
         assert!(matches!(response.response_type(), ResponseType::Error(_)));
     }
 }

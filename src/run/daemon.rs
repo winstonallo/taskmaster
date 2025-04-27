@@ -31,7 +31,7 @@ impl Daemon {
             .flat_map(|(proc_name, proc)| {
                 (0..proc.processes()).map(move |id| {
                     let key = if proc.processes() > 1 {
-                        format!("{}_{}", proc_name, id)
+                        format!("{proc_name}_{id}")
                     } else {
                         proc_name.to_owned()
                     };
@@ -88,7 +88,7 @@ impl Daemon {
             accept_result = listener.accept() => {
 
                 if let Err(e) = accept_result {
-                    log_error!("Failed to accept connection: {}", e);
+                    log_error!("Failed to accept connection: {e}");
                 }
 
                 let mut socket = listener;
@@ -106,13 +106,13 @@ impl Daemon {
             },
 
             Some((request, mut socket)) = receiver.recv() => {
-                let response = handle_request(self, request);
+                let response = handle_request(self, request).await;
 
                 let msg = serde_json::to_string(&response).unwrap();
 
                 tokio::spawn(async move {
                     if let Err(e) = socket.write(msg.as_bytes()).await {
-                        log_error!("error sending to socket: {}", e);
+                        log_error!("error sending to socket: {e}");
                     }
                 });
             },
@@ -139,7 +139,7 @@ impl Daemon {
                 accept_result = listener.accept() => {
 
                     if let Err(e) = accept_result {
-                        log_error!("Failed to accept connection: {}", e);
+                        log_error!("Failed to accept connection: {e}");
                         continue;
                     }
 
@@ -160,13 +160,15 @@ impl Daemon {
                 },
 
                 Some((request, mut socket)) = receiver.recv() => {
-                    let response = handle_request(self, request);
+                    let response = handle_request(self, request).await;
+                    println!("response in daemon loop: {response:?}");
 
                     let msg = serde_json::to_string(&response).unwrap();
 
+                    println!("msg in daemon loop: {msg:?}");
                     tokio::spawn(async move {
                         if let Err(e) = socket.write(msg.as_bytes()).await {
-                            log_error!("error sending to socket: {}", e);
+                            log_error!("error sending to socket: {e}");
                         }
                     });
                 },
@@ -222,7 +224,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                         m_r.id,
                         ResponseType::Error(ResponseError {
                             code: crate::jsonrpc::response::ErrorCode::InvalidRequest,
-                            message: format!("{}", e).to_owned(),
+                            message: format!("{e}").to_owned(),
                             data: None,
                         }),
                     ))
@@ -230,12 +232,12 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                     Err(_) => "request id not found - can't respond with JsonRPCError".to_owned(),
                 };
                 if let Err(e) = socket.write(error_msg.as_bytes()).await {
-                    log_error!("error writing to socket: {}", e)
+                    log_error!("error writing to socket: {e}")
                 }
             }
         },
         Err(e) => {
-            log_error!("Error reading from socket: {}", e);
+            log_error!("Error reading from socket: {e}");
         }
     }
 }
@@ -374,10 +376,15 @@ mod tests {
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 1);
 
-        // Run one last time to catch Stopped state (the Stopping -> Stopped transition is done
+        // Run to catch Stopped state (the Stopping -> Stopped transition is done
         // in the same iteration of the state machine).
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        // Run last time to trigger monitor_stopped, which will clear failure counts for eventual
+        // future restarts.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().healthcheck_failures(), 0);
 
         d.shutdown();
     }
@@ -474,6 +481,10 @@ mod tests {
 
         let _ = d.run_once().await;
         assert_eq!(d.processes().get("sleep").unwrap().state(), ProcessState::Stopped);
+
+        // Run again to go into monitor_stopped, which will clear failure counters.
+        let _ = d.run_once().await;
+        assert_eq!(d.processes().get("sleep").unwrap().runtime_failures(), 0);
 
         d.shutdown();
     }
