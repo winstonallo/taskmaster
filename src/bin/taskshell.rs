@@ -141,8 +141,18 @@ async fn attach(name: &str, socket_path: &str) {
 
     let mut reader = BufReader::new(stream);
 
-    while let Ok(out) = read_from_stream(&mut reader).await {
-        print!("{out}")
+    loop {
+        tokio::select! {
+            output_res = read_from_stream(&mut reader) => {
+                match output_res {
+                    Ok(data) => print!("{data}"),
+                    Err(e) => {
+                        eprintln!("attach: {e}");
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     println!("attaching to process {name} on socket {socket_path}");
