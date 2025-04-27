@@ -68,12 +68,6 @@ impl Process {
     }
 }
 
-extern "C" fn kill(_signum: c_int) {
-    unsafe {
-        libc::_exit(1);
-    }
-}
-
 #[allow(unused)]
 impl Process {
     pub fn state(&self) -> ProcessState {
@@ -167,25 +161,15 @@ impl Process {
         let stop_signals = self.conf.stopsignals().to_owned();
         let umask_val = self.conf.umask();
 
-        let mut child = unsafe {
-            Command::new(cmd_path)
-                .args(args)
-                .envs(self.conf.env().clone())
-                .stdin(Stdio::piped())
-                .stdout(stdout_file)
-                .stderr(stderr_file)
-                .current_dir(working_dir)
-                .pre_exec(move || {
-                    for sig in &stop_signals {
-                        signal(sig.signal(), kill as usize);
-                    }
-                    umask(umask_val);
-
-                    Ok(())
-                })
-                .spawn()
-                .map_err(|e| Box::<dyn Error + Send + Sync>::from(e.to_string()))
-        }?;
+        let mut child = Command::new(cmd_path)
+            .args(args)
+            .envs(self.conf.env().clone())
+            .stdin(Stdio::piped())
+            .stdout(stdout_file)
+            .stderr(stderr_file)
+            .current_dir(working_dir)
+            .spawn()
+            .map_err(|e| Box::<dyn Error + Send + Sync>::from(e.to_string()))?;
 
         Ok(child)
     }
@@ -257,7 +241,14 @@ impl Process {
         };
 
         unsafe {
-            libc::kill(child.id() as i32, libc::SIGTERM);
+            libc::kill(
+                child.id() as i32,
+                self.config()
+                    .stopsignals()
+                    .first()
+                    .expect("something went terribly wrong")
+                    .signal(),
+            );
         }
         proc_info!(self, "shutting down, PID {} gracefully", child.id());
 
