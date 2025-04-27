@@ -238,8 +238,6 @@ async fn main() {
             }
         };
 
-        println!("{response}");
-
         let mut response = match serde_json::from_str::<Response>(&response) {
             Ok(resp) => resp,
             Err(_) => {
