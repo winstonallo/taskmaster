@@ -6,7 +6,7 @@ use tokio::{
 };
 
 use tasklib::jsonrpc::{
-    request::RequestType,
+    request::{AttachFile, RequestType},
     response::{Response, ResponseType},
 };
 
@@ -62,8 +62,11 @@ fn build_request_stop(name: &str) -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop(name))
 }
 
-fn build_request_attach(name: &str) -> Request {
-    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_attach(name))
+fn build_request_attach(name: &str, to: &str) -> Request {
+    Request::new(
+        ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        RequestType::new_attach(name, if to == "stdout" { AttachFile::StdOut } else { AttachFile::StdErr }),
+    )
 }
 
 fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
@@ -115,10 +118,10 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
             }
         }
         "attach" => {
-            if arguments.len() == 2 {
-                build_request_attach(arguments[1])
+            if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
+                build_request_attach(arguments[1], arguments[2])
             } else {
-                return Err("usage: attach PROCESS_NAME");
+                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
             }
         }
         "exit" => exit(0),
@@ -145,12 +148,11 @@ async fn attach(name: &str, socket_path: &str) {
         match read_from_stream(&mut reader).await {
             Ok(data) => print!("{data}"),
             Err(e) => {
-                eprintln!("attach: {e}");
+                eprintln!("attach (process: {name}): {e}");
                 break;
             }
         }
     }
-    println!("attaching to process {name} on socket {socket_path}");
 }
 
 async fn handle_response(response: &Response) {
