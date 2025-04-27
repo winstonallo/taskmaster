@@ -46,16 +46,16 @@ impl Display for ProcessState {
 }
 
 impl ProcessState {
-    pub fn monitor(&mut self, proc: &mut Process) -> Option<ProcessState> {
+    pub async fn monitor(&mut self, proc: &mut Process) -> Option<ProcessState> {
         use ProcessState::*;
         match self {
             Idle => monitor_idle(),
-            Ready => monitor_ready(proc),
+            Ready => monitor_ready(proc).await,
             HealthCheck(started_at) => monitor_healthcheck(started_at, proc),
             Healthy => monitor_healthy(proc),
             Failed(_process_state) => monitor_failed(proc),
-            WaitingForRetry(retry_at) => monitor_waiting_for_retry(retry_at, proc),
-            Completed => monitor_completed(proc),
+            WaitingForRetry(retry_at) => monitor_waiting_for_retry(retry_at, proc).await,
+            Completed => monitor_completed(proc).await,
             Stopping(killed_at) => monitor_stopping(*killed_at, proc),
             Stopped => monitor_stopped(proc),
         }

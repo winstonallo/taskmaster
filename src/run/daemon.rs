@@ -129,7 +129,7 @@ impl Daemon {
             },
 
             _ = sleep(Duration::from_nanos(1)) => {
-                monitor_state(self.processes_mut());
+                monitor_state(self.processes_mut()).await;
 
                 if  self.shutting_down && self.no_process_running(){
                     return Ok(());
@@ -182,7 +182,7 @@ impl Daemon {
                 },
 
                 _ = sleep(Duration::from_nanos(1)) => {
-                    monitor_state(self.processes_mut());
+                    monitor_state(self.processes_mut()).await;
 
                     if  self.shutting_down && self.no_process_running(){
                         return Ok(());
@@ -205,10 +205,10 @@ impl Daemon {
     }
 }
 
-fn monitor_state(procs: &mut HashMap<String, Process>) {
+async fn monitor_state(procs: &mut HashMap<String, Process>) {
     for proc in procs.values_mut() {
         proc.desire();
-        proc.monitor();
+        proc.monitor().await;
     }
 }
 
