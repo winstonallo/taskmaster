@@ -1,0 +1,25 @@
+{
+    "name": "taskmaster",
+    "runArgs": [
+        "--name",
+        "dev_42-taskmaster"
+    ],
+    "dockerFile": "Dockerfile",
+    "mounts": [
+        "source=${localEnv:HOME}/.ssh,target=/root/.ssh,type=bind,consistency=cached",
+        "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached"
+    ],
+    "customizations": {
+        "vscode": {
+            "settings": {
+                "terminal.integrated.shell.linux": "/bin/bash"
+            },
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cpptools-themes",
+                "rust-lang.rust-analyzer"
+            ]
+        }
+    },
+    "workspaceFolder": "/workspaces/taskmaster"
+}
