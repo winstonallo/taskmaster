@@ -29,13 +29,13 @@ pub async fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
     use super::request::RequestType::*;
     let response_type = match request.request_type() {
         Status => handle_request_status(daemon.processes_mut()),
-        StatusSingle(request_status_single) => handle_request_status_single(daemon.processes_mut(), request_status_single),
-        Start(request_start) => handle_request_start(daemon.processes_mut(), request_start),
-        Stop(request_stop) => handle_request_stop(daemon.processes_mut(), request_stop),
-        Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
+        StatusSingle(request) => handle_request_status_single(daemon.processes_mut(), request),
+        Start(request) => handle_request_start(daemon.processes_mut(), request),
+        Stop(request) => handle_request_stop(daemon.processes_mut(), request),
+        Restart(request) => handle_request_restart(daemon.processes_mut(), request),
         Reload => handle_request_reload(daemon),
         Halt => handle_request_halt(daemon),
-        Attach(request_attach) => handle_request_attach(daemon, request_attach).await,
+        Attach(request) => handle_request_attach(daemon, request).await,
     };
 
     Response::from_request(request, response_type)
@@ -322,6 +322,10 @@ async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> 
     ResponseType::Result(ResponseResult::Attach {
         name: process.name().to_owned(),
         socketpath,
+        to: match request.to {
+            AttachFile::StdOut => "stdout".to_string(),
+            AttachFile::StdErr => "stderr".to_string(),
+        },
     })
 }
 

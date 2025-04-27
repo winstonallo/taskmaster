@@ -86,7 +86,7 @@ pub enum ResponseResult {
     Restart(String),
     Reload,
     Halt,
-    Attach { name: String, socketpath: String },
+    Attach { name: String, socketpath: String, to: String },
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -133,7 +133,16 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     Ok(request)
 }
 
-async fn attach(name: &str, socket_path: &str) {
+async fn attach(name: &str, socket_path: &str, to: &str) {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
+    let tx_clone = tx.clone();
+
+    tokio::spawn(async move {
+        if let Ok(_) = tokio::signal::ctrl_c().await {
+            let _ = tx_clone.send(()).await;
+        }
+    });
+
     let stream = match UnixStream::connect(socket_path).await {
         Ok(stream) => stream,
         Err(e) => {
@@ -145,10 +154,18 @@ async fn attach(name: &str, socket_path: &str) {
     let mut reader = BufReader::new(stream);
 
     loop {
-        match read_from_stream(&mut reader).await {
-            Ok(data) => print!("{data}"),
-            Err(e) => {
-                eprintln!("attach (process: {name}): {e}");
+        tokio::select! {
+            read_result = read_from_stream(&mut reader) => {
+                match read_result {
+                    Ok(data) => print!("[{name}:{to}]: {data}"),
+                    Err(e) => {
+                        eprintln!("attach (process: {name}): {e}");
+                        break;
+                    }
+                }
+            },
+            _ = rx.recv() => {
+                println!("[{name}:{to}]: detached");
                 break;
             }
         }
@@ -167,7 +184,7 @@ async fn handle_response(response: &Response) {
                 Restart(name) => println!("restarting: {name}"),
                 Reload => println!("reloading configuration"),
                 Halt => println!("shutting down taskmaster\n"),
-                Attach { name, socketpath } => attach(name, socketpath).await,
+                Attach { name, socketpath, to } => attach(name, socketpath, to).await,
             };
         }
         ResponseType::Error(err) => {
