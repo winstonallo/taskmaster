@@ -1,6 +1,5 @@
 a.out
 target/
+*.c
 *.sh
 *.txt
-*.c
-*.py

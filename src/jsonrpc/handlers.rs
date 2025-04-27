@@ -1,5 +1,11 @@
+use rand::{Rng, distr::Alphanumeric, rng};
+use tokio::{
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+    net::UnixStream,
+};
+
 use super::{
-    request::{RequestAttach, RequestRestart, RequestStart, RequestStop},
+    request::{AttachFile, RequestAttach, RequestRestart, RequestStart, RequestStop},
     response::ErrorCode,
 };
 use crate::{
@@ -8,9 +14,11 @@ use crate::{
         response::{ResponseResult, ResponseType},
         short_process::ShortProcess,
     },
+    log_info,
     run::{daemon::Daemon, proc::Process, statemachine::states::ProcessState},
 };
-use std::collections::HashMap;
+use crate::{log_error, run::daemon::socket::AsyncUnixSocket};
+use std::{collections::HashMap, error::Error};
 
 use super::{
     request::{Request, RequestStatusSingle},
@@ -21,13 +29,13 @@ pub async fn handle_request(daemon: &mut Daemon, request: Request) -> Response {
     use super::request::RequestType::*;
     let response_type = match request.request_type() {
         Status => handle_request_status(daemon.processes_mut()),
-        StatusSingle(request_status_single) => handle_request_status_single(daemon.processes_mut(), request_status_single),
-        Start(request_start) => handle_request_start(daemon.processes_mut(), request_start),
-        Stop(request_stop) => handle_request_stop(daemon.processes_mut(), request_stop),
-        Restart(request_restart) => handle_request_restart(daemon.processes_mut(), request_restart),
+        StatusSingle(request) => handle_request_status_single(daemon.processes_mut(), request),
+        Start(request) => handle_request_start(daemon.processes_mut(), request),
+        Stop(request) => handle_request_stop(daemon.processes_mut(), request),
+        Restart(request) => handle_request_restart(daemon.processes_mut(), request),
         Reload => handle_request_reload(daemon),
         Halt => handle_request_halt(daemon),
-        Attach(request_attach) => handle_request_attach(daemon.processes_mut(), request_attach).await,
+        Attach(request) => handle_request_attach(daemon, request).await,
     };
 
     Response::from_request(request, response_type)
@@ -73,10 +81,7 @@ fn handle_request_start(processes: &mut HashMap<String, Process>, request: &Requ
 
     use ProcessState::*;
     match process.state() {
-        Healthy | HealthCheck(_) => {
-            // If the process was stopped after reaching max retries, it would go into an infinite restart loop.
-            ResponseType::Result(ResponseResult::Start(format!("process with name {} already running", process.name())))
-        }
+        Healthy | HealthCheck(_) => ResponseType::Result(ResponseResult::Start(format!("process with name {} already running", process.name()))),
         _ => ResponseType::Result(ResponseResult::Start(format!("starting process with name {}", process.name()))),
     }
 }
@@ -174,30 +179,154 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
-async fn handle_request_attach(processes: &mut HashMap<String, Process>, request: &RequestAttach) -> ResponseType {
-    let process = match processes.get(request.name()) {
+async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, listener: &mut UnixStream) -> Result<u64, Box<dyn Error + Send + Sync>> {
+    match file.seek(std::io::SeekFrom::Start(pos)).await {
+        Ok(_) => {}
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not seek file: {e}"))),
+    };
+
+    if len <= pos {
+        return Ok(if len == pos { pos } else { 0 });
+    }
+
+    let mut pos = pos;
+    let mut buf = Vec::new();
+
+    match file.read_to_end(&mut buf).await {
+        Ok(bytes_read) => {
+            if bytes_read > 0 {
+                pos += bytes_read as u64;
+                listener.write_all(&buf).await?;
+            }
+        }
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not read file: {e}"))),
+    }
+
+    Ok(pos)
+}
+
+async fn attach(socketpath: &str, to: &str, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let mut listener =
+        AsyncUnixSocket::new(socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
+
+    let mut file = tokio::fs::File::open(&to)
+        .await
+        .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not open stdout at path '{to}': {e}")))?;
+
+    let mut pos = 0;
+
+    let (mut sock, _addr) = match listener.accept().await {
+        Ok((sock, addr)) => {
+            log_info!("client attached, sending data on {socketpath}");
+            (sock, addr)
+        }
+        Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not accept client on {socketpath}: {e}"))),
+    };
+
+    loop {
+        tokio::select! {
+            md = file.metadata() => {
+                match md {
+                    Ok(metadata) => pos = update_attach_stream(&mut file, pos, metadata.len(), &mut sock).await?,
+                    Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{to}': {e}"))),
+                }
+            }
+
+        }
+    }
+}
+
+pub struct AttachmentManager {
+    tx: tokio::sync::mpsc::Sender<AttachmentRequest>,
+}
+
+enum AttachmentRequest {
+    New { socketpath: String, to: String, authgroup: String },
+}
+
+impl Default for AttachmentManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl AttachmentManager {
+    pub fn new() -> Self {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+
+        tokio::spawn(async move {
+            while let Some(req) = rx.recv().await {
+                match req {
+                    AttachmentRequest::New { socketpath, to, authgroup } => {
+                        tokio::spawn(async move {
+                            if let Err(e) = attach(&socketpath, &to, authgroup).await {
+                                if e.to_string().contains("Broken pipe") {
+                                    log_info!("connection on {socketpath} closed");
+                                } else {
+                                    log_error!("attach: {e}");
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+        });
+
+        Self { tx }
+    }
+
+    pub async fn attach(&self, socketpath: &str, to: &str, authgroup: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+        self.tx
+            .send(AttachmentRequest::New {
+                socketpath: socketpath.to_owned(),
+                to: to.to_owned(),
+                authgroup: authgroup.to_owned(),
+            })
+            .await
+            .map_err(Box::<dyn Error + Send + Sync>::from)
+    }
+}
+
+async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> ResponseType {
+    let process = match daemon.processes().get(request.name()) {
         Some(p) => p,
         None => {
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InvalidParams,
-                message: format!("no process with name {} found", request.name()),
+                message: format!("process {} not found", request.name()),
                 data: None,
             });
         }
     };
 
-    println!("{}", process.config().stdout());
-    let stdout = match tokio::fs::read_to_string(process.config().stdout()).await {
-        Ok(stdout) => stdout,
-        Err(e) => {
-            return ResponseType::Error(ResponseError {
-                code: ErrorCode::InternalError,
-                message: e.to_string(),
-                data: None,
-            });
-        }
+    let socketpath = format!("/tmp/{}.sock", rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>());
+    let attach_path = match request.to {
+        AttachFile::StdOut => process.config().stdout(),
+        AttachFile::StdErr => process.config().stderr(),
     };
-    ResponseType::Result(ResponseResult::Attach(stdout))
+
+    if let Err(e) = daemon
+        .attachment_manager()
+        .attach(&socketpath, attach_path, daemon.auth_group())
+        .await
+    {
+        let message = format!("could not attach to process {}: {e}", request.name());
+        log_error!("{message}");
+        return ResponseType::Error(ResponseError {
+            code: ErrorCode::InternalError,
+            message,
+            data: None,
+        });
+    }
+
+    ResponseType::Result(ResponseResult::Attach {
+        name: process.name().to_owned(),
+        socketpath,
+        to: match request.to {
+            AttachFile::StdOut => "stdout".to_string(),
+            AttachFile::StdErr => "stderr".to_string(),
+        },
+    })
 }
 
 #[cfg(test)]

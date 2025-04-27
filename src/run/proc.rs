@@ -1,8 +1,9 @@
 use std::{
     collections::VecDeque,
+    error::Error,
     fs::File,
     os::unix::process::{CommandExt, ExitStatusExt},
-    process::{Child, Command, ExitStatus},
+    process::{Child, Command, ExitStatus, Stdio},
     time::{self, Duration, Instant},
 };
 
@@ -50,8 +51,8 @@ impl Process {
         }
     }
 
-    pub fn monitor(&mut self) {
-        let new_state = match self.state.clone().monitor(self) {
+    pub async fn monitor(&mut self) {
+        let new_state = match self.state.clone().monitor(self).await {
             Some(new_state) => new_state,
             None => return,
         };
@@ -156,7 +157,7 @@ impl Process {
         Instant::now().duration_since(started_at).as_secs() >= self.healthcheck.starttime() as u64
     }
 
-    fn spawn(&self) -> Result<Child, ProcessError> {
+    async fn spawn(&self) -> Result<Child, Box<dyn Error + Send + Sync>> {
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
 
@@ -166,10 +167,11 @@ impl Process {
         let stop_signals = self.conf.stopsignals().to_owned();
         let umask_val = self.conf.umask();
 
-        match unsafe {
+        let mut child = unsafe {
             Command::new(cmd_path)
                 .args(args)
                 .envs(self.conf.env().clone())
+                .stdin(Stdio::piped())
                 .stdout(stdout_file)
                 .stderr(stderr_file)
                 .current_dir(working_dir)
@@ -182,22 +184,22 @@ impl Process {
                     Ok(())
                 })
                 .spawn()
-        } {
-            Ok(child) => Ok(child),
-            Err(err) => Err(ProcessError::CouldNotSpawn(err.to_string())),
-        }
+                .map_err(|e| Box::<dyn Error + Send + Sync>::from(e.to_string()))
+        }?;
+
+        Ok(child)
     }
 
-    pub fn start(&mut self) -> Result<(), ProcessError> {
+    pub async fn start(&mut self) -> Result<(), ProcessError> {
         if self.child.is_some() {
             return Err(ProcessError::AlreadyRunning);
         }
 
         assert_ne!(self.state(), ProcessState::Healthy);
 
-        self.child = match self.spawn() {
+        self.child = match self.spawn().await {
             Ok(child) => Some(child),
-            Err(err) => return Err(err),
+            Err(e) => return Err(ProcessError::CouldNotSpawn(e.to_string())),
         };
 
         self.id = Some(self.child.as_ref().unwrap().id());

@@ -94,9 +94,10 @@ impl RequestType {
         Self::Halt
     }
 
-    pub fn new_attach(name: &str) -> Self {
+    pub fn new_attach(name: &str, to: AttachFile) -> Self {
         Self::Attach(RequestAttach {
             params: ParamsName { name: name.to_owned() },
+            to,
         })
     }
 }
@@ -139,8 +140,16 @@ impl RequestStop {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[serde(rename_all = "lowercase")]
+pub enum AttachFile {
+    StdErr,
+    StdOut,
+}
+
+#[derive(Serialize, Deserialize, PartialEq, Debug)]
 pub struct RequestAttach {
     params: ParamsName,
+    pub to: AttachFile,
 }
 
 impl RequestAttach {

@@ -130,7 +130,11 @@ impl Config {
     pub fn random() -> Config {
         use rand::{Rng, distr::Alphanumeric};
 
-        let socketpath = rand::rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>();
+        let socketpath = rand::rng()
+            .sample_iter(&Alphanumeric)
+            .take(8)
+            .map(char::from)
+            .collect::<String>();
 
         Self::default().set_socketpath(&format!("/tmp/{socketpath}.sock")).to_owned()
     }
