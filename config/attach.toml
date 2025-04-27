@@ -4,7 +4,7 @@ authgroup = "winstonallo"
 
 [processes.sleepwrite]
 cmd = "/usr/bin/python3"
-args = ["/home/winstonallo/mastery/taskmaster/sleepwrite.py"]
+args = ["/home/winstonallo/mastery/taskmaster/executables/sleepwrite.py"]
 processes = 1
 umask = "022"
 workingdir = "/tmp"
