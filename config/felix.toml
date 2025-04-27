@@ -7,7 +7,7 @@ socketpath = "/tmp/.taskmaster.sock"
 # Name of the group to be created for authenticating client (similarly to 
 # the docker group.
 # Defaults to "taskmaster".
-authgroup = "everyone"
+authgroup = "root"
 
 # Process name.
 [processes.ls]
@@ -15,7 +15,7 @@ authgroup = "everyone"
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/Users/code/source/taskmaster/a.out"
+cmd = "/workspaces/taskmaster/a.out"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
@@ -23,7 +23,7 @@ args = []
 
 # Number of processes to start.
 # Defaults to 1, max 255.
-processes = 100
+processes = 4
 
 # Mask for files created by the process.
 # Defaults to "022".

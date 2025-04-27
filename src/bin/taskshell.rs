@@ -1,4 +1,5 @@
 use std::{
+    env::args,
     io::{Read, Write},
     os::unix::net::UnixStream,
     process::exit,
@@ -6,9 +7,9 @@ use std::{
 };
 
 use tasklib::jsonrpc::{
-    request::RequestType,
-    response::{Response, ResponseType},
-};
+        request::RequestType,
+        response::{Response, ResponseType},
+    };
 
 use tasklib::jsonrpc::request::Request;
 
@@ -72,54 +73,54 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
             } else if arguments.len() == 1 {
                 build_request_status()
             } else {
-                return Err("usage: status OR status PROCESS_NAME");
+                return Err("usage: status OR status PROCESS_NAME\n");
             }
         }
         "start" => {
             if arguments.len() == 2 {
                 build_request_start(arguments[1])
             } else {
-                return Err("usage: start PROCESS_NAME");
+                return Err("usage: start PROCESS_NAME\n");
             }
         }
         "restart" => {
             if arguments.len() == 2 {
                 build_request_restart(arguments[1])
             } else {
-                return Err("usage: restart PROCESS_NAME");
+                return Err("usage: restart PROCESS_NAME\n");
             }
         }
         "stop" => {
             if arguments.len() == 2 {
                 build_request_stop(arguments[1])
             } else {
-                return Err("usage: stop PROCESS_NAME");
+                return Err("usage: stop PROCESS_NAME\n");
             }
         }
         "reload" => {
             if arguments.len() == 1 {
                 build_request_reload()
             } else {
-                return Err("usage: reload");
+                return Err("usage: reload\n");
             }
         }
         "halt" => {
             if arguments.len() == 1 {
                 build_request_halt()
             } else {
-                return Err("usage: halt");
+                return Err("usage: halt\n");
             }
         }
         "exit" => exit(0),
         _ => {
-            return Err("method not implemented");
+            return Err("method not implemented\n");
         }
     };
 
     Ok(request)
 }
 
-fn print_response(response: Response) {
+fn response_to_str(response: Response) -> String {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
@@ -132,72 +133,91 @@ fn print_response(response: Response) {
                     str
                 }
                 StatusSingle(short_process) => format!("Name: {}, State: {}\n", short_process.name(), short_process.state()),
-                Start(name) => format!("staring: {}\n", name),
+                Start(name) => format!("starting: {}\n", name),
                 Stop(name) => format!("stopping: {}\n", name),
                 Restart(name) => format!("restarting: {}\n", name),
                 Reload => "reloading configuration\n".to_owned(),
                 Halt => "shutting down taskmaster\n".to_owned(),
             };
+            str
+        }
+        ResponseType::Error(err) => err.message.clone() + "\n",
+    }
+}
 
-            print!("response from daemon: \n{}", str)
+fn handle_input(input: String) -> Result<String, String> {
+    let arguments: Vec<&str> = input.split_ascii_whitespace().collect();
+    if arguments.is_empty() {
+        return Err("no non white space input given\n".to_owned());
+    }
+
+    let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH) {
+        Ok(s) => s,
+        Err(e) => return Err(format!("couldn't establish socket connection: {}\n", e)),
+    };
+
+    let request = match build_request(&arguments) {
+        Ok(request) => request,
+        Err(e) => return Err(e.to_owned()),
+    };
+
+    let request = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
+
+    if let Err(e) = write_request(&mut unix_stream, request.as_bytes()) {
+        return Err(format!("error while writing request: {}\n", e));
+    }
+
+    let response = match read_from_stream(&mut unix_stream) {
+        Ok(resp) => resp,
+        Err(e) => return Err(format!("error while reading socket: {}\n", e)),
+    };
+
+    let response = match serde_json::from_str::<Response>(&response) {
+        Ok(resp) => resp,
+        Err(_) => return Err(format!("non json_rpc formated message: {}\n", response)),
+    };
+
+    Ok(response_to_str(response))
+}
+
+fn docker(args: Vec<String>) {
+    let msg = match handle_input(args.join(" ")) {
+        Ok(s) => s,
+        Err(s) => s,
+    };
+    print!("{}", msg);
+}
+
+fn shell() {
+    loop {
+        print!("taskshell> ");
+        let _ = std::io::stdout().flush();
+        let mut line = String::new();
+        match std::io::stdin().read_line(&mut line) {
+            Err(e) => {
+                println!("{}", e);
+                return;
+            }
+            Ok(0) => return,
+            _ => {}
         }
-        ResponseType::Error(err) => {
-            println!("{}", err.message)
-        }
+
+        let msg = match handle_input(line) {
+            Ok(s) => s,
+            Err(s) => s,
+        };
+        print!("{}", msg);
     }
 }
 
 fn main() {
-    loop {
-        let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH) {
-            Ok(s) => s,
-            Err(e) => {
-                println!("couldn't establish socket connection: {}", e);
-                return;
-            }
-        };
+    let args = args();
+    let mut args: Vec<String> = args.collect();
 
-        print!("taskshell> ");
-        let _ = std::io::stdout().flush();
-        let mut line = String::new();
-        std::io::stdin().read_line(&mut line).unwrap();
+    args.remove(0);
 
-        let arguments: Vec<&str> = line.split_ascii_whitespace().collect();
-        if arguments.is_empty() {
-            continue;
-        }
-
-        let request = match build_request(&arguments) {
-            Ok(request) => request,
-            Err(e) => {
-                println!("{}", e);
-                continue;
-            }
-        };
-
-        let request = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
-
-        if let Err(e) = write_request(&mut unix_stream, request.as_bytes()) {
-            println!("error while writing request: {}", e);
-            continue;
-        }
-
-        let response = match read_from_stream(&mut unix_stream) {
-            Ok(resp) => resp,
-            Err(e) => {
-                println!("error while reading socket: {}", e);
-                continue;
-            }
-        };
-
-        let response = match serde_json::from_str::<Response>(&response) {
-            Ok(resp) => resp,
-            Err(_) => {
-                println!("non json_rpc formated message: {}", response);
-                continue;
-            }
-        };
-
-        print_response(response);
+    match args.len() {
+        0 => shell(),
+        _ => docker(args),
     }
 }
