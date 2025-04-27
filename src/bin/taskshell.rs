@@ -138,7 +138,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) {
     let tx_clone = tx.clone();
 
     tokio::spawn(async move {
-        if let Ok(_) = tokio::signal::ctrl_c().await {
+        if (tokio::signal::ctrl_c().await).is_ok() {
             let _ = tx_clone.send(()).await;
         }
     });

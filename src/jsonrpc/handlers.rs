@@ -207,7 +207,7 @@ async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, li
 
 async fn attach(socketpath: &str, to: &str, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut listener =
-        AsyncUnixSocket::new(&socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
+        AsyncUnixSocket::new(socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
 
     let mut file = tokio::fs::File::open(&to)
         .await
@@ -258,7 +258,7 @@ impl AttachmentManager {
             while let Some(req) = rx.recv().await {
                 match req {
                     AttachmentRequest::New { socketpath, to, authgroup } => {
-                        let _ = tokio::spawn(async move {
+                        tokio::spawn(async move {
                             if let Err(e) = attach(&socketpath, &to, authgroup).await {
                                 if e.to_string().contains("Broken pipe") {
                                     log_info!("connection on {socketpath} closed");
