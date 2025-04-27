@@ -12,7 +12,7 @@ use crate::{
     log_error, log_info, proc_info,
 };
 pub use error::ProcessError;
-use libc::{c_int, signal, umask};
+use libc::umask;
 
 use super::statemachine::{healthcheck::HealthCheckRunner, states::ProcessState};
 
@@ -161,15 +161,21 @@ impl Process {
         let stop_signals = self.conf.stopsignals().to_owned();
         let umask_val = self.conf.umask();
 
-        let mut child = Command::new(cmd_path)
-            .args(args)
-            .envs(self.conf.env().clone())
-            .stdin(Stdio::piped())
-            .stdout(stdout_file)
-            .stderr(stderr_file)
-            .current_dir(working_dir)
-            .spawn()
-            .map_err(|e| Box::<dyn Error + Send + Sync>::from(e.to_string()))?;
+        let mut child = unsafe {
+            Command::new(cmd_path)
+                .args(args)
+                .envs(self.conf.env().clone())
+                .stdin(Stdio::piped())
+                .stdout(stdout_file)
+                .stderr(stderr_file)
+                .pre_exec(move || {
+                    umask(umask_val);
+                    Ok(())
+                })
+                .current_dir(working_dir)
+                .spawn()
+                .map_err(|e| Box::<dyn Error + Send + Sync>::from(e.to_string()))
+        }?;
 
         Ok(child)
     }
