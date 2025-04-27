@@ -65,8 +65,8 @@ impl Shell {
         let _ = io::stdout().flush();
 
         let mut buf: [u8; 1] = [0; 1];
-        while let Ok(x) = io::stdin().lock().read(&mut buf) {
-            if x == 0 {
+        while let Ok(bytes_read) = io::stdin().lock().read(&mut buf) {
+            if bytes_read == 0 {
                 continue;
             }
 

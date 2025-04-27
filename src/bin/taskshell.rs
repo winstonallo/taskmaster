@@ -1,4 +1,4 @@
-use std::{io::Write, process::exit, sync::atomic::AtomicU32};
+use std::{env::args, process::exit, sync::atomic::AtomicU32};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
@@ -124,14 +124,7 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
             if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
                 build_request_attach(arguments[1], arguments[2])
             } else {
-                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
-            }
-        }
-        "attach" => {
-            if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
-                build_request_attach(arguments[1], arguments[2])
-            } else {
-                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
+                return Err("usage: attach PROCESS_NAME {stdout | stderr}\n");
             }
         }
         "exit" => exit(0),
@@ -143,7 +136,7 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     Ok(request)
 }
 
-async fn attach(name: &str, socket_path: &str, to: &str) {
+async fn attach(name: &str, socket_path: &str, to: &str) -> String {
     let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
     let tx_clone = tx.clone();
 
@@ -157,7 +150,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) {
         Ok(stream) => stream,
         Err(e) => {
             eprintln!("could not establish connection on attach socket at path {socket_path}: {e}");
-            return;
+            return "".to_string();
         }
     };
 
@@ -167,7 +160,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) {
         tokio::select! {
             read_result = read_from_stream(&mut reader) => {
                 match read_result {
-                    Ok(data) => print!("[{name}:{to}]: {data}"),
+                    Ok(data) => print_raw_mode(&format!("[{name}:{to}]: {data}")),
                     Err(e) => {
                         eprintln!("attach (process: {name}): {e}");
                         break;
@@ -175,40 +168,46 @@ async fn attach(name: &str, socket_path: &str, to: &str) {
                 }
             },
             _ = rx.recv() => {
-                println!("[{name}:{to}]: detached");
+                print_raw_mode(&format!("[{name}:{to}]: detached\n"));
                 break;
             }
         }
     }
+    "".to_string()
 }
 
-async fn handle_response(response: &Response) {
-fn response_to_str(response: Response) -> String {
+async fn response_to_str(response: &Response) -> String {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
             match res {
-                Status(items) => items.iter().for_each(|sp| println!("{}: {}", sp.name(), sp.state())),
-                StatusSingle(item) => println!("{}: {}", item.name(), item.state()),
-                Start(name) => println!("starting: {name}"),
-                Stop(name) => println!("stopping: {name}"),
-                Restart(name) => println!("restarting: {name}"),
-                Reload => println!("reloading configuration"),
-                Halt => println!("shutting down taskmaster\n"),
+                Status(items) => {
+                    let mut str = String::new();
+                    for short_process in items.iter() {
+                        str.push_str(&format!("{}: {}\n", short_process.name(), short_process.state()));
+                    }
+                    str
+                }
+                StatusSingle(item) => format!("{}: {}\n", item.name(), item.state()),
+                Start(name) => format!("starting: {name}\n"),
+                Stop(name) => format!("stopping: {name}\n"),
+                Restart(name) => format!("restarting: {name}\n"),
+                Reload => "reloading configuration\n".to_string(),
+                Halt => "shutting down taskmaster\n".to_string(),
                 Attach { name, socketpath, to } => attach(name, socketpath, to).await,
-            };
+            }
         }
-        ResponseType::Error(err) => err.message.clone() + "\n",
+        ResponseType::Error(err) => format!("{}\n", err.message),
     }
 }
 
-fn handle_input(input: String) -> Result<String, String> {
+async fn handle_input(input: String) -> Result<String, String> {
     let arguments: Vec<&str> = input.split_ascii_whitespace().collect();
     if arguments.is_empty() {
         return Err("no non white space input given\n".to_owned());
     }
 
-    let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH) {
+    let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
         Ok(s) => s,
         Err(e) => return Err(format!("couldn't establish socket connection: {e}\n")),
     };
@@ -218,13 +217,14 @@ fn handle_input(input: String) -> Result<String, String> {
         Err(e) => return Err(e.to_owned()),
     };
 
-        let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
+    let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
-    if let Err(e) = write_request(&mut unix_stream, request.as_bytes()) {
+    if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()).await {
         return Err(format!("error while writing request: {e}\n"));
     }
 
-    let response = match read_from_stream(&mut unix_stream) {
+    let mut reader = BufReader::new(unix_stream);
+    let response = match read_from_stream(&mut reader).await {
         Ok(resp) => resp,
         Err(e) => return Err(format!("error while reading socket: {e}\n")),
     };
@@ -234,11 +234,11 @@ fn handle_input(input: String) -> Result<String, String> {
         Err(_) => return Err(format!("non json_rpc formatted message: {response}\n")),
     };
 
-    Ok(response_to_str(response))
+    Ok(response_to_str(&response).await)
 }
 
-fn docker(args: Vec<String>) {
-    let msg = match handle_input(args.join(" ")) {
+async fn docker(args: Vec<String>) {
+    let msg = match handle_input(args.join(" ")).await {
         Ok(s) => s,
         Err(s) => s,
     };
@@ -247,17 +247,20 @@ fn docker(args: Vec<String>) {
 
 fn print_raw_mode(string: &str) {
     let mut raw_new_line = String::new();
-    raw_new_line.push(13 as char);
     raw_new_line.push('\n');
+    raw_new_line.push(13 as char);
 
     let string = string.replace('\n', &raw_new_line);
     print!("{string}")
 }
 
-fn shell() {
+async fn shell() {
     let mut shell = shell::Shell::new("taskshell> ");
     while let Some(line) = shell.next_line() {
-        let msg = match handle_input(line) {
+        if line.trim() == "exit" {
+            break;
+        }
+        let msg = match handle_input(line).await {
             Ok(s) => s,
             Err(s) => s,
         };
@@ -265,14 +268,15 @@ fn shell() {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = args();
     let mut args: Vec<String> = args.collect();
 
     args.remove(0);
 
     match args.len() {
-        0 => shell(),
-        _ => docker(args),
-    }
+        0 => shell().await,
+        _ => docker(args).await,
+    };
 }
