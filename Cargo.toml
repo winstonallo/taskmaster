@@ -19,3 +19,6 @@ name = "taskmaster"
 
 [[bin]]
 name = "taskshell"
+
+[build-dependencies]
+cc = "1.0"
