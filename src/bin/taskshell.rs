@@ -141,43 +141,15 @@ async fn attach(name: &str, socket_path: &str) {
 
     let mut reader = BufReader::new(stream);
 
-    let mut stdin_reader = BufReader::new(tokio::io::stdin());
-    let mut stdin_buf = String::new();
-
     loop {
-        tokio::select! {
-            output_res = read_from_stream(&mut reader) => {
-                match output_res {
-                    Ok(data) => print!("{data}"),
-                    Err(e) => {
-                        eprintln!("attach: {e}");
-                        break;
-                    }
-                }
-            }
-            stdin_res = stdin_reader.read_line(&mut stdin_buf) => {
-                match stdin_res {
-                    Ok(0) => break,
-                    Ok(_) => {
-                        println!("{stdin_buf}");
-                        if let Ok(mut write_stream) = UnixStream::connect(socket_path).await {
-                            if let Err(e) = write_stream.write_all(stdin_buf.as_bytes()).await {
-                                eprintln!("failed to send stdin: {e}");
-                            }
-                            stdin_buf.clear();
-                        } else {
-                            eprintln!("could not connect to socket for sending input");
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("stdin error: {e}");
-                        break;
-                    }
-                }
+        match read_from_stream(&mut reader).await {
+            Ok(data) => print!("{data}"),
+            Err(e) => {
+                eprintln!("attach: {e}");
+                break;
             }
         }
     }
-
     println!("attaching to process {name} on socket {socket_path}");
 }
 
