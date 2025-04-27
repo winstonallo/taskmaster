@@ -7,14 +7,16 @@ void tty_atexit(void);
 int tty_reset(void);
 void tty_raw(void);
 void fatal(char *mess);
+void ctrlc();
 
 static struct termios orig_termios;
 static int ttyfd = 0;
 
-void raw_mod()
-{
-    if (!isatty(ttyfd))
-        fatal("not on a tty");
+void
+raw_mod() {
+    signal(SIGINT, ctrlc);
+
+    if (!isatty(ttyfd)) fatal("not on a tty");
 
     if (tcgetattr(ttyfd, &orig_termios) < 0)
         fatal("can't get tty settings");
@@ -30,10 +32,12 @@ void tty_atexit(void)
     tty_reset();
 }
 
-int tty_reset(void)
-{
-    if (tcsetattr(ttyfd, TCSAFLUSH, &orig_termios) < 0)
-        return -1;
+void
+ctrlc() {}
+
+int
+tty_reset() {
+    if (tcsetattr(ttyfd, TCSAFLUSH, &orig_termios) < 0) return -1;
     return 0;
 }
 
