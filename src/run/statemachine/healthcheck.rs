@@ -56,7 +56,7 @@ impl HealthCheckRunner {
     pub fn timeout(&self) -> usize {
         match &self.check {
             HealthCheckType::Command { cmd: _, args: _, timeout } => *timeout,
-            _ => panic!("args() called on an Uptime HealthCheck"),
+            _ => panic!("timeout() called on an Uptime HealthCheck"),
         }
     }
 
@@ -124,5 +124,127 @@ impl HealthCheckRunner {
         });
 
         self.task = Some(handle);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::time::sleep;
+
+    use super::*;
+
+    impl HealthCheckRunner {
+        pub fn command() -> Self {
+            Self {
+                check: HealthCheckType::Command {
+                    cmd: "/usr/bin/echo".to_string(),
+                    args: Vec::new(),
+                    timeout: 5,
+                },
+                failures: 0,
+                task: None,
+                receiver: None,
+                retries: 5,
+                backoff: 5,
+            }
+        }
+
+        pub fn uptime() -> Self {
+            Self {
+                check: HealthCheckType::Uptime { starttime: 5 },
+                failures: 0,
+                task: None,
+                receiver: None,
+                retries: 5,
+                backoff: 5,
+            }
+        }
+    }
+
+    #[test]
+    fn increment_failures() {
+        let mut hc = HealthCheckRunner::command();
+        hc.increment_failures();
+        assert_eq!(hc.failures(), 1);
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn clear() {
+        let mut hc = HealthCheckRunner::command();
+        hc.start();
+        hc.clear();
+        assert!(hc.task().is_none());
+        assert!(hc.receiver().is_none());
+    }
+
+    #[test]
+    fn cmd_on_command_healthcheck() {
+        let hc = HealthCheckRunner::command();
+        assert_eq!(hc.cmd(), "/usr/bin/echo".to_string());
+    }
+
+    #[test]
+    fn retries() {
+        let hc = HealthCheckRunner::command();
+        assert_eq!(hc.retries(), 5);
+    }
+
+    #[test]
+    fn backoff() {
+        let hc = HealthCheckRunner::command();
+        assert_eq!(hc.backoff(), 5);
+    }
+
+    #[test]
+    fn args_on_command_healthcheck() {
+        let hc = HealthCheckRunner::command();
+        assert_eq!(hc.args(), Vec::<String>::new());
+    }
+
+    #[test]
+    fn timeout_on_command_healthcheck() {
+        let hc = HealthCheckRunner::command();
+        assert_eq!(hc.timeout(), 5);
+    }
+
+    #[test]
+    fn starttime_on_uptime_healthcheck() {
+        let hc = HealthCheckRunner::uptime();
+        assert_eq!(hc.starttime(), 5);
+    }
+
+    #[test]
+    #[should_panic]
+    fn start_on_uptime_healthcheck() {
+        let mut healthcheck = HealthCheckRunner::uptime();
+        healthcheck.start();
+    }
+
+    #[test]
+    #[should_panic]
+    fn cmd_on_uptime_healthcheck() {
+        let mut healthcheck = HealthCheckRunner::uptime();
+        healthcheck.cmd();
+    }
+
+    #[test]
+    #[should_panic]
+    fn args_on_uptime_healthcheck() {
+        let mut healthcheck = HealthCheckRunner::uptime();
+        healthcheck.args();
+    }
+
+    #[test]
+    #[should_panic]
+    fn timeout_on_uptime_healthcheck() {
+        let mut healthcheck = HealthCheckRunner::uptime();
+        healthcheck.timeout();
+    }
+
+    #[test]
+    #[should_panic]
+    fn starttime_on_command_healthcheck() {
+        let mut healthcheck = HealthCheckRunner::command();
+        healthcheck.starttime();
     }
 }

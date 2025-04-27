@@ -4,11 +4,10 @@ use proc::ProcessConfig;
 use serde::Deserialize;
 
 mod defaults;
-pub mod help;
 pub mod proc;
 mod tests;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     /// Path to the socket used for communication between taskmaster and its client.
@@ -96,5 +95,43 @@ impl Config {
 
     pub fn authgroup(&self) -> &str {
         &self.authgroup
+    }
+}
+
+#[cfg(test)]
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            socketpath: "socketpath".to_string(),
+            authgroup: "authgroup".to_string(),
+            processes: HashMap::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Config {
+    pub fn set_socketpath(&mut self, socketpath: &str) -> &mut Self {
+        self.socketpath = socketpath.to_string();
+        self
+    }
+
+    pub fn set_authgroup(&mut self, authgroup: &str) -> &mut Self {
+        self.authgroup = authgroup.to_string();
+        self
+    }
+
+    pub fn add_process(&mut self, name: &str, process: ProcessConfig) -> &mut Self {
+        self.processes.insert(name.to_string(), process);
+        self
+    }
+
+    #[cfg(test)]
+    pub fn random() -> Config {
+        use rand::{Rng, distr::Alphanumeric};
+
+        let socketpath = rand::rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>();
+
+        Self::default().set_socketpath(&format!("/tmp/{socketpath}.sock")).to_owned()
     }
 }

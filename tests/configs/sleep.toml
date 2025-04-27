@@ -1,27 +1,21 @@
 socketpath = "/tmp/.taskmaster.sock"
-
 authgroup = "winstonallo"
 
 [processes.sleep]
-
 cmd = "/usr/bin/sleep"
-args = ["60"]
+args = ["2"]
 processes = 1
 umask = "022"
 workingdir = "/tmp"
 autostart = true
-autorestart = "always"
+autorestart = "on-failure[:5]"
 exitcodes = [0, 2]
-[processes.sleep.healthcheck]
-cmd = "/usr/bin/sleep"
-args = ["2"]
-backoff = 1
-timeout = 1
-retries = 1
-
 stopsignals = ["TERM", "USR1"]
 stoptime = 5
-stdout = "/tmp/ls.stdout"
-stderr = "/tmp/ls.stderr"
+stdout = "/tmp/sleep.stdout"
+stderr = "/tmp/sleep.stderr"
 env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
-
+[processes.sleep.healthcheck]
+starttime = 1
+retries = 3
+backoff = 5

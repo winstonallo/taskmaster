@@ -6,9 +6,12 @@ use std::{
     sync::atomic::AtomicU32,
 };
 
-use tasklib::jsonrpc::{
-    request::RequestType,
-    response::{Response, ResponseType},
+use tasklib::{
+    jsonrpc::{
+        request::RequestType,
+        response::{Response, ResponseType},
+    },
+    shell,
 };
 
 use tasklib::jsonrpc::request::Request;
@@ -184,26 +187,23 @@ fn docker(args: Vec<String>) {
     print!("{msg}");
 }
 
-fn shell() {
-    loop {
-        print!("taskshell> ");
-        let _ = std::io::stdout().flush();
-        let mut line = String::new();
-        match std::io::stdin().read_line(&mut line) {
-            Err(e) => {
-                println!("{e}");
-                return;
-            }
-            Ok(0) => return,
-            _ => {}
-        }
+fn print_raw_mode(string: &str) {
+    let mut raw_new_line = String::new();
+    raw_new_line.push(13 as char);
+    raw_new_line.push('\n');
 
+    let string = string.replace('\n', &raw_new_line);
+    print!("{string}")
+}
+
+fn shell() {
+    let mut shell = shell::Shell::new("taskshell> ");
+    while let Some(line) = shell.next_line() {
         let msg = match handle_input(line) {
             Ok(s) => s,
             Err(s) => s,
-
         };
-        print!("{msg}");
+        print_raw_mode(&msg);
     }
 }
 
