@@ -74,7 +74,11 @@ impl AsyncUnixSocket {
         })
     }
 
-    pub async fn accept(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn stream(&self) -> &Option<UnixStream> {
+        &self.stream
+    }
+
+    pub async fn accept(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(listener) = &self.listener {
             match listener.accept().await {
                 Ok((stream, _)) => {
