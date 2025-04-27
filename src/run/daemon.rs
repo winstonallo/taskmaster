@@ -2,6 +2,8 @@ use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
 use serde::{Deserialize, Serialize};
 use socket::AsyncUnixSocket;
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::net::UnixStream;
 use tokio::time::sleep;
 
 use super::proc::{self, Process};
@@ -98,22 +100,25 @@ impl Daemon {
         tokio::select! {
             accept_result = listener.accept() => {
 
-                if let Err(e) = accept_result {
-                    log_error!("Failed to accept connection: {e}");
+
+                match accept_result {
+                    Ok((sock, _)) => {
+                        let mut socket = listener;
+                        let clone = sender.clone();
+
+                        let shutting_down = self.shutting_down;
+                        tokio::spawn(async move {
+                            if shutting_down {
+                                let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
+                            } else {
+                                handle_client(sock, clone).await;
+                            }
+                        });
+                    },
+                    Err(e) => log_error!("Failed to accept connection: {e}"),
                 }
 
-                let mut socket = listener;
-                let clone = sender.clone();
 
-                let shutting_down = self.shutting_down;
-                tokio::spawn(async move {
-                    if shutting_down {
-
-                        let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
-                    } else {
-                        handle_client(socket, clone).await;
-                    }
-                });
             },
 
             Some((request, mut socket)) = receiver.recv() => {
@@ -149,24 +154,26 @@ impl Daemon {
             tokio::select! {
                 accept_result = listener.accept() => {
 
-                    if let Err(e) = accept_result {
-                        log_error!("Failed to accept connection: {e}");
-                        continue;
+                    match accept_result {
+                        Ok((mut sock, _)) => {
+                            let clone = sender.clone();
+
+                            let shutting_down = self.shutting_down;
+
+                            tokio::spawn(async move {
+                                if shutting_down {
+                                    let _ = sock.write("not accepting requests - currently shutting down".as_bytes()).await;
+                                } else {
+                                    handle_client(sock, clone).await;
+                                }
+                            });
+                        },
+                        Err(e) => {
+                            log_error!("Failed to accept connection: {e}");
+                            continue;
+                        }
                     }
 
-                    let mut socket = listener;
-                    let clone = sender.clone();
-
-                    let shutting_down = self.shutting_down;
-                    tokio::spawn(async move {
-                        if shutting_down {
-                            let _ = socket.write("not accepting requests - currently shutting down".as_bytes()).await;
-                        } else {
-                            handle_client(socket, clone).await;
-                        }
-                    });
-
-                    listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group())?;
                 },
 
                 Some((request, mut socket)) = receiver.recv() => {
@@ -217,10 +224,13 @@ pub struct MinimumRequest {
     pub id: u32,
 }
 
-async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mpsc::Sender<(Request, AsyncUnixSocket)>>) {
+async fn handle_client(mut socket: UnixStream, sender: Arc<tokio::sync::mpsc::Sender<(Request, UnixStream)>>) {
     let mut line = String::new();
 
-    match socket.read_line(&mut line).await {
+    let (reader_half, mut writer_half) = socket.split();
+    let mut reader = BufReader::new(reader_half);
+
+    match reader.read_line(&mut line).await {
         Ok(0) => { /* connection closed, do nothing */ }
         Ok(_) => match serde_json::from_str(&line) {
             Ok(request) => {
@@ -239,7 +249,7 @@ async fn handle_client(mut socket: AsyncUnixSocket, sender: Arc<tokio::sync::mps
                     .unwrap(),
                     Err(_) => "request id not found - can't respond with JsonRPCError".to_owned(),
                 };
-                if let Err(e) = socket.write(error_msg.as_bytes()).await {
+                if let Err(e) = writer_half.write_all(error_msg.as_bytes()).await {
                     log_error!("error writing to socket: {e}")
                 }
             }

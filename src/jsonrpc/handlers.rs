@@ -1,5 +1,8 @@
 use rand::{Rng, distr::Alphanumeric, rng};
-use tokio::io::{AsyncReadExt, AsyncSeekExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt},
+    net::UnixStream,
+};
 
 use super::{
     request::{AttachFile, RequestAttach, RequestRestart, RequestStart, RequestStop},
@@ -176,7 +179,7 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
     ResponseType::Result(ResponseResult::Halt)
 }
 
-async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, listener: &mut AsyncUnixSocket) -> Result<u64, Box<dyn Error + Send + Sync>> {
+async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, listener: &mut UnixStream) -> Result<u64, Box<dyn Error + Send + Sync>> {
     match file.seek(std::io::SeekFrom::Start(pos)).await {
         Ok(_) => {}
         Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not seek file: {e}"))),
@@ -193,7 +196,7 @@ async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, li
         Ok(bytes_read) => {
             if bytes_read > 0 {
                 pos += bytes_read as u64;
-                listener.write(&buf).await?;
+                listener.write_all(&buf).await?;
             }
         }
         Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not read file: {e}"))),
@@ -212,15 +215,23 @@ async fn attach(socketpath: &str, to: &str, authgroup: String) -> Result<(), Box
 
     let mut pos = 0;
 
-    match listener.accept().await {
-        Ok(()) => log_info!("client attached, sending data on {socketpath}"),
+    let (mut sock, _addr) = match listener.accept().await {
+        Ok((sock, addr)) => {
+            log_info!("client attached, sending data on {socketpath}");
+            (sock, addr)
+        }
         Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not accept client on {socketpath}: {e}"))),
     };
 
     loop {
-        match file.metadata().await {
-            Ok(metadata) => pos = update_attach_stream(&mut file, pos, metadata.len(), &mut listener).await?,
-            Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{to}': {e}"))),
+        tokio::select! {
+            md = file.metadata() => {
+                match md {
+                    Ok(metadata) => pos = update_attach_stream(&mut file, pos, metadata.len(), &mut sock).await?,
+                    Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not get metadata for file '{to}': {e}"))),
+                }
+            }
+
         }
     }
 }
@@ -230,12 +241,7 @@ pub struct AttachmentManager {
 }
 
 enum AttachmentRequest {
-    New {
-        process_name: String,
-        socketpath: String,
-        to: String,
-        authgroup: String,
-    },
+    New { socketpath: String, to: String, authgroup: String },
 }
 
 impl Default for AttachmentManager {
@@ -251,12 +257,7 @@ impl AttachmentManager {
         tokio::spawn(async move {
             while let Some(req) = rx.recv().await {
                 match req {
-                    AttachmentRequest::New {
-                        process_name: _,
-                        socketpath,
-                        to,
-                        authgroup,
-                    } => {
+                    AttachmentRequest::New { socketpath, to, authgroup } => {
                         let _ = tokio::spawn(async move {
                             if let Err(e) = attach(&socketpath, &to, authgroup).await {
                                 if e.to_string().contains("Broken pipe") {
@@ -274,10 +275,9 @@ impl AttachmentManager {
         Self { tx }
     }
 
-    pub async fn attach(&self, process_name: &str, socketpath: &str, to: &str, authgroup: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn attach(&self, socketpath: &str, to: &str, authgroup: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.tx
             .send(AttachmentRequest::New {
-                process_name: process_name.to_owned(),
                 socketpath: socketpath.to_owned(),
                 to: to.to_owned(),
                 authgroup: authgroup.to_owned(),
@@ -307,7 +307,7 @@ async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> 
 
     if let Err(e) = daemon
         .attachment_manager()
-        .attach(process.name(), &socketpath, attach_path, daemon.auth_group())
+        .attach(&socketpath, attach_path, daemon.auth_group())
         .await
     {
         let message = format!("could not attach to process {}: {e}", request.name());

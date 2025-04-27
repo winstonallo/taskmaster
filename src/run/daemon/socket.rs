@@ -7,7 +7,7 @@ use std::{
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    net::{UnixListener, UnixStream},
+    net::{UnixListener, UnixStream, unix::SocketAddr},
 };
 
 use libc::{chown, getgrnam, gid_t};
@@ -78,13 +78,10 @@ impl AsyncUnixSocket {
         &self.stream
     }
 
-    pub async fn accept(&mut self) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn accept(&mut self) -> Result<(UnixStream, SocketAddr), Box<dyn Error + Send + Sync>> {
         if let Some(listener) = &self.listener {
             match listener.accept().await {
-                Ok((stream, _)) => {
-                    self.stream = Some(stream);
-                    Ok(())
-                }
+                Ok((stream, addr)) => Ok((stream, addr)),
                 Err(e) => Err(format!("accept: {e}").into()),
             }
         } else {
