@@ -193,11 +193,7 @@ async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, li
         Ok(bytes_read) => {
             if bytes_read > 0 {
                 pos += bytes_read as u64;
-
-                listener
-                    .write(&buf)
-                    .await
-                    .map_err(|e| format!("error writing to socket: {e}"))?;
+                listener.write(&buf).await?;
             }
         }
         Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not read file: {e}"))),
@@ -206,7 +202,7 @@ async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, li
     Ok(pos)
 }
 
-async fn attach(socketpath: String, to: &str, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn attach(socketpath: &str, to: &str, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut listener =
         AsyncUnixSocket::new(&socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
 
@@ -253,23 +249,23 @@ impl AttachmentManager {
         let (tx, mut rx) = tokio::sync::mpsc::channel(32);
 
         tokio::spawn(async move {
-            let mut active_attachments = HashMap::new();
-
             while let Some(req) = rx.recv().await {
                 match req {
                     AttachmentRequest::New {
-                        process_name,
+                        process_name: _,
                         socketpath,
                         to,
                         authgroup,
                     } => {
-                        let attachment_handler = tokio::spawn(async move {
-                            if let Err(e) = attach(socketpath, &to, authgroup).await {
-                                log_error!("attach: {e}");
+                        let _ = tokio::spawn(async move {
+                            if let Err(e) = attach(&socketpath, &to, authgroup).await {
+                                if e.to_string().contains("Broken pipe") {
+                                    log_info!("connection on {socketpath} closed");
+                                } else {
+                                    log_error!("attach: {e}");
+                                }
                             }
                         });
-
-                        active_attachments.insert(process_name, attachment_handler);
                     }
                 }
             }
