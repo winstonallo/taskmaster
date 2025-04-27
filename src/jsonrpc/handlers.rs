@@ -194,9 +194,10 @@ async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, li
             if bytes_read > 0 {
                 pos += bytes_read as u64;
 
-                if let Err(e) = listener.write(&buf).await {
-                    return Err(Box::<dyn Error + Send + Sync>::from(format!("error writing to socket: {e}")));
-                }
+                listener
+                    .write(&buf)
+                    .await
+                    .map_err(|e| format!("error writing to socket: {e}"))?;
             }
         }
         Err(e) => return Err(Box::<dyn Error + Send + Sync>::from(format!("could not read file: {e}"))),
@@ -209,19 +210,15 @@ async fn attach(socketpath: String, stdout_path: String, stderr_path: String, au
     let mut listener =
         AsyncUnixSocket::new(&socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
 
-    let mut stdout = tokio::fs::File::open(&stdout_path).await.map_err(|e| ResponseError {
-        code: ErrorCode::InternalError,
-        message: format!("could not open process stdout: {e}"),
-        data: None,
-    })?;
-    let mut stderr = tokio::fs::File::open(&stderr_path).await.map_err(|e| ResponseError {
-        code: ErrorCode::InternalError,
-        message: format!("could not open process stdout: {e}"),
-        data: None,
-    })?;
+    let mut stdout = tokio::fs::File::open(&stdout_path)
+        .await
+        .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not open stdout at path '{stdout_path}': {e}")))?;
 
-    let mut stdout_pos = 0;
-    let mut stderr_pos = 0;
+    let mut stderr = tokio::fs::File::open(&stderr_path)
+        .await
+        .map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not open stderr at path '{stderr_path}': {e}")))?;
+
+    let (mut stdout_pos, mut stderr_pos) = (0, 0);
 
     match listener.accept().await {
         Ok(()) => log_info!("client attached, sending data on {socketpath}"),
