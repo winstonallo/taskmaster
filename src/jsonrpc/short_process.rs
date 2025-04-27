@@ -30,6 +30,7 @@ impl ShortProcess {
 pub enum State {
     Idle,
     Ready,
+    Starting(u64),
     HealthCheck(u64),
     Healthy,
     Failed,
@@ -61,7 +62,8 @@ impl fmt::Display for State {
         let s = match self {
             Idle => "idle".to_owned(),
             Ready => "ready".to_owned(),
-            HealthCheck(s) => format!("healthcheck since {s} seconds"),
+            Starting(s) => format!("starting since {} seconds", s),
+            HealthCheck(s) => format!("healthcheck since {} seconds", s),
             Healthy => "healthy".to_owned(),
             Failed => "failed".to_owned(),
             WaitingForRetry(s) => format!("waiting for retry since {s} seconds"),

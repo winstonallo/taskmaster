@@ -51,9 +51,7 @@ impl<'de> Deserialize<'de> for AutoRestart {
         }
 
         if !s.starts_with("on-failure[:") || !s.ends_with("]") {
-            return Err(serde::de::Error::custom(format!(
-                "invalid value for on-failure: {s}, expected 'on-failure[:max-retries]'"
-            )));
+            return Err(serde::de::Error::custom(format!("invalid value for on-failure: {s}, expected 'on-failure[:max-retries]'")));
         }
 
         let max_retries_str = &s[12..s.len() - 1];
@@ -61,9 +59,7 @@ impl<'de> Deserialize<'de> for AutoRestart {
         let max_retries = match max_retries_str.parse::<u8>() {
             Ok(n) => n,
             Err(e) => {
-                return Err(serde::de::Error::custom(format!(
-                    "invalid max-retries value for on-failure: {max_retries_str}: {e}, expected u8"
-                )));
+                return Err(serde::de::Error::custom(format!("invalid max-retries value for on-failure: {max_retries_str}: {e}, expected u8")));
             }
         };
 

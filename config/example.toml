@@ -10,16 +10,79 @@ socketpath = "/tmp/.taskmaster.sock"
 authgroup = "winstonallo"
 
 # Process name.
+[processes.sleep]
+
+# Command to run in order to start this process.
+# Must be an absolute path.
+# Required.
+cmd = "/usr/bin/sleep"
+
+# Arguments to pass to 'cmd'.
+# Defaults to [].
+args = ["1"]
+
+# Number of processes to start.
+# Defaults to 1, max 255.
+processes = 1
+
+# Mask for files created by the process.
+# Defaults to "022".
+umask = "022"
+
+# Working directory for the process.
+# Must be an absolute path.
+# Required.
+workingdir = "/tmp"
+
+# Start the program automatically when starting taskmaster. 
+# Defaults to false.
+autostart = true
+
+# Restart the process when it quits, options are:
+# - "no" (default): Never restart the process automatically.
+# - "on-failure[:max-retries]": Try to restart the process 
+#   <max-retries> times when it exits unexpectedly. Maximum value for 
+#   max-retries is 255.
+# - "always": Always restart when exiting, no matter the status.
+autorestart = "always"
+
+# List of exit codes to be interpreted as success.
+# Defaults to [0].
+exitcodes = [0, 2]
+
+[processes.sleep.healthcheck]
+
+# Command to run in order to start this process.
+# Must be an absolute path.
+# Required.
+cmd = "/usr/bin/sleep"
+
+# Arguments to pass to 'cmd'.
+# Defaults to [].
+args = ["2"]
+
+# Time, in seconds, given for the healthcheck to run through. If it runs for longer,
+# it will be considered failed.
+timeout = 1
+
+# How many times to retry the healthcheck.
+retries = 3
+
+# How much time to wait after a failed healthcheck before retrying.
+backoff = 5
+
+
+# Process name.
 [processes.ls]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/home/winstonallo/mastery/taskmaster/writetofile.sh"
+cmd = "/usr/bin/ls"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
-args = []
+args = ["-laR"]
 
 # Number of processes to start.
 # Defaults to 1, max 255.
@@ -32,7 +95,7 @@ umask = "022"
 # Working directory for the process.
 # Must be an absolute path.
 # Required.
-workingdir = "/tmp"
+workingdir = "/home/winstonallo/mastery/taskmaster/src"
 
 # Start the program automatically when starting taskmaster. 
 # Defaults to false.
@@ -44,101 +107,12 @@ autostart = true
 #   <max-retries> times when it exits unexpectedly. Maximum value for 
 #   max-retries is 255.
 # - "always": Always restart when exiting, no matter the status.
-autorestart = "on-failure[:5]"
-
-# Backoff time (in seconds) for retries.
-# Defaults to 5, max 255.
-backoff = 1
+autorestart = "on-failure[:1]"
 
 # List of exit codes to be interpreted as success.
 # Defaults to [0].
-exitcodes = [0, 2]
+exitcodes = [0]
 
-# Number of attempts to start the program before giving up.
-# Defaults to 3, max 255.
-startretries = 3
-
-# Time (in seconds) given for the program to startup - if the program 
-# does not start within this time, it will be considered a failure.
-# Defaults to 5, max 65536.
-starttime = 1
-
-# List of signals triggering a stop of the process, options are any 
-# FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).
-# Defaults to ["TERM"].
-stopsignals = ["TERM", "USR1"]
-
-# Time (in seconds) to wait for the process to stop. If it does not stop 
-# within this time, it will be forcibly killed.
-# Defaults to 5, max 255.
-stoptime = 5
-
-# File the standard output of the process should be redirected to.
-# Defaults to "/tmp/<process name>.stdout".
-stdout = "/tmp/ls.stdout"
-
-# File the standard error of the process should be redirected to.
-# Defaults to "/tmp/<process name>.stderr".
-stderr = "/tmp/ls.stderr"
-
-# Key value pairs of environment variables to be injected into the process
-# at startup.
-# Defaults to [[]].
-env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
-
-# Process name.
-[processes.lsls]
-
-# Command to run in order to start this process.
-# Must be an absolute path.
-# Required.
-cmd = "/home/winstonallo/mastery/taskmaster/writetofile.sh"
-
-# Arguments to pass to 'cmd'.
-# Defaults to [].
-args = []
-
-# Number of processes to start.
-# Defaults to 1, max 255.
-processes = 1
-
-# Mask for files created by the process.
-# Defaults to "022".
-umask = "022"
-
-# Working directory for the process.
-# Must be an absolute path.
-# Required.
-workingdir = "/tmp"
-
-# Start the program automatically when starting taskmaster. 
-# Defaults to false.
-autostart = true
-
-# Restart the process when it quits, options are:
-# - "no" (default): Never restart the process automatically.
-# - "on-failure[:max-retries]": Try to restart the process 
-#   <max-retries> times when it exits unexpectedly. Maximum value for 
-#   max-retries is 255.
-# - "always": Always restart when exiting, no matter the status.
-autorestart = "on-failure[:5]"
-
-# Backoff time (in seconds) for retries.
-# Defaults to 5, max 255.
-backoff = 2
-
-# List of exit codes to be interpreted as success.
-# Defaults to [0].
-exitcodes = [0, 2]
-
-# Number of attempts to start the program before giving up.
-# Defaults to 3, max 255.
-startretries = 3
-
-# Time (in seconds) given for the program to startup - if the program 
-# does not start within this time, it will be considered a failure.
-# Defaults to 5, max 65536.
-starttime = 2
 
 # List of signals triggering a stop of the process, options are any 
 # FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).

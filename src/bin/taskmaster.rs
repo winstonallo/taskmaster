@@ -3,7 +3,11 @@ use std::{
     error::Error,
 };
 
-use tasklib::{conf::Config, log_error, log_info, run::daemon::Daemon};
+use tasklib::{
+    conf::{Config, help},
+    log_error, log_info,
+    run::daemon::Daemon,
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -14,9 +18,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let arguments: Vec<String> = env::args().collect();
 
-    let config_path: String = arguments.get(1).unwrap().to_owned();
+    let arg: String = arguments.get(1).unwrap().to_owned();
+    if arg == "--help" || arg == "-h" {
+        help::print_help();
+        return Ok(());
+    }
 
-    let conf = match Config::from_file(&config_path) {
+    let conf = match Config::from_file(&arg) {
         Ok(c) => c,
         Err(e) => {
             log_error!("{}", e);
@@ -24,13 +32,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         }
     };
 
-    let mut daemon = Daemon::from_config(conf, config_path);
+    let mut daemon = Daemon::from_config(conf, arg);
 
     log_info!("starting taskmaster..");
     daemon.run().await
-    // let res = tasklib::run::daemon::run(&mut daemon.processes, conf.socketpath().to_string(), conf.authgroup().to_string()).await;
-    // if let Ok(()) = res {
-    //     return Ok(());
-    // }
-    // tokio::signal::ctrl_c().await?;
 }

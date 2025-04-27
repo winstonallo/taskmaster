@@ -26,6 +26,7 @@ mod defaults;
 pub mod types;
 
 use serde::Deserialize;
+use types::HealthCheck;
 
 /// # ProcessConfig
 /// `src/conf/proc/mod.rs`
@@ -36,50 +37,196 @@ use serde::Deserialize;
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessConfig {
+    /// Command to run in order to start this process.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// ```
+    ///
+    /// Required.
     cmd: types::ExecutableFile,
 
+    /// Args to pass to `cmd`.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// args = ["-v"]
+    /// ```
+    ///
+    /// Defaults to no arguments.
     #[serde(default = "defaults::dflt_args")]
     args: Vec<String>,
 
+    /// Number of copies of this process to start.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// processes = 4
+    /// ```
+    ///
+    /// Defaults to `1`.
     #[serde(default = "defaults::dflt_processes")]
     processes: u8,
 
+    /// Mask for files created by the process.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// umask = 011
+    /// ```
+    ///
+    /// Defaults to `022`.
     #[serde(default = "defaults::dflt_umask")]
     umask: types::Umask,
 
+    /// Working directory for the process. Must be an absolute path.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/tmp"
+    /// ```
+    ///
+    /// Required.
     workingdir: types::AccessibleDirectory,
 
+    /// Whether to start the process automatically when starting `taskmaster`.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// autostart = true
+    /// ```
+    ///
+    /// Defaults to `false`.
     #[serde(default = "defaults::dflt_autostart")]
     autostart: bool,
 
+    /// Restart the process when it quits, options are:
+    /// - `no`: Never restart the process automatically.
+    /// - `on-failure[:max-retries]`: Try to restart the process `max-retries` times
+    ///   when it exits unexpectedly.
+    /// - `always`: Always restart when exiting.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// autorestart = on-failure[:5]
+    /// ```
+    ///
+    /// Defaults to `no`.
     #[serde(default = "defaults::dflt_autorestart")]
     autorestart: types::AutoRestart,
 
-    #[serde(default = "defaults::dflt_backoff")]
-    backoff: u8,
-
+    /// List of exit codes to be interpreted as successful.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// exitcodes = [0, 2, 42]
+    /// ```
+    ///
+    /// Defaults to `[0]`.
     #[serde(default = "defaults::dflt_exitcodes")]
     exitcodes: Vec<i32>,
 
-    #[serde(default = "defaults::dflt_startretries")]
-    startretries: u8,
+    /// Healthcheck configuration. See [`types::HealthCheck`] for
+    /// more details.
+    ///
+    /// Must be one of:
+    /// - Command HealthCheck:
+    /// ```toml
+    /// cmd = <string>
+    /// args = <<string>>
+    /// ```
+    /// - Uptime HealthCheck:
+    ///
+    /// ```toml
+    /// starttime = <int>
+    /// ```
+    ///
+    /// Defaults to `{starttime = 5, retries = 5, backoff = 5}`
+    #[serde(default)]
+    healthcheck: HealthCheck,
 
-    #[serde(default = "defaults::dflt_startttime")]
-    starttime: u16,
-
+    /// List of signals triggering able to stop the process, options are any
+    /// FreeBSD signal (<https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html>).
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stopsignals = ["TERM", "USR1"]
+    /// ```
+    ///
+    /// Defaults to `["TERM"]`.
     #[serde(default = "defaults::dflt_stopsignals")]
     stopsignals: Vec<types::StopSignal>,
 
+    /// Time (in seconds) to wait for the process to stop. If it does not stop within
+    /// this time, it will be killed forcibly.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stoptime = 20
+    /// ```
+    ///
+    /// Defaults to `5`, max `255`.
     #[serde(default = "defaults::dflt_stoptime")]
     stoptime: u8,
 
+    /// File the standard output of the process should be redirected to.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stdout = "nginx.stdout"
+    /// ```
+    ///
+    /// Defaults to `/tmp/<process_name>.stdout`.
     #[serde(default = "defaults::dflt_stdout")]
     stdout: types::WritableFile,
 
+    /// File the standard error of the process should be redirected to.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// stderr = "nginx.stderr"
+    /// ```
+    ///
+    /// Defaults to `/tmp/<process_name>.stderr`.
     #[serde(default = "defaults::dflt_stderr")]
     stderr: types::WritableFile,
 
-    env: Option<Vec<(String, String)>>,
+    /// Key value pairs of environment variables to be injected into the process
+    /// at startup.
+    ///
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// env = [["HOME", "/home/abied-ch"], ["ANSWER", "42"]]
+    /// ```
+    ///
+    /// Defaults to an empty list.
+    #[serde(default)]
+    env: Vec<(String, String)>,
 }
 
 #[allow(unused)]
@@ -112,22 +259,12 @@ impl ProcessConfig {
         &self.autorestart
     }
 
-    pub fn backoff(&self) -> u8 {
-        assert_eq!(self.autorestart.mode(), "on-failure");
-
-        self.backoff
-    }
-
     pub fn exitcodes(&self) -> &Vec<i32> {
         &self.exitcodes
     }
 
-    pub fn startretries(&self) -> u8 {
-        self.startretries
-    }
-
-    pub fn starttime(&self) -> u16 {
-        self.starttime
+    pub fn healthcheck(&self) -> &HealthCheck {
+        &self.healthcheck
     }
 
     pub fn stopsignals(&self) -> &Vec<types::StopSignal> {
@@ -146,7 +283,7 @@ impl ProcessConfig {
         self.stderr.path()
     }
 
-    pub fn env(&self) -> &Option<Vec<(String, String)>> {
+    pub fn env(&self) -> &Vec<(String, String)> {
         &self.env
     }
 
@@ -170,15 +307,13 @@ impl ProcessConfig {
             workingdir: types::AccessibleDirectory::default(),
             autostart: true,
             autorestart: types::AutoRestart::default(),
-            backoff: 5,
             exitcodes: vec![0],
-            startretries: 1,
-            starttime: 5,
+            healthcheck: HealthCheck::default(),
             stopsignals: vec![types::StopSignal(SIGTERM)],
             stoptime: 5,
             stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
             stderr: types::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
-            env: None,
+            env: Vec::new(),
         }
     }
 }

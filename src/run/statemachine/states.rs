@@ -8,7 +8,7 @@ use crate::run::{
     statemachine::{
         desired::{desire_healthy, desire_idle, desire_ready},
         monitor::{
-            monitor_completed, monitor_failed, monitor_health_check, monitor_healthy, monitor_idle, monitor_ready, monitor_stopped, monitor_stopping,
+            monitor_completed, monitor_failed, monitor_healthcheck, monitor_healthy, monitor_idle, monitor_ready, monitor_stopped, monitor_stopping,
             monitor_waiting_for_retry,
         },
     },
@@ -30,13 +30,14 @@ pub enum ProcessState {
 
 impl Display for ProcessState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let now = Instant::now();
         match self {
             ProcessState::Idle => write!(f, "idle"),
             ProcessState::Ready => write!(f, "ready"),
-            ProcessState::HealthCheck(started_at) => write!(f, "in healthcheck since {} seconds", Instant::now().duration_since(*started_at).as_secs()),
+            ProcessState::HealthCheck(started_at) => write!(f, "in healthcheck since {} seconds", now.duration_since(*started_at).as_secs()),
             ProcessState::Healthy => write!(f, "healthy"),
             ProcessState::Failed(prev_state) => write!(f, "failed while in state: {}", *prev_state),
-            ProcessState::WaitingForRetry(retry_at) => write!(f, "retrying in {} seconds", retry_at.duration_since(Instant::now()).as_secs()),
+            ProcessState::WaitingForRetry(retry_at) => write!(f, "retrying in {} seconds", retry_at.duration_since(now).as_secs()),
             ProcessState::Completed => write!(f, "completed successfully"),
             ProcessState::Stopping(_) => write!(f, "stopping"),
             ProcessState::Stopped => write!(f, "stopped"),
@@ -50,12 +51,12 @@ impl ProcessState {
         match self {
             Idle => monitor_idle(),
             Ready => monitor_ready(proc),
-            HealthCheck(started_at) => monitor_health_check(started_at, proc),
+            HealthCheck(started_at) => monitor_healthcheck(started_at, proc),
             Healthy => monitor_healthy(proc),
             Failed(_process_state) => monitor_failed(proc),
             WaitingForRetry(retry_at) => monitor_waiting_for_retry(retry_at, proc),
             Completed => monitor_completed(proc),
-            Stopping(_) => monitor_stopping(proc),
+            Stopping(killed_at) => monitor_stopping(*killed_at, proc),
             Stopped => monitor_stopped(proc),
         }
     }

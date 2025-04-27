@@ -45,10 +45,7 @@ fn build_request_status() -> Request {
 }
 
 fn build_request_status_single(name: &str) -> Request {
-    Request::new(
-        ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        RequestType::new_status_single(name),
-    )
+    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single(name))
 }
 
 fn build_request_start(name: &str) -> Request {
@@ -204,6 +201,7 @@ fn shell() {
         let msg = match handle_input(line) {
             Ok(s) => s,
             Err(s) => s,
+
         };
         print!("{msg}");
     }
