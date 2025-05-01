@@ -87,7 +87,7 @@ fn engine_running() -> bool {
 
     let mut pid = String::new();
 
-    if let Err(_) = pid_file.read_to_string(&mut pid) {
+    if pid_file.read_to_string(&mut pid).is_err() {
         return true;
     }
 
