@@ -1,4 +1,8 @@
-use std::{env::args, process::exit, sync::atomic::AtomicU32};
+use std::{
+    env::args,
+    process::{Command, exit},
+    sync::atomic::AtomicU32,
+};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
@@ -99,6 +103,7 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
             if arguments.len() != 2 {
                 return Err("usage: start PROCESS_NAME");
             }
+            build_request_start(arguments[1])
         }
         "restart" => {
             if arguments.len() != 2 {
@@ -158,7 +163,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) -> String {
     };
 
     let mut reader = BufReader::new(stream);
-
+    print_raw_mode("\n");
     loop {
         tokio::select! {
             read_result = read_from_stream(&mut reader) => {
@@ -171,7 +176,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) -> String {
                 }
             },
             _ = rx.recv() => {
-                print_raw_mode(&format!("[{name}:{to}]: detached\n"));
+                print_raw_mode(&format!("[{name}:_info_]: detached"));
                 break;
             }
         }
@@ -187,20 +192,20 @@ async fn response_to_str(response: &Response) -> String {
                 Status(items) => {
                     let mut str = String::new();
                     for short_process in items.iter() {
-                        str.push_str(&format!("{}: {}\n", short_process.name(), short_process.state()));
+                        str.push_str(&format!("{}: {}", short_process.name(), short_process.state()));
                     }
                     str
                 }
-                StatusSingle(item) => format!("{}: {}\n", item.name(), item.state()),
-                Start(name) => format!("starting: {name}\n"),
-                Stop(name) => format!("stopping: {name}\n"),
-                Restart(name) => format!("restarting: {name}\n"),
-                Reload => "reloading configuration\n".to_string(),
-                Halt => "shutting down taskmaster\n".to_string(),
+                StatusSingle(item) => format!("{}: {}", item.name(), item.state()),
+                Start(name) => format!("starting: {name}"),
+                Stop(name) => format!("stopping: {name}"),
+                Restart(name) => format!("restarting: {name}"),
+                Reload => "reloading configuration".to_string(),
+                Halt => "shutting down taskmaster".to_string(),
                 Attach { name, socketpath, to } => attach(name, socketpath, to).await,
             }
         }
-        ResponseType::Error(err) => format!("{}\n", err.message),
+        ResponseType::Error(err) => format!("{}", err.message),
     }
 }
 
@@ -219,7 +224,7 @@ async fn handle_input(input: String) -> Result<String, String> {
 
     let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
         Ok(s) => s,
-        Err(e) => return Err(format!("couldn't establish socket connection: {e}\n")),
+        Err(e) => return Err(format!("couldn't establish socket connection: {e}")),
     };
 
     let request = match build_request(&arguments) {
@@ -230,18 +235,18 @@ async fn handle_input(input: String) -> Result<String, String> {
     let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
     if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()).await {
-        return Err(format!("error while writing request: {e}\n"));
+        return Err(format!("error while writing request: {e}"));
     }
 
     let mut reader = BufReader::new(unix_stream);
     let response = match read_from_stream(&mut reader).await {
         Ok(resp) => resp,
-        Err(e) => return Err(format!("error while reading socket: {e}\n")),
+        Err(e) => return Err(format!("error while reading socket: {e}")),
     };
 
     let mut response = match serde_json::from_str::<Response>(&response) {
         Ok(resp) => resp,
-        Err(_) => return Err(format!("non json_rpc formatted message: {response}\n")),
+        Err(_) => return Err(format!("non json_rpc formatted message: {response}")),
     };
     response.set_response_result(request.request_type());
 
@@ -253,7 +258,7 @@ async fn docker(args: Vec<String>) {
         Ok(s) => s,
         Err(s) => s,
     };
-    print!("{msg}");
+    println!("{msg}");
 }
 
 fn print_raw_mode(string: &str) {
