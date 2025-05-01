@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{
     collections::BTreeMap,
-    io::{Write, stderr, stdout},
+    io::Write,
     sync::{Mutex, Once},
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -252,6 +252,7 @@ fn get_logger() -> &'static Logger {
         if INSTANCE.as_ref().is_none() {
             #[cfg(not(test))]
             INIT.call_once(|| {
+                use std::io::{stderr, stdout};
                 let logger = Logger::new(Box::new(stdout()), Box::new(stderr()));
                 INSTANCE = Some(logger);
             });
