@@ -1,6 +1,6 @@
 use core::fmt;
 use std::{
-    collections::BTreeMap,
+    collections::HashMap,
     io::Write,
     sync::{Mutex, Once},
     time::{SystemTime, UNIX_EPOCH},
@@ -42,7 +42,7 @@ impl Logger {
         String::from_utf8_lossy(&buf[..ret as usize]).into_owned()
     }
 
-    pub fn error(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+    pub fn error(&self, message: fmt::Arguments, fields: HashMap<String, Value>) {
         let mut log_entry = fields;
         log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
         log_entry.insert("level".to_string(), json!("error"));
@@ -55,7 +55,7 @@ impl Logger {
         let _ = guard.write_all(b"\n");
     }
 
-    pub fn info(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+    pub fn info(&self, message: fmt::Arguments, fields: HashMap<String, Value>) {
         let mut log_entry = fields;
         log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
         log_entry.insert("level".to_string(), json!("info"));
@@ -68,7 +68,7 @@ impl Logger {
         let _ = guard.write_all(b"\n");
     }
 
-    pub fn warning(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+    pub fn warning(&self, message: fmt::Arguments, fields: HashMap<String, Value>) {
         let mut log_entry = fields;
         log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
         log_entry.insert("level".to_string(), json!("warning"));
@@ -82,7 +82,7 @@ impl Logger {
     }
 
     #[allow(unused)]
-    pub fn fatal(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+    pub fn fatal(&self, message: fmt::Arguments, fields: HashMap<String, Value>) {
         let mut log_entry = fields;
         log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
         log_entry.insert("level".to_string(), json!("fatal"));
@@ -100,25 +100,25 @@ impl Logger {
 static mut INSTANCE: Option<Logger> = None;
 static INIT: Once = Once::new();
 
-pub fn error(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+pub fn error(message: fmt::Arguments, fields: HashMap<String, Value>) {
     get_logger().error(message, fields);
 }
 
-pub fn info(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+pub fn info(message: fmt::Arguments, fields: HashMap<String, Value>) {
     get_logger().info(message, fields);
 }
 
 #[allow(unused)]
-pub fn fatal(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+pub fn fatal(message: fmt::Arguments, fields: HashMap<String, Value>) {
     get_logger().fatal(message, fields);
 }
 
-pub fn prefix_info(prefix: &str, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
+pub fn prefix_info(prefix: &str, message: fmt::Arguments, mut fields: HashMap<String, Value>) {
     fields.insert("prefix".to_string(), json!(prefix));
     get_logger().info(message, fields);
 }
 
-pub fn prefix_warning(prefix: &str, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
+pub fn prefix_warning(prefix: &str, message: fmt::Arguments, mut fields: HashMap<String, Value>) {
     fields.insert("prefix".to_string(), json!(prefix));
     get_logger().warning(message, fields);
 }
@@ -126,7 +126,7 @@ pub fn prefix_warning(prefix: &str, message: fmt::Arguments, mut fields: BTreeMa
 #[macro_export]
 macro_rules! log_error {
     ($($arg:tt)*) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::error(format_args!($($arg)*), fields);
     }};
 }
@@ -138,7 +138,7 @@ macro_rules! log_info {
     }};
 
     ($($arg:tt)*) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::info(format_args!($($arg)*), fields);
     }};
 }
@@ -146,17 +146,17 @@ macro_rules! log_info {
 #[macro_export]
 macro_rules! _log_info_internal {
     ($fmt:expr,) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::info(format_args!($fmt), fields);
     }};
 
     ($fmt:expr, $($arg:expr),+ $(,)?) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::info(format_args!($fmt, $($arg),+), fields);
     }};
 
     ($fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
-        let mut fields = std::collections::BTreeMap::new();
+        let mut fields = std::collections::HashMap::new();
         $(
             fields.insert(stringify!($key).to_string(), serde_json::json!($value));
         )*
@@ -167,7 +167,7 @@ macro_rules! _log_info_internal {
 #[macro_export]
 macro_rules! log_warn {
     ($($arg:tt)*) => {{
-        let mut fields = std::collections::BTreeMap::new();
+        let mut fields = std::collections::HashMap::new();
         $crate::log::warning(format_args!($($arg)*), fields);
     }};
 }
@@ -175,7 +175,7 @@ macro_rules! log_warn {
 #[macro_export]
 macro_rules! log_fatal {
     ($($arg:tt)*) => {{
-        let mut fields = std::collections::BTreeMap::new();
+        let mut fields = std::collections::HashMap::new();
         $crate::log::fatal(format_args!($($arg)*), fields);
     }};
 }
@@ -187,7 +187,7 @@ macro_rules! proc_info {
     }};
 
     ($proc:expr, $($arg:tt)*) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::prefix_info($proc.name(), format_args!($($arg)*), fields);
     }};
 }
@@ -195,17 +195,17 @@ macro_rules! proc_info {
 #[macro_export]
 macro_rules! _proc_info_internal {
     ($proc:expr, $fmt:expr,) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::prefix_info($proc.name(), format_args!($fmt), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($arg:expr),+ $(,)?) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::prefix_info($proc.name(), format_args!($fmt, $($arg),+), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
-        let mut fields = std::collections::BTreeMap::new();
+        let mut fields = std::collections::HashMap::new();
         $(
             fields.insert(stringify!($key).to_string(), serde_json::json!($value));
         )*
@@ -220,7 +220,7 @@ macro_rules! proc_warning {
     }};
 
     ($proc:expr, $($arg:tt)*) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::prefix_warning($proc.name(), format_args!($($arg)*), fields);
     }};
 }
@@ -228,17 +228,17 @@ macro_rules! proc_warning {
 #[macro_export]
 macro_rules! _proc_warning_internal {
     ($proc:expr, $fmt:expr,) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::prefix_warning($proc.name(), format_args!($fmt), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($arg:expr),+ $(,)?) => {{
-        let fields = std::collections::BTreeMap::new();
+        let fields = std::collections::HashMap::new();
         $crate::log::prefix_warning($proc.name(), format_args!($fmt, $($arg),+), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
-        let mut fields = std::collections::BTreeMap::new();
+        let mut fields = std::collections::HashMap::new();
         $(
             fields.insert(stringify!($key).to_string(), serde_json::json!($value));
         )*
