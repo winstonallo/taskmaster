@@ -1,7 +1,7 @@
 use std::time::Instant;
 
 use crate::{
-    proc_info, proc_warning,
+    proc_error, proc_info, proc_warning,
     run::{
         proc::{Process, ProcessError},
         statemachine::healthcheck::HealthCheckEvent,
@@ -18,11 +18,11 @@ pub async fn monitor_ready(p: &mut Process) -> Option<ProcessState> {
     match p.start().await {
         Ok(()) => {
             let pid = p.id().expect("id should always be set if the process is running");
-            proc_info!(&p, "spawned, PID {}", pid);
+            proc_info!(&p, "spawned",; pid = pid);
             Some(ProcessState::HealthCheck(Instant::now()))
         }
         Err(err) => {
-            proc_warning!(&p, "failed to start: {}", err);
+            proc_error!(&p, "failed to start: {err}");
             p.increment_healthcheck_failures();
             Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(Instant::now()))))
         }
@@ -39,19 +39,15 @@ fn exited_state(p: &mut Process) -> Option<ProcessState> {
     match p.exited() {
         Ok(code) => {
             if p.config().exitcodes().contains(&code) {
-                proc_info!(&p, "exited with healthy code ({})", code);
+                proc_info!(&p, "exited with healthy code",; code = code);
                 Some(ProcessState::Completed)
             } else {
-                proc_warning!(&p, "exited with unexpected code ({})", code);
+                proc_warning!(&p, "exited with unexpected code",; code = code);
                 Some(ProcessState::Failed(Box::new(p.state())))
             }
         }
         Err(e) => match e {
-            ProcessError::NoChildProcess => Some(ProcessState::Stopped),
-            ProcessError::NoExitInformation => {
-                proc_warning!(&p, "exited, {e}");
-                Some(ProcessState::Stopped)
-            }
+            ProcessError::NoChildProcess | ProcessError::NoExitInformation => Some(ProcessState::Stopped),
             _ => None,
         },
     }
@@ -83,7 +79,7 @@ fn healthcheck_command(started_at: &Instant, p: &mut Process) -> Option<ProcessS
                     Some(ProcessState::Healthy)
                 }
                 HealthCheckEvent::Failed(reason) => {
-                    proc_warning!(&p, "healthcheck failed: {}", reason);
+                    proc_warning!(&p, "healthcheck failed: {reason}");
                     Some(ProcessState::Failed(Box::new(ProcessState::HealthCheck(*started_at))))
                 }
             }
@@ -217,10 +213,10 @@ pub fn monitor_stopping(killed_at: Instant, p: &mut Process) -> Option<ProcessSt
     match p.exited() {
         Ok(code) => {
             if p.config().exitcodes().contains(&code) {
-                proc_info!(&p, "exited with healthy code ({})", code);
+                proc_info!(&p, "exited with healthy code",; code = code);
                 Some(ProcessState::Completed)
             } else {
-                proc_warning!(&p, "exited with unexpected code ({})", code);
+                proc_warning!(&p, "exited with unexpected code",; code = code);
                 Some(ProcessState::Failed(Box::new(p.state())))
             }
         }
