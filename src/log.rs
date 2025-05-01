@@ -124,6 +124,44 @@ pub fn prefix_warning(prefix: &str, message: fmt::Arguments, mut fields: BTreeMa
 }
 
 #[macro_export]
+macro_rules! define_log_macros {
+    ($name:ident, $internal:ident, $func:path) => {
+        #[macro_export]
+        macro_rules! $name {
+            ($fmt:expr, $($arg:tt)*) => {{
+                $crate::$internal!($fmt, $($arg)*);
+            }};
+
+            ($($arg:tt)*) => {{
+                let fields = std::collections::BTreeMap::new();
+                $func(format_args!($($arg)*), fields);
+            }};
+        }
+
+        #[macro_export]
+        macro_rules! $internal {
+            ($fmt:expr,) => {{
+                let fields = std::collections::BTreeMap::new();
+                $func(format_args!($fmt), fields);
+            }};
+
+            ($fmt:expr, $($arg:expr),+ $(,)?) => {{
+                let fields = std::collections::BTreeMap::new();
+                $func(format_args!($fmt, $($arg),+), fields);
+            }};
+
+            ($fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
+                let mut fields = std::collections::BTreeMap::new();
+                $(
+                    fields.insert(stringify!($key).to_string(), serde_json::json!($value));
+                )*
+                $func(format_args!($fmt, $($farg),*), fields);
+            }};
+        }
+    };
+}
+
+#[macro_export]
 macro_rules! log_error {
     ($fmt:expr, $($arg:tt)*) => {{
         $crate::_log_error_internal!($fmt, $($arg)*);
@@ -159,7 +197,7 @@ macro_rules! _log_error_internal {
 #[macro_export]
 macro_rules! log_info {
     // One string + any number of arguments
-    // $fmt:expr macthes any Rust expression
+    // $fmt:expr matches any Rust expression
     // $($arg:tt)* matches the entire rest of the token tree
     ($fmt:expr, $($arg:tt)*) => {{
         $crate::_log_info_internal!($fmt, $($arg)*);
