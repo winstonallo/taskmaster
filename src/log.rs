@@ -1,11 +1,13 @@
 use core::fmt;
 use std::{
+    collections::BTreeMap,
     io::{Write, stderr, stdout},
     sync::{Mutex, Once},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use libc::{c_char, localtime, strftime, time_t};
+use serde_json::{Value, json};
 
 struct Logger {
     stderr: Mutex<Box<dyn Write + Send>>,
@@ -40,36 +42,56 @@ impl Logger {
         String::from_utf8_lossy(&buf[..ret as usize]).into_owned()
     }
 
-    pub fn error(&self, args: fmt::Arguments) {
+    pub fn error(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+        let mut log_entry = fields;
+        log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
+        log_entry.insert("level".to_string(), json!("error"));
+        log_entry.insert("message".to_string(), json!(format!("{}", message)));
+
+        let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
+
         let mut guard = self.stderr.lock().expect("Mutex lock panicked in another thread");
-        let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
-        let _ = guard.write_all(b" \x1b[31m[err_]\x1b[0m: ");
-        let _ = guard.write_fmt(args);
+        let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
     }
 
-    pub fn info(&self, args: fmt::Arguments) {
+    pub fn info(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+        let mut log_entry = fields;
+        log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
+        log_entry.insert("level".to_string(), json!("info"));
+        log_entry.insert("message".to_string(), json!(format!("{}", message)));
+
+        let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
+
         let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
-        let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
-        let _ = guard.write_all(b" \x1b[32m[info]\x1b[0m: ");
-        let _ = guard.write_fmt(args);
+        let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
     }
 
-    pub fn warning(&self, args: fmt::Arguments) {
+    pub fn warning(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+        let mut log_entry = fields;
+        log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
+        log_entry.insert("level".to_string(), json!("warning"));
+        log_entry.insert("message".to_string(), json!(format!("{}", message)));
+
+        let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
+
         let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
-        let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
-        let _ = guard.write_all(b" \x1b[33m[warn]\x1b[0m: ");
-        let _ = guard.write_fmt(args);
+        let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
     }
 
     #[allow(unused)]
-    pub fn fatal(&self, args: fmt::Arguments) {
+    pub fn fatal(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+        let mut log_entry = fields;
+        log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
+        log_entry.insert("level".to_string(), json!("fatal"));
+        log_entry.insert("message".to_string(), json!(format!("{}", message)));
+
+        let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
+
         let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
-        let _ = guard.write_all(Logger::get_time_fmt().as_bytes());
-        let _ = guard.write_all(b" [fatal]: ");
-        let _ = guard.write_fmt(args);
+        let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
         panic!();
     }
@@ -78,85 +100,185 @@ impl Logger {
 static mut INSTANCE: Option<Logger> = None;
 static INIT: Once = Once::new();
 
-pub fn error(args: fmt::Arguments) {
-    get_logger().error(args);
+pub fn error(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+    get_logger().error(message, fields);
 }
 
-pub fn info(args: fmt::Arguments) {
-    get_logger().info(args);
+pub fn info(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+    get_logger().info(message, fields);
 }
 
 #[allow(unused)]
-pub fn fatal(args: fmt::Arguments) {
-    get_logger().fatal(args);
+pub fn fatal(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
+    get_logger().fatal(message, fields);
 }
 
-pub fn prefix_info(prefix: &str, args: fmt::Arguments) {
-    let prefix = format!("\x1b[1m{prefix}\x1b[22m");
-
-    get_logger().info(format_args!("{prefix} {args}"));
+pub fn prefix_info(prefix: &str, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
+    fields.insert("prefix".to_string(), json!(prefix));
+    get_logger().info(message, fields);
 }
 
-pub fn prefix_warning(prefix: &str, args: fmt::Arguments) {
-    let prefix = format!("\x1b[1m{prefix}\x1b[22m");
-
-    get_logger().warning(format_args!("{prefix} {args}"));
+pub fn prefix_warning(prefix: &str, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
+    fields.insert("prefix".to_string(), json!(prefix));
+    get_logger().warning(message, fields);
 }
 
 #[macro_export]
 macro_rules! log_error {
-    ($($arg:tt)*) => {
-        $crate::log::error(format_args!($($arg)*))
-    };
+    ($($arg:tt)*) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::error(format_args!($($arg)*), fields);
+    }};
 }
 
 #[macro_export]
 macro_rules! log_info {
-    ($($arg:tt)*) => {
-        $crate::log::info(format_args!($($arg)*))
-    };
+    ($fmt:expr, $($arg:tt)*) => {{
+        $crate::_log_info_internal!($fmt, $($arg)*);
+    }};
+
+    ($($arg:tt)*) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::info(format_args!($($arg)*), fields);
+    }};
+}
+
+#[macro_export]
+macro_rules! _log_info_internal {
+    ($fmt:expr,) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::info(format_args!($fmt), fields);
+    }};
+
+    ($fmt:expr, $($arg:expr),+ $(,)?) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::info(format_args!($fmt, $($arg),+), fields);
+    }};
+
+    ($fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
+        let mut fields = std::collections::BTreeMap::new();
+        $(
+            fields.insert(stringify!($key).to_string(), serde_json::json!($value));
+        )*
+        $crate::log::info(format_args!($fmt, $($farg),*), fields);
+    }};
+}
+
+#[macro_export]
+macro_rules! log_warn {
+    ($($arg:tt)*) => {{
+        let mut fields = std::collections::BTreeMap::new();
+        $crate::log::warning(format_args!($($arg)*), fields);
+    }};
 }
 
 #[macro_export]
 macro_rules! log_fatal {
-    ($($arg:tt)*) => {
-        $crate::log::fatal(format_args!($($arg)*))
-    };
+    ($($arg:tt)*) => {{
+        let mut fields = std::collections::BTreeMap::new();
+        $crate::log::fatal(format_args!($($arg)*), fields);
+    }};
 }
 
 #[macro_export]
 macro_rules! proc_info {
-    ($proc:expr, $($arg:tt)*) => {
-        $crate::log::prefix_info($proc.name(), format_args!($($arg)*))
-    };
+    ($proc:expr, $fmt:expr, $($arg:tt)*) => {{
+        $crate::_proc_info_internal!($proc, $fmt, $($arg)*);
+    }};
+
+    ($proc:expr, $($arg:tt)*) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::prefix_info($proc.name(), format_args!($($arg)*), fields);
+    }};
+}
+
+#[macro_export]
+macro_rules! _proc_info_internal {
+    ($proc:expr, $fmt:expr,) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::prefix_info($proc.name(), format_args!($fmt), fields);
+    }};
+
+    ($proc:expr, $fmt:expr, $($arg:expr),+ $(,)?) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::prefix_info($proc.name(), format_args!($fmt, $($arg),+), fields);
+    }};
+
+    ($proc:expr, $fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
+        let mut fields = std::collections::BTreeMap::new();
+        $(
+            fields.insert(stringify!($key).to_string(), serde_json::json!($value));
+        )*
+        $crate::log::prefix_info($proc.name(), format_args!($fmt, $($farg),*), fields);
+    }};
 }
 
 #[macro_export]
 macro_rules! proc_warning {
-    ($proc:expr, $($arg:tt)*) => {
-        $crate::log::prefix_warning($proc.name(), format_args!($($arg)*))
-    };
+    ($proc:expr, $fmt:expr, $($arg:tt)*) => {{
+        $crate::_proc_warning_internal!($proc, $fmt, $($arg)*);
+    }};
+
+    ($proc:expr, $($arg:tt)*) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::prefix_warning($proc.name(), format_args!($($arg)*), fields);
+    }};
 }
 
-fn get_logger() -> &'static Logger {
-    #[cfg(not(test))]
-    INIT.call_once(|| {
-        let logger = Logger::new(Box::new(stdout()), Box::new(stderr()));
-        unsafe {
-            INSTANCE = Some(logger);
-        }
-    });
-    #[cfg(test)]
-    INIT.call_once(|| {
-        use std::io::sink;
-        let logger = Logger::new(Box::new(sink()), Box::new(sink()));
-        unsafe {
-            INSTANCE = Some(logger);
-        }
-    });
+#[macro_export]
+macro_rules! _proc_warning_internal {
+    ($proc:expr, $fmt:expr,) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::prefix_warning($proc.name(), format_args!($fmt), fields);
+    }};
 
+    ($proc:expr, $fmt:expr, $($arg:expr),+ $(,)?) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::prefix_warning($proc.name(), format_args!($fmt, $($arg),+), fields);
+    }};
+
+    ($proc:expr, $fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
+        let mut fields = std::collections::BTreeMap::new();
+        $(
+            fields.insert(stringify!($key).to_string(), serde_json::json!($value));
+        )*
+        $crate::log::prefix_warning($proc.name(), format_args!($fmt, $($farg),*), fields);
+    }};
+}
+
+#[allow(static_mut_refs)]
+fn get_logger() -> &'static Logger {
+    unsafe {
+        if INSTANCE.as_ref().is_none() {
+            #[cfg(not(test))]
+            INIT.call_once(|| {
+                let logger = Logger::new(Box::new(stdout()), Box::new(stderr()));
+                INSTANCE = Some(logger);
+            });
+            #[cfg(test)]
+            INIT.call_once(|| {
+                use std::io::sink;
+                let logger = Logger::new(Box::new(sink()), Box::new(sink()));
+                INSTANCE = Some(logger);
+            });
+        }
+    }
     #[allow(static_mut_refs)]
     unsafe {
         INSTANCE.as_ref().expect("there should always be one instance of the logger")
     }
+}
+
+pub fn init(logfile: &str) -> Result<(), String> {
+    let stdout = std::fs::File::create(logfile).map_err(|e| e.to_string())?;
+    let stderr = std::fs::File::create(logfile).map_err(|e| e.to_string())?;
+
+    let logger = Logger::new(Box::new(stdout), Box::new(stderr));
+    unsafe {
+        INSTANCE = Some(logger);
+    }
+
+    log_info!("logger initialized, logfile: {logfile}");
+
+    Ok(())
 }
