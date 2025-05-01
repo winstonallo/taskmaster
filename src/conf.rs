@@ -1,6 +1,8 @@
 use std::{collections::HashMap, error::Error, fs};
 
+#[cfg(test)]
 use defaults::{dflt_authgroup, dflt_logfile, dflt_socketpath};
+
 use proc::{ProcessConfig, types::WritableFile};
 use serde::Deserialize;
 
