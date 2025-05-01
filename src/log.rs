@@ -125,6 +125,10 @@ pub fn prefix_warning(prefix: &str, message: fmt::Arguments, mut fields: BTreeMa
 
 #[macro_export]
 macro_rules! log_error {
+    ($fmt:expr, $($arg:tt)*) => {{
+        $crate::_log_error_internal!($fmt, $($arg)*);
+    }};
+
     ($($arg:tt)*) => {{
         let fields = std::collections::BTreeMap::new();
         $crate::log::error(format_args!($($arg)*), fields);
@@ -132,11 +136,36 @@ macro_rules! log_error {
 }
 
 #[macro_export]
+macro_rules! _log_error_internal {
+    ($fmt:expr,) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::error(format_args!($fmt), fields);
+    }};
+
+    ($fmt:expr, $($arg:expr),+ $(,)?) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::error(format_args!($fmt, $($arg),+), fields);
+    }};
+
+    ($fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
+        let mut fields = std::collections::BTreeMap::new();
+        $(
+            fields.insert(stringify!($key).to_string(), serde_json::json!($value));
+        )*
+        $crate::log::error(format_args!($fmt, $($farg),*), fields);
+    }};
+}
+
+#[macro_export]
 macro_rules! log_info {
+    // One string + any number of arguments
+    // $fmt:expr macthes any Rust expression
+    // $($arg:tt)* matches the entire rest of the token tree
     ($fmt:expr, $($arg:tt)*) => {{
         $crate::_log_info_internal!($fmt, $($arg)*);
     }};
 
+    // Only one string without formatting
     ($($arg:tt)*) => {{
         let fields = std::collections::BTreeMap::new();
         $crate::log::info(format_args!($($arg)*), fields);
@@ -145,19 +174,25 @@ macro_rules! log_info {
 
 #[macro_export]
 macro_rules! _log_info_internal {
+    // Empty string with trailing comma.
     ($fmt:expr,) => {{
         let fields = std::collections::BTreeMap::new();
         $crate::log::info(format_args!($fmt), fields);
     }};
 
+    // Regular format string
+    // +$(,)? matches one or more arguments with an optional trailing comma
     ($fmt:expr, $($arg:expr),+ $(,)?) => {{
         let fields = std::collections::BTreeMap::new();
         $crate::log::info(format_args!($fmt, $($arg),+), fields);
     }};
 
+    // Format string, zero or more arguments, semicolon delimiter and zero or more key value pairs
+    // after the semicolon.
     ($fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
         let mut fields = std::collections::BTreeMap::new();
         $(
+            // Stringify keys to create JSON fields out of them
             fields.insert(stringify!($key).to_string(), serde_json::json!($value));
         )*
         $crate::log::info(format_args!($fmt, $($farg),*), fields);
@@ -166,6 +201,10 @@ macro_rules! _log_info_internal {
 
 #[macro_export]
 macro_rules! log_warn {
+    ($fmt:expr, $($arg:tt)*) => {{
+        $crate::_log_warn_internal!($fmt, $($arg)*);
+    }};
+
     ($($arg:tt)*) => {{
         let mut fields = std::collections::BTreeMap::new();
         $crate::log::warning(format_args!($($arg)*), fields);
@@ -173,10 +212,23 @@ macro_rules! log_warn {
 }
 
 #[macro_export]
-macro_rules! log_fatal {
-    ($($arg:tt)*) => {{
+macro_rules! _log_warn_internal {
+    ($fmt:expr,) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::warning(format_args!($fmt), fields);
+    }};
+
+    ($fmt:expr, $($arg:expr),+ $(,)?) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::warning(format_args!($fmt, $($arg),+), fields);
+    }};
+
+    ($fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
         let mut fields = std::collections::BTreeMap::new();
-        $crate::log::fatal(format_args!($($arg)*), fields);
+        $(
+            fields.insert(stringify!($key).to_string(), serde_json::json!($value));
+        )*
+        $crate::log::warning(format_args!($fmt, $($farg),*), fields);
     }};
 }
 
