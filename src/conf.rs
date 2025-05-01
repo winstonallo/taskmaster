@@ -108,7 +108,7 @@ impl Config {
     }
 
     pub fn logfile(&self) -> &str {
-        &self.logfile.path()
+        self.logfile.path()
     }
 }
 
