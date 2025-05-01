@@ -229,10 +229,11 @@ async fn handle_input(input: String) -> Result<String, String> {
         Err(e) => return Err(format!("error while reading socket: {e}\n")),
     };
 
-    let response = match serde_json::from_str::<Response>(&response) {
+    let mut response = match serde_json::from_str::<Response>(&response) {
         Ok(resp) => resp,
         Err(_) => return Err(format!("non json_rpc formatted message: {response}\n")),
     };
+    response.set_response_result(request.request_type());
 
     Ok(response_to_str(&response).await)
 }
