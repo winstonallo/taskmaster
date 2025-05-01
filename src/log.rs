@@ -9,6 +9,8 @@ use std::{
 use libc::{c_char, localtime, strftime, time_t};
 use serde_json::{Value, json};
 
+use crate::run::statemachine::states::ProcessState;
+
 struct Logger {
     stderr: Mutex<Box<dyn Write + Send>>,
     stdout: Mutex<Box<dyn Write + Send>>,
@@ -113,13 +115,21 @@ pub fn fatal(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
     get_logger().fatal(message, fields);
 }
 
-pub fn prefix_info(prefix: &str, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
-    fields.insert("prefix".to_string(), json!(prefix));
+pub fn process_info(name: &str, state: &ProcessState, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
+    fields.insert("process".to_string(), json!(name));
+    fields.insert("state".to_string(), json!(state.to_string()));
     get_logger().info(message, fields);
 }
 
-pub fn prefix_warning(prefix: &str, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
-    fields.insert("prefix".to_string(), json!(prefix));
+pub fn process_warning(name: &str, state: &ProcessState, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
+    fields.insert("process".to_string(), json!(name));
+    fields.insert("state".to_string(), json!(state.to_string()));
+    get_logger().warning(message, fields);
+}
+
+pub fn process_error(name: &str, state: &ProcessState, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
+    fields.insert("process".to_string(), json!(name));
+    fields.insert("state".to_string(), json!(state.to_string()));
     get_logger().warning(message, fields);
 }
 
@@ -278,7 +288,7 @@ macro_rules! proc_info {
 
     ($proc:expr, $($arg:tt)*) => {{
         let fields = std::collections::BTreeMap::new();
-        $crate::log::prefix_info($proc.name(), format_args!($($arg)*), fields);
+        $crate::log::process_info($proc.name(), &$proc.state(), format_args!($($arg)*), fields);
     }};
 }
 
@@ -286,12 +296,12 @@ macro_rules! proc_info {
 macro_rules! _proc_info_internal {
     ($proc:expr, $fmt:expr,) => {{
         let fields = std::collections::BTreeMap::new();
-        $crate::log::prefix_info($proc.name(), format_args!($fmt), fields);
+        $crate::log::process_info($proc.name(), &$proc.state(), format_args!($fmt), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($arg:expr),+ $(,)?) => {{
         let fields = std::collections::BTreeMap::new();
-        $crate::log::prefix_info($proc.name(), format_args!($fmt, $($arg),+), fields);
+        $crate::log::process_info($proc.name(), &$proc.state(), format_args!($fmt, $($arg),+), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
@@ -299,7 +309,7 @@ macro_rules! _proc_info_internal {
         $(
             fields.insert(stringify!($key).to_string(), serde_json::json!($value));
         )*
-        $crate::log::prefix_info($proc.name(), format_args!($fmt, $($farg),*), fields);
+        $crate::log::process_info($proc.name(), &$proc.state(), format_args!($fmt, $($farg),*), fields);
     }};
 }
 
@@ -311,7 +321,7 @@ macro_rules! proc_warning {
 
     ($proc:expr, $($arg:tt)*) => {{
         let fields = std::collections::BTreeMap::new();
-        $crate::log::prefix_warning($proc.name(), format_args!($($arg)*), fields);
+        $crate::log::process_warning($proc.name(), &$proc.state(), format_args!($($arg)*), fields);
     }};
 }
 
@@ -319,12 +329,12 @@ macro_rules! proc_warning {
 macro_rules! _proc_warning_internal {
     ($proc:expr, $fmt:expr,) => {{
         let fields = std::collections::BTreeMap::new();
-        $crate::log::prefix_warning($proc.name(), format_args!($fmt), fields);
+        $crate::log::process_warning($proc.name(), &$proc.state(), format_args!($fmt), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($arg:expr),+ $(,)?) => {{
         let fields = std::collections::BTreeMap::new();
-        $crate::log::prefix_warning($proc.name(), format_args!($fmt, $($arg),+), fields);
+        $crate::log::process_warning($proc.name(), &$proc.state(), format_args!($fmt, $($arg),+), fields);
     }};
 
     ($proc:expr, $fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
@@ -332,7 +342,40 @@ macro_rules! _proc_warning_internal {
         $(
             fields.insert(stringify!($key).to_string(), serde_json::json!($value));
         )*
-        $crate::log::prefix_warning($proc.name(), format_args!($fmt, $($farg),*), fields);
+        $crate::log::process_warning($proc.name(), &$proc.state(), format_args!($fmt, $($farg),*), fields);
+    }};
+}
+
+#[macro_export]
+macro_rules! proc_error {
+    ($proc:expr, $fmt:expr, $($arg:tt)*) => {{
+        $crate::_proc_error_internal!($proc, $fmt, $($arg)*);
+    }};
+
+    ($proc:expr, $($arg:tt)*) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::process_error($proc.name(), &$proc.state(), format_args!($($arg)*), fields);
+    }};
+}
+
+#[macro_export]
+macro_rules! _proc_error_internal {
+    ($proc:expr, $fmt:expr,) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::process_error($proc.name(), &$proc.state(), format_args!($fmt), fields);
+    }};
+
+    ($proc:expr, $fmt:expr, $($arg:expr),+ $(,)?) => {{
+        let fields = std::collections::BTreeMap::new();
+        $crate::log::process_error($proc.name(), &$proc.state(), format_args!($fmt, $($arg),+), fields);
+    }};
+
+    ($proc:expr, $fmt:expr, $($farg:expr),* $(,)? ; $($key:ident = $value:expr),* $(,)?) => {{
+        let mut fields = std::collections::BTreeMap::new();
+        $(
+            fields.insert(stringify!($key).to_string(), serde_json::json!($value));
+        )*
+        $crate::log::process_error($proc.name(), &$proc.state(), format_args!($fmt, $($farg),*), fields);
     }};
 }
 
