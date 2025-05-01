@@ -18,6 +18,11 @@ fn write_pid_file() -> Result<(), Box<dyn Error>> {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    #[cfg(not(unix))]
+    {
+        panic!("taskmaster only support UNIX systems");
+    }
+
     if env::args().len() != 2 {
         log_error!("usage: ./taskmaster ./path/to/config.toml");
         std::process::exit(1);

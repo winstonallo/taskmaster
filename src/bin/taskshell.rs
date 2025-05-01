@@ -307,6 +307,11 @@ async fn shell() {
 
 #[tokio::main]
 async fn main() {
+    #[cfg(not(unix))]
+    {
+        panic!("taskmaster only support UNIX systems");
+    }
+
     let args = args();
     let mut args: Vec<String> = args.collect();
 
