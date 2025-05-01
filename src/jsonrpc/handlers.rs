@@ -262,6 +262,10 @@ impl AttachmentManager {
                             if let Err(e) = attach(&socketpath, &to, authgroup).await {
                                 if e.to_string().contains("Broken pipe") {
                                     log_info!("connection on {socketpath} closed");
+                                    if let Ok(c_socketpath) = std::ffi::CString::new(socketpath.clone()) {
+                                        unsafe { libc::unlink(c_socketpath.as_ptr()) };
+                                        log_info!("{socketpath} unlinked");
+                                    }
                                 } else {
                                     log_error!("attach: {e}");
                                 }
