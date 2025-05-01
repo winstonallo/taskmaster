@@ -72,6 +72,16 @@ fn build_request_attach(name: &str, to: &str) -> Request {
     )
 }
 
+fn start_engine(config_path: &str) -> Result<String, String> {
+    if let Err(e) = Command::new("cargo")
+        .args(["run", "--bin", "taskmaster", "--quiet", config_path])
+        .spawn()
+    {
+        return Err(e.to_string());
+    }
+    Ok("started taskmaster engine".to_string())
+}
+
 fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     let method = *arguments.first().unwrap();
 
@@ -197,7 +207,14 @@ async fn response_to_str(response: &Response) -> String {
 async fn handle_input(input: String) -> Result<String, String> {
     let arguments: Vec<&str> = input.split_ascii_whitespace().collect();
     if arguments.is_empty() {
-        return Err("no non white space input given\n".to_owned());
+        return Err("no non white space input given".to_owned());
+    }
+
+    if arguments[0] == "engine" && arguments[1] == "start" {
+        if arguments.len() != 3 {
+            return Err(format!("usage: engine start CONFIG_PATH"));
+        }
+        return start_engine(arguments[2]);
     }
 
     let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
