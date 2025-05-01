@@ -1,5 +1,6 @@
 use std::{
     env::args,
+    io::Read,
     process::{Command, exit},
     sync::atomic::AtomicU32,
 };
@@ -76,13 +77,35 @@ fn build_request_attach(name: &str, to: &str) -> Request {
     )
 }
 
+fn engine_running() -> bool {
+    use std::path::Path;
+
+    let mut pid_file = match std::fs::File::open("/tmp/taskmaster.pid").map_err(|e| e.to_string()) {
+        Ok(file) => file,
+        Err(_) => return true,
+    };
+
+    let mut pid = String::new();
+
+    if let Err(_) = pid_file.read_to_string(&mut pid) {
+        return true;
+    }
+
+    Path::new(&format!("/proc/{pid}")).exists()
+}
+
 fn start_engine(config_path: &str) -> Result<String, String> {
+    if engine_running() {
+        return Ok("taskmaster is already running".to_string());
+    }
+
     if let Err(e) = Command::new("cargo")
         .args(["run", "--bin", "taskmaster", "--quiet", config_path])
         .spawn()
     {
         return Err(e.to_string());
     }
+
     Ok("started taskmaster engine".to_string())
 }
 
