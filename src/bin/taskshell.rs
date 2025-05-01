@@ -205,7 +205,7 @@ async fn response_to_str(response: &Response) -> String {
                 Attach { name, socketpath, to } => attach(name, socketpath, to).await,
             }
         }
-        ResponseType::Error(err) => format!("{}", err.message),
+        ResponseType::Error(err) => err.message.to_string(),
     }
 }
 
@@ -217,7 +217,7 @@ async fn handle_input(input: String) -> Result<String, String> {
 
     if arguments[0] == "engine" && arguments[1] == "start" {
         if arguments.len() != 3 {
-            return Err(format!("usage: engine start CONFIG_PATH"));
+            return Err("usage: engine start CONFIG_PATH".to_string());
         }
         return start_engine(arguments[2]);
     }
