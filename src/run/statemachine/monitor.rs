@@ -68,7 +68,7 @@ fn healthcheck_command(started_at: &Instant, p: &mut Process) -> Option<ProcessS
     let receiver = match p.healthcheck_mut().receiver() {
         Some(receiver) => receiver,
         None => {
-            proc_info!(p, "starting healthcheck - cmd: {}, args: {:?}", p.healthcheck().cmd(), p.healthcheck().args());
+            proc_info!(p, "starting healthcheck",; cmd = p.healthcheck().cmd(), args = p.healthcheck().args());
             p.start_healthcheck();
             return None;
         }
