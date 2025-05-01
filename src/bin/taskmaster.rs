@@ -7,7 +7,7 @@ use std::{
 
 use tasklib::{conf::Config, log, log_error, log_info, run::daemon::Daemon};
 
-const PID_FILE_PATH: &'static str = "/tmp/taskmaster.pid";
+const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
 
 fn write_pid_file() -> Result<(), Box<dyn Error>> {
     let pid = unsafe { libc::getpid() };
