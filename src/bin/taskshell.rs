@@ -82,54 +82,47 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
             } else if arguments.len() == 1 {
                 build_request_status()
             } else {
-                return Err("usage: status OR status PROCESS_NAME\n");
+                return Err("usage: status OR status PROCESS_NAME");
             }
         }
         "start" => {
-            if arguments.len() == 2 {
-                build_request_start(arguments[1])
-            } else {
-                return Err("usage: start PROCESS_NAME\n");
+            if arguments.len() != 2 {
+                return Err("usage: start PROCESS_NAME");
             }
         }
         "restart" => {
-            if arguments.len() == 2 {
-                build_request_restart(arguments[1])
-            } else {
-                return Err("usage: restart PROCESS_NAME\n");
+            if arguments.len() != 2 {
+                return Err("usage: restart PROCESS_NAME");
             }
+            build_request_restart(arguments[1])
         }
         "stop" => {
-            if arguments.len() == 2 {
-                build_request_stop(arguments[1])
-            } else {
-                return Err("usage: stop PROCESS_NAME\n");
+            if arguments.len() != 2 {
+                return Err("usage: stop PROCESS_NAME");
             }
+            build_request_stop(arguments[1])
         }
         "reload" => {
-            if arguments.len() == 1 {
-                build_request_reload()
-            } else {
-                return Err("usage: reload\n");
+            if arguments.len() != 1 {
+                return Err("usage: reload");
             }
+            build_request_reload()
         }
         "halt" => {
-            if arguments.len() == 1 {
-                build_request_halt()
-            } else {
-                return Err("usage: halt\n");
+            if arguments.len() != 1 {
+                return Err("usage: halt");
             }
+            build_request_halt()
         }
         "attach" => {
-            if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
-                build_request_attach(arguments[1], arguments[2])
-            } else {
-                return Err("usage: attach PROCESS_NAME {stdout | stderr}\n");
+            if !(arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2])) {
+                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
             }
+            build_request_attach(arguments[1], arguments[2])
         }
         "exit" => exit(0),
         _ => {
-            return Err("method not implemented\n");
+            return Err("method not implemented");
         }
     };
 
