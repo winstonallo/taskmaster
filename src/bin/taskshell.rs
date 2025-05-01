@@ -189,13 +189,11 @@ async fn response_to_str(response: &Response) -> String {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
             match res {
-                Status(items) => {
-                    let mut str = String::new();
-                    for short_process in items.iter() {
-                        str.push_str(&format!("{}: {}", short_process.name(), short_process.state()));
-                    }
-                    str
-                }
+                Status(items) => items
+                    .iter()
+                    .map(|sp| format!("{}: {}", sp.name(), sp.state()))
+                    .collect::<Vec<String>>()
+                    .join("\n"),
                 StatusSingle(item) => format!("{}: {}", item.name(), item.state()),
                 Start(name) => format!("starting: {name}"),
                 Stop(name) => format!("stopping: {name}"),
