@@ -79,7 +79,10 @@ impl TaskBoard {
 
         match self.content.clone() {
             Content::Empty => {}
-            Content::Error(e) => println!("{}", e),
+            Content::Error(mut e) => {
+                e.push(13 as char);
+                println!("{}", e);
+            }
             Content::Processes(processes) => {
                 self.load_terminal_dimnsions();
                 let height = self.terminal_height - 1;
@@ -117,10 +120,10 @@ impl TaskBoard {
                     line.push(13 as char);
                     println!("{}", line);
                 }
-                print!("Press 'q' to quit");
-                let _ = std::io::stdout().flush();
             }
         }
+        print!("Press 'q' to quit - use arrow keys to move the list");
+        let _ = std::io::stdout().flush();
     }
 
     async fn get_status_from_daemon(&mut self) {
