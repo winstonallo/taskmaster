@@ -130,7 +130,7 @@ pub fn process_warning(name: &str, state: &ProcessState, message: fmt::Arguments
 pub fn process_error(name: &str, state: &ProcessState, message: fmt::Arguments, mut fields: BTreeMap<String, Value>) {
     fields.insert("process".to_string(), json!(name));
     fields.insert("state".to_string(), json!(state.to_string()));
-    get_logger().warning(message, fields);
+    get_logger().error(message, fields);
 }
 
 #[macro_export]
