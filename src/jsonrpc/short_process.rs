@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::run::{proc::Process, statemachine::states::ProcessState};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct ShortProcess {
     name: String,
     state: State,
@@ -26,7 +26,7 @@ impl ShortProcess {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum State {
     Idle,
     Ready,

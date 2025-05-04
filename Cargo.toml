@@ -14,13 +14,16 @@ libc = "0.2.169"
 toml = "0.8.20"
 tokio = { version = "1.44.1", features = ["full"] }
 rand = "0.9.1"
+term_size = "0.3.2"
 
 [[bin]]
 name = "taskmaster"
-path = "src/bin/taskmaster.rs"
 
 [[bin]]
 name = "taskshell"
+
+[[bin]]
+name = "taskboard"
 
 [build-dependencies]
 cc = "1.0"

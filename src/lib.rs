@@ -7,3 +7,4 @@ pub mod jsonrpc;
 pub mod log;
 pub mod run;
 pub mod shell;
+pub mod termios;
