@@ -5,7 +5,6 @@ unsafe extern "C" {
     unsafe fn cfmakeraw(termios: *mut termios);
 }
 
-
 pub fn change_to_raw_mode() -> libc::termios {
     let mut orig: libc::termios = libc::termios {
         c_iflag: 0,
@@ -36,7 +35,6 @@ pub fn change_to_raw_mode() -> libc::termios {
 }
 
 pub fn reset_to_termios(orig: libc::termios) {
-
     unsafe {
         tcsetattr(0, TCSAFLUSH, &orig);
     }
