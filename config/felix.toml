@@ -23,7 +23,7 @@ args = ["3"]
 
 # Number of processes to start.
 # Defaults to 1, max 255.
-processes = 40
+processes = 4
 
 # Mask for files created by the process.
 # Defaults to "022".
