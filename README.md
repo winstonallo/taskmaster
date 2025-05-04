@@ -31,4 +31,3 @@ The states and their transition triggers can be represented as follows:
 ![alt text](assets/statediagram.png)
 ---
 This lays out a rough process for decision making during daemon execution. We can easily define those states and their transitioning rules in code. 
-tmp
