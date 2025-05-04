@@ -1,4 +1,9 @@
-use std::{env::args, process::exit, sync::atomic::AtomicU32};
+use std::{
+    env::args,
+    io::Read,
+    process::{Command, exit},
+    sync::atomic::AtomicU32,
+};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
@@ -72,6 +77,38 @@ fn build_request_attach(name: &str, to: &str) -> Request {
     )
 }
 
+fn engine_running() -> bool {
+    use std::path::Path;
+
+    let mut pid_file = match std::fs::File::open("/tmp/taskmaster.pid").map_err(|e| e.to_string()) {
+        Ok(file) => file,
+        Err(_) => return true,
+    };
+
+    let mut pid = String::new();
+
+    if pid_file.read_to_string(&mut pid).is_err() {
+        return true;
+    }
+
+    Path::new(&format!("/proc/{pid}")).exists()
+}
+
+fn start_engine(config_path: &str) -> Result<String, String> {
+    if engine_running() {
+        return Ok("taskmaster is already running".to_string());
+    }
+
+    if let Err(e) = Command::new("cargo")
+        .args(["run", "--bin", "taskmaster", "--quiet", config_path])
+        .spawn()
+    {
+        return Err(e.to_string());
+    }
+
+    Ok("started taskmaster engine".to_string())
+}
+
 fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
     let method = *arguments.first().unwrap();
 
@@ -82,54 +119,48 @@ fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
             } else if arguments.len() == 1 {
                 build_request_status()
             } else {
-                return Err("usage: status OR status PROCESS_NAME\n");
+                return Err("usage: status OR status PROCESS_NAME");
             }
         }
         "start" => {
-            if arguments.len() == 2 {
-                build_request_start(arguments[1])
-            } else {
-                return Err("usage: start PROCESS_NAME\n");
+            if arguments.len() != 2 {
+                return Err("usage: start PROCESS_NAME");
             }
+            build_request_start(arguments[1])
         }
         "restart" => {
-            if arguments.len() == 2 {
-                build_request_restart(arguments[1])
-            } else {
-                return Err("usage: restart PROCESS_NAME\n");
+            if arguments.len() != 2 {
+                return Err("usage: restart PROCESS_NAME");
             }
+            build_request_restart(arguments[1])
         }
         "stop" => {
-            if arguments.len() == 2 {
-                build_request_stop(arguments[1])
-            } else {
-                return Err("usage: stop PROCESS_NAME\n");
+            if arguments.len() != 2 {
+                return Err("usage: stop PROCESS_NAME");
             }
+            build_request_stop(arguments[1])
         }
         "reload" => {
-            if arguments.len() == 1 {
-                build_request_reload()
-            } else {
-                return Err("usage: reload\n");
+            if arguments.len() != 1 {
+                return Err("usage: reload");
             }
+            build_request_reload()
         }
         "halt" => {
-            if arguments.len() == 1 {
-                build_request_halt()
-            } else {
-                return Err("usage: halt\n");
+            if arguments.len() != 1 {
+                return Err("usage: halt");
             }
+            build_request_halt()
         }
         "attach" => {
-            if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
-                build_request_attach(arguments[1], arguments[2])
-            } else {
-                return Err("usage: attach PROCESS_NAME {stdout | stderr}\n");
+            if !(arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2])) {
+                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
             }
+            build_request_attach(arguments[1], arguments[2])
         }
         "exit" => exit(0),
         _ => {
-            return Err("method not implemented\n");
+            return Err("method not implemented");
         }
     };
 
@@ -155,7 +186,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) -> String {
     };
 
     let mut reader = BufReader::new(stream);
-
+    print_raw_mode("\n");
     loop {
         tokio::select! {
             read_result = read_from_stream(&mut reader) => {
@@ -168,7 +199,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) -> String {
                 }
             },
             _ = rx.recv() => {
-                print_raw_mode(&format!("[{name}:{to}]: detached\n"));
+                print_raw_mode(&format!("[{name}:_info_]: detached"));
                 break;
             }
         }
@@ -181,35 +212,40 @@ async fn response_to_str(response: &Response) -> String {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
             match res {
-                Status(items) => {
-                    let mut str = String::new();
-                    for short_process in items.iter() {
-                        str.push_str(&format!("{}: {}\n", short_process.name(), short_process.state()));
-                    }
-                    str
-                }
-                StatusSingle(item) => format!("{}: {}\n", item.name(), item.state()),
-                Start(name) => format!("starting: {name}\n"),
-                Stop(name) => format!("stopping: {name}\n"),
-                Restart(name) => format!("restarting: {name}\n"),
-                Reload => "reloading configuration\n".to_string(),
-                Halt => "shutting down taskmaster\n".to_string(),
+                Status(items) => items
+                    .iter()
+                    .map(|sp| format!("{}: {}", sp.name(), sp.state()))
+                    .collect::<Vec<String>>()
+                    .join("\n"),
+                StatusSingle(item) => format!("{}: {}", item.name(), item.state()),
+                Start(name) => format!("starting: {name}"),
+                Stop(name) => format!("stopping: {name}"),
+                Restart(name) => format!("restarting: {name}"),
+                Reload => "reloading configuration".to_string(),
+                Halt => "shutting down taskmaster".to_string(),
                 Attach { name, socketpath, to } => attach(name, socketpath, to).await,
             }
         }
-        ResponseType::Error(err) => format!("{}\n", err.message),
+        ResponseType::Error(err) => err.message.to_string(),
     }
 }
 
 async fn handle_input(input: String) -> Result<String, String> {
     let arguments: Vec<&str> = input.split_ascii_whitespace().collect();
     if arguments.is_empty() {
-        return Err("no non white space input given\n".to_owned());
+        return Err("no non white space input given".to_owned());
+    }
+
+    if arguments[0] == "engine" && arguments[1] == "start" {
+        if arguments.len() != 3 {
+            return Err("usage: engine start CONFIG_PATH".to_string());
+        }
+        return start_engine(arguments[2]);
     }
 
     let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
         Ok(s) => s,
-        Err(e) => return Err(format!("couldn't establish socket connection: {e}\n")),
+        Err(e) => return Err(format!("couldn't establish socket connection: {e}")),
     };
 
     let request = match build_request(&arguments) {
@@ -220,19 +256,20 @@ async fn handle_input(input: String) -> Result<String, String> {
     let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
     if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()).await {
-        return Err(format!("error while writing request: {e}\n"));
+        return Err(format!("error while writing request: {e}"));
     }
 
     let mut reader = BufReader::new(unix_stream);
     let response = match read_from_stream(&mut reader).await {
         Ok(resp) => resp,
-        Err(e) => return Err(format!("error while reading socket: {e}\n")),
+        Err(e) => return Err(format!("error while reading socket: {e}")),
     };
 
-    let response = match serde_json::from_str::<Response>(&response) {
+    let mut response = match serde_json::from_str::<Response>(&response) {
         Ok(resp) => resp,
-        Err(_) => return Err(format!("non json_rpc formatted message: {response}\n")),
+        Err(_) => return Err(format!("non json_rpc formatted message: {response}")),
     };
+    response.set_response_result(request.request_type());
 
     Ok(response_to_str(&response).await)
 }
@@ -242,7 +279,7 @@ async fn docker(args: Vec<String>) {
         Ok(s) => s,
         Err(s) => s,
     };
-    print!("{msg}");
+    println!("{msg}");
 }
 
 fn print_raw_mode(string: &str) {
@@ -270,6 +307,11 @@ async fn shell() {
 
 #[tokio::main]
 async fn main() {
+    #[cfg(not(unix))]
+    {
+        panic!("taskmaster only support UNIX systems");
+    }
+
     let args = args();
     let mut args: Vec<String> = args.collect();
 

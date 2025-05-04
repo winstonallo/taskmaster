@@ -4,12 +4,14 @@ use serde::{Deserialize, Serialize};
 use socket::AsyncUnixSocket;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
+use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
 use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
+use crate::log_info;
 use crate::{
     conf,
     jsonrpc::{handlers::handle_request, request::Request},
@@ -79,6 +81,7 @@ impl Daemon {
     }
 
     pub fn shutdown(&mut self) {
+        let _ = std::fs::remove_file("/tmp/taskmaster.pid");
         self.shutting_down = true;
     }
 
@@ -149,6 +152,7 @@ impl Daemon {
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
         let sender = Arc::new(sender);
+        let mut sigint = signal(SignalKind::interrupt())?;
 
         loop {
             tokio::select! {
@@ -169,7 +173,7 @@ impl Daemon {
                             });
                         },
                         Err(e) => {
-                            log_error!("Failed to accept connection: {e}");
+                            log_error!("failed to accept connection: {e}");
                             continue;
                         }
                     }
@@ -194,6 +198,10 @@ impl Daemon {
                     if  self.shutting_down && self.no_process_running(){
                         return Ok(());
                     }
+                }
+                _ = sigint.recv() => {
+                    log_info!("received SIGINT, exiting");
+                    self.shutdown();
                 }
             }
         }
