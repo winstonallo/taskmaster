@@ -30,7 +30,7 @@ struct TaskBoard {
     content: Content,
     scrolled_lines_down: usize,
     terminal_height: usize,
-    terminal_witdh: usize,
+    terminal_width: usize,
     command_started: bool,
     command_arrow: bool,
 }
@@ -40,7 +40,7 @@ impl TaskBoard {
         Self {
             scrolled_lines_down: 0,
             terminal_height: 0,
-            terminal_witdh: 0,
+            terminal_width: 0,
             command_arrow: false,
             command_started: false,
             content: Content::Empty,
@@ -108,8 +108,8 @@ impl TaskBoard {
 
                 let max_line_length = max_line.len();
 
-                if max_line_length > self.terminal_witdh {
-                    println!("terminal not big enough to display processes | {} width needed {} given", max_line_length, self.terminal_witdh);
+                if max_line_length > self.terminal_width {
+                    println!("terminal not big enough to display processes | {} width needed {} given", max_line_length, self.terminal_width);
                     return;
                 }
 
@@ -202,7 +202,7 @@ impl TaskBoard {
             Some(x) => x,
             None => panic!("couldn't get terminal width and height"),
         };
-        self.terminal_witdh = w;
+        self.terminal_width = w;
         self.terminal_height = h;
     }
 
@@ -217,9 +217,9 @@ impl TaskBoard {
 
     fn clear_screen(&self) {
         for _ in 0..self.terminal_height {
-            Self::clear_line(self.terminal_witdh);
+            Self::clear_line(self.terminal_width);
             move_cursor_up();
-            Self::clear_line(self.terminal_witdh);
+            Self::clear_line(self.terminal_width);
         }
     }
 }
