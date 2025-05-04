@@ -62,23 +62,22 @@ async fn handle() -> Result<Response, String> {
 
     Ok(response)
 }
-async fn response_to_str(response: &Response) -> String {
-    match response.response_type() {
-        ResponseType::Result(res) => {
-            use tasklib::jsonrpc::response::ResponseResult::*;
-            match res {
-                Status(items) => {
-                    let mut str = String::new();
-                    for short_process in items.iter() {
-                        str.push_str(&format!("{}: {}\n", short_process.name(), short_process.state()));
-                    }
-                    str
-                }
-                _ => panic!("this should only get Status responses nothing else"),
-            }
-        }
-        ResponseType::Error(err) => format!("{}\n", err.message),
+async fn response_status_to_str(response: &Response) -> String {
+    let result = match response.response_type() {
+        ResponseType::Result(result) => result,
+        ResponseType::Error(err) => return format!("{}\n", err.message),
+    };
+
+    let processes = match result {
+        ResponseResult::Status(processes) => processes,
+        _ => panic!("this should only get Status responses nothing else"),
+    };
+
+    let mut str = String::new();
+    for short_process in processes.iter() {
+        str.push_str(&format!("{}: {}\n", short_process.name(), short_process.state()));
     }
+    str
 }
 
 unsafe extern "C" {
@@ -98,20 +97,52 @@ fn clear_line(width: usize) {
     stdout().flush();
 }
 
-#[tokio::main]
-async fn main() {
-    let (w, h) = match term_size::dimensions() {
-        Some(x) => x,
-        None => panic!("couldn't get terminal width and height"),
-    };
-    print!("{esc}[2J{esc}[{w};{h}H", esc = 27 as char);
-    unsafe {
-        raw_mod();
+struct TaskBoard {
+    buf: [u8; 1],
+    scrolled_lines_down: usize,
+    command_key_last_pressed: bool,
+    terminal_height: usize,
+    terminal_witdh: usize,
+}
+
+impl TaskBoard {
+    pub fn new() -> Self {
+        Self {
+            buf: [0; 1],
+            scrolled_lines_down: 0,
+            command_key_last_pressed: false,
+            terminal_height: 0,
+            terminal_witdh: 0,
+        }
     }
 
-    let mut buf: [u8; 1] = [0; 1];
-    let mut scrolled_lines_down: usize = 0;
-    let mut command_mode = false;
+    pub fn run(&mut self) {
+        self.load_terminal_dimnsions();
+        self.clear_screen();
+
+        unsafe {
+            raw_mod();
+        }
+
+
+    }
+
+    pub fn load_terminal_dimnsions(&mut self) {
+        let (w, h) = match term_size::dimensions() {
+            Some(x) => x,
+            None => panic!("couldn't get terminal width and height"),
+        };
+        self.terminal_witdh = w;
+        self.terminal_height = h;
+    }
+
+    pub fn clear_screen(&self) {
+        print!("{esc}[2J{esc}[{};{}H", self.terminal_witdh, self.terminal_height, esc = 27 as char);
+    }
+}
+
+#[tokio::main]
+async fn main() {
 
     let mut stdin = tokio::io::stdin();
     loop {
