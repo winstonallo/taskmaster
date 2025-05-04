@@ -1,8 +1,4 @@
-use std::{
-    io::{Read, Write, stdout},
-    sync::atomic::AtomicU32,
-    time::Duration,
-};
+use std::{io::Write, sync::atomic::AtomicU32, time::Duration};
 
 use tasklib::{
     jsonrpc::{
@@ -14,7 +10,6 @@ use tasklib::{
 };
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader},
-    join,
     net::UnixStream,
     select,
     time::sleep,
@@ -32,7 +27,6 @@ enum Content {
 }
 
 struct TaskBoard {
-    buf: [u8; 1],
     content: Content,
     scrolled_lines_down: usize,
     terminal_height: usize,
@@ -44,7 +38,6 @@ struct TaskBoard {
 impl TaskBoard {
     pub fn new() -> Self {
         Self {
-            buf: [0; 1],
             scrolled_lines_down: 0,
             terminal_height: 0,
             terminal_witdh: 0,
@@ -66,7 +59,7 @@ impl TaskBoard {
         loop {
             select! {
                Ok(_) = stdin.read_exact(&mut buf) => {
-                   if let Err(_) = self.handle_keyboard_entry(buf[0]) {
+                   if self.handle_keyboard_entry(buf[0]).is_err() {
                        break;
                     }
                 },
@@ -233,15 +226,6 @@ impl TaskBoard {
 
 fn move_cursor_up() {
     print!("\x1b[1A");
-}
-
-fn clear_line(width: usize) {
-    print!("{}", 13 as char);
-    for _ in 0..width {
-        print!(" ");
-    }
-    print!("{}", 13 as char);
-    stdout().flush();
 }
 
 #[tokio::main]
