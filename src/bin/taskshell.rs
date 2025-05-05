@@ -218,6 +218,11 @@ async fn handle_input(input: Vec<String>) -> Result<String, String> {
         Err(e) => return Err(e.to_owned()),
     };
 
+    let mut unix_stream: UnixStream = match UnixStream::connect(arguments.socketpath()).await {
+        Ok(s) => s,
+        Err(e) => return Err(format!("couldn't establish socket connection: {e}")),
+    };
+
     let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
 
     if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()).await {
