@@ -267,7 +267,7 @@ async fn shell() {
             Ok(s) => s,
             Err(s) => s,
         };
-        print_raw_mode(&msg);
+        print_raw_mode(&format!("{msg}\n"));
     }
 }
 
