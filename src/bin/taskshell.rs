@@ -3,6 +3,7 @@ use std::{
     io::Read,
     process::{Command, exit},
     sync::atomic::AtomicU32,
+    time::Duration,
 };
 
 use tokio::{
@@ -147,7 +148,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) -> String {
             let _ = tx_clone.send(()).await;
         }
     });
-
+    tokio::time::sleep(Duration::from_millis(50)).await;
     let stream = match UnixStream::connect(socket_path).await {
         Ok(stream) => stream,
         Err(e) => {
