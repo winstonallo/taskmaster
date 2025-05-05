@@ -156,7 +156,10 @@ impl TryFrom<Vec<String>> for Args {
         let mut socketpath: Option<String> = None;
 
         for (idx, arg) in value.iter().enumerate() {
-            if (arg.as_str() == "-s" || arg.as_str() == "--socketpath") && value.len() > idx + 1 {
+            if arg.as_str() == "-s" || arg.as_str() == "--socketpath" {
+                if value.len() <= idx + 1 {
+                    return Err(format!("--socketpath option expected a value\n\n{}", help()));
+                }
                 socketpath = Some(value[idx + 1].to_owned());
                 value.remove(idx);
                 value.remove(idx);
@@ -280,6 +283,17 @@ mod tests {
     #[test]
     fn unknown_engine_subcommand() {
         let command_line = "engine dance"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        assert!(Args::try_from(command_line).is_err());
+    }
+
+    #[test]
+    fn socketpath_option_without_arg() {
+        let command_line = "status --socketpath"
             .to_string()
             .split_ascii_whitespace()
             .map(String::from)
