@@ -127,10 +127,8 @@ fn build_request(command: &ShellCommand) -> Result<BuildRequestResult, String> {
         ShellCommand::Exit => return Ok(BuildRequestResult::Exit(0)),
         ShellCommand::Engine { subcommand } => match subcommand {
             EngineSubcommand::Start { config_path } => {
-                if let Ok(msg) = start_engine(config_path) {
-                    println!("{msg}");
-                }
-                return Ok(BuildRequestResult::NoOp("taskmaster engine successfully started".to_string()));
+                let msg = start_engine(config_path)?;
+                return Ok(BuildRequestResult::NoOp(msg));
             }
             EngineSubcommand::Stop => build_request_halt(),
         },
@@ -205,6 +203,7 @@ async fn response_to_str(response: &Response) -> String {
 
 async fn handle_input(input: Vec<String>) -> Result<String, String> {
     let arguments = Args::try_from(input)?;
+
     let request = match build_request(arguments.command()) {
         Ok(res) => match res {
             BuildRequestResult::Exit(code) => exit(code),
@@ -216,7 +215,11 @@ async fn handle_input(input: Vec<String>) -> Result<String, String> {
 
     let mut unix_stream: UnixStream = match UnixStream::connect(arguments.socketpath()).await {
         Ok(s) => s,
-        Err(e) => return Err(format!("couldn't establish socket connection: {e}")),
+        Err(e) => {
+            return Err(format!(
+                "couldn't establish socket connection: {e} - verify that \n  1. the taskmaster engine is running\n  2. you are using the correct socket path"
+            ));
+        }
     };
 
     let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
