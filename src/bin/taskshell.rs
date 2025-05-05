@@ -79,9 +79,10 @@ fn build_request_attach(name: &str, to: &AttachFile) -> Request {
 }
 
 enum BuildRequestResult {
-    Request(Request),
-    NoOp(String),
-    Exit(i32),
+    RequestToEngine(Request),
+    Help,
+    StartEngine { config_path: String },
+    Exit,
 }
 
 fn engine_running() -> bool {
@@ -116,26 +117,23 @@ fn start_engine(config_path: &str) -> Result<String, String> {
     Ok("started taskmaster engine".to_string())
 }
 
-fn build_request(command: &ShellCommand) -> Result<BuildRequestResult, String> {
-    let request = match command {
-        ShellCommand::Status { process } => build_request_status(process),
-        ShellCommand::Start { process } => build_request_start(process),
-        ShellCommand::Restart { process } => build_request_restart(process),
-        ShellCommand::Stop { process } => build_request_stop(process),
-        ShellCommand::Attach { process, fd } => build_request_attach(process, fd),
-        ShellCommand::Reload => build_request_reload(),
-        ShellCommand::Exit => return Ok(BuildRequestResult::Exit(0)),
+fn build_request(command: &ShellCommand) -> BuildRequestResult {
+    match command {
+        ShellCommand::Status { process } => BuildRequestResult::RequestToEngine(build_request_status(process)),
+        ShellCommand::Start { process } => BuildRequestResult::RequestToEngine(build_request_start(process)),
+        ShellCommand::Restart { process } => BuildRequestResult::RequestToEngine(build_request_restart(process)),
+        ShellCommand::Stop { process } => BuildRequestResult::RequestToEngine(build_request_stop(process)),
+        ShellCommand::Attach { process, fd } => BuildRequestResult::RequestToEngine(build_request_attach(process, fd)),
+        ShellCommand::Reload => BuildRequestResult::RequestToEngine(build_request_reload()),
+        ShellCommand::Exit => return BuildRequestResult::Exit,
         ShellCommand::Engine { subcommand } => match subcommand {
-            EngineSubcommand::Start { config_path } => {
-                let msg = start_engine(config_path)?;
-                return Ok(BuildRequestResult::NoOp(msg));
-            }
-            EngineSubcommand::Stop => build_request_halt(),
+            EngineSubcommand::Start { config_path } => BuildRequestResult::StartEngine {
+                config_path: config_path.to_owned(),
+            },
+            EngineSubcommand::Stop => BuildRequestResult::RequestToEngine(build_request_halt()),
         },
-        ShellCommand::Help => return Ok(BuildRequestResult::NoOp(help())),
-    };
-
-    Ok(BuildRequestResult::Request(request))
+        ShellCommand::Help => BuildRequestResult::Help,
+    }
 }
 
 async fn attach(name: &str, socket_path: &str, to: &str) -> String {
@@ -205,12 +203,10 @@ async fn handle_input(input: Vec<String>) -> Result<String, String> {
     let arguments = Args::try_from(input)?;
 
     let request = match build_request(arguments.command()) {
-        Ok(res) => match res {
-            BuildRequestResult::Exit(code) => exit(code),
-            BuildRequestResult::NoOp(msg) => return Ok(msg),
-            BuildRequestResult::Request(request) => request,
-        },
-        Err(e) => return Err(e.to_owned()),
+        BuildRequestResult::Exit => exit(0),
+        BuildRequestResult::StartEngine { config_path } => return start_engine(&config_path),
+        BuildRequestResult::Help => return Ok(help()),
+        BuildRequestResult::RequestToEngine(request) => request,
     };
 
     let mut unix_stream: UnixStream = match UnixStream::connect(arguments.socketpath()).await {
