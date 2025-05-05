@@ -136,7 +136,7 @@ impl TryFrom<Vec<String>> for Args {
             if (arg.as_str() == "-s" || arg.as_str() == "--socketpath") && value.len() > idx + 1 {
                 socketpath = Some(value[idx + 1].to_owned());
                 value.remove(idx);
-                value.remove(idx + 1);
+                value.remove(idx);
                 break;
             }
         }
