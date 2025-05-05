@@ -239,14 +239,6 @@ async fn handle_input(input: Vec<String>) -> Result<String, String> {
     Ok(response_to_str(&response).await)
 }
 
-async fn docker(args: Vec<String>) {
-    let msg = match handle_input(args).await {
-        Ok(s) => s,
-        Err(s) => s,
-    };
-    println!("{msg}");
-}
-
 fn print_raw_mode(string: &str) {
     let mut raw_new_line = String::new();
     raw_new_line.push('\n');
@@ -281,6 +273,12 @@ async fn main() {
 
     match args.len() {
         0 => shell().await,
-        _ => docker(args).await,
+        _ => match handle_input(args).await {
+            Ok(data) => print_raw_mode(&format!("{data}\n")),
+            Err(e) => {
+                print_raw_mode(&format!("{e}\n"));
+                exit(1);
+            }
+        },
     };
 }
