@@ -1,17 +1,19 @@
 use std::{
     env::args,
-    io::Read,
-    process::{Command, exit},
-    sync::atomic::AtomicU32,
+    io::{BufRead, Read},
+    path::Path,
+    process::{Command, Stdio, exit},
+    sync::{atomic::AtomicU32, mpsc},
+    thread,
     time::Duration,
 };
-
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     net::UnixStream,
 };
 
 use tasklib::{
+    conf::PID_FILE_PATH,
     jsonrpc::{
         request::{AttachFile, RequestType},
         response::{Response, ResponseType},
@@ -107,14 +109,40 @@ fn start_engine(config_path: &str) -> Result<String, String> {
         return Ok("taskmaster is already running".to_string());
     }
 
-    if let Err(e) = Command::new("cargo")
+    let mut child = match Command::new("cargo")
         .args(["run", "--bin", "taskmaster", "--quiet", config_path])
+        .stderr(Stdio::piped())
         .spawn()
     {
-        return Err(e.to_string());
+        Ok(child) => child,
+        Err(e) => return Err(e.to_string()),
+    };
+
+    let stderr = child.stderr.take().unwrap();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let reader = std::io::BufReader::new(stderr);
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                let _ = tx.send(line);
+            }
+        }
+    });
+
+    let pid_file = Path::new(PID_FILE_PATH);
+    for backoff in [1, 2, 4, 8] {
+        if pid_file.exists() {
+            return Ok("started taskmaster engine".to_string());
+        }
+
+        if let Ok(stderr_output) = rx.try_recv() {
+            return Err(format!("failed to start taskmaster engine: {stderr_output}"));
+        }
+
+        thread::sleep(Duration::from_secs(backoff));
     }
 
-    Ok("started taskmaster engine".to_string())
+    Err("failed to start taskmaster engine: unknown error".to_string())
 }
 
 fn build_request(command: &ShellCommand) -> BuildRequestResult {
