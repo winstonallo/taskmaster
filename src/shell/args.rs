@@ -2,23 +2,37 @@ use std::env;
 
 use crate::{conf::defaults::dflt_socketpath, jsonrpc::request::AttachFile};
 
+#[derive(Debug)]
 pub enum EngineSubcommand {
-    Start,
+    Start { config_path: String },
     Stop,
 }
 
-impl TryFrom<&str> for EngineSubcommand {
+impl TryFrom<Vec<String>> for EngineSubcommand {
     type Error = String;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "start" => Ok(Self::Start),
-            "stop" => Ok(Self::Stop),
-            _ => Err(format!("{value}: invalid subcommand for 'engine' (expected start | stop)")),
+    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
+        match value[0].as_str() {
+            "start" => {
+                if value.len() != 2 {
+                    return Err("engine start CONFIG_PATH".to_string());
+                }
+                Ok(Self::Start {
+                    config_path: value[1].to_owned(),
+                })
+            }
+            "stop" => {
+                if value.len() != 1 {
+                    return Err("no argument expected for 'engine stop'".to_string());
+                }
+                Ok(Self::Stop)
+            }
+            _ => Err(format!("{value:?}: invalid subcommand for 'engine' (expected start | stop)")),
         }
     }
 }
 
+#[derive(Debug)]
 pub enum ShellCommand {
     Status { process: Option<String> },
     Start { process: String },
@@ -84,10 +98,7 @@ impl TryFrom<Vec<String>> for ShellCommand {
                 Ok(Self::Exit)
             }
             "engine" => {
-                if value.len() != 2 {
-                    return Err("engine {start | stop}".to_string());
-                }
-                let subcommand = EngineSubcommand::try_from(value[1].as_str())?;
+                let subcommand = EngineSubcommand::try_from(value[1..].to_vec())?;
                 Ok(Self::Engine { subcommand })
             }
             _ => {
@@ -98,6 +109,7 @@ impl TryFrom<Vec<String>> for ShellCommand {
     }
 }
 
+#[derive(Debug)]
 pub struct Args {
     command: ShellCommand,
     socketpath: String,
