@@ -2,7 +2,7 @@ use std::env;
 
 use crate::{conf::defaults::dflt_socketpath, jsonrpc::request::AttachFile};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum EngineSubcommand {
     Start { config_path: String },
     Stop,
@@ -32,7 +32,7 @@ impl TryFrom<Vec<String>> for EngineSubcommand {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ShellCommand {
     Status { process: Option<String> },
     Start { process: String },
@@ -152,5 +152,124 @@ impl TryFrom<Vec<String>> for Args {
             command,
             socketpath: socketpath.unwrap(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+
+    use super::*;
+
+    static ENV_LOCK: std::sync::Mutex<bool> = Mutex::new(true);
+
+    #[test]
+    fn full_command_line() {
+        let command_line = "engine stop --socketpath taskmaster.sock"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        let args = Args::try_from(command_line).unwrap();
+
+        assert_eq!(
+            args.command,
+            ShellCommand::Engine {
+                subcommand: EngineSubcommand::Stop
+            }
+        );
+        assert_eq!(args.socketpath, "taskmaster.sock".to_string());
+    }
+
+    #[test]
+    fn default_socketpath() {
+        let _handle = ENV_LOCK.lock();
+        let command_line = "engine stop"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        let args = Args::try_from(command_line).unwrap();
+
+        assert_eq!(args.socketpath, "/tmp/taskmaster.sock".to_string());
+    }
+
+    #[test]
+    fn socketpath_from_env() {
+        let _handle = ENV_LOCK.lock();
+        unsafe {
+            std::env::set_var("TASKMASTER_SOCKETPATH", "taskmaster.sock");
+        }
+
+        let command_line = "engine stop"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        let args = Args::try_from(command_line).unwrap();
+
+        assert_eq!(args.socketpath, "taskmaster.sock".to_string());
+
+        unsafe {
+            std::env::remove_var("TASKMASTER_SOCKETPATH");
+        }
+    }
+
+    #[test]
+    fn cli_arg_overrides_env() {
+        let _handle = ENV_LOCK.lock();
+        unsafe {
+            std::env::set_var("TASKMASTER_SOCKETPATH", "taskmaster.sock");
+        }
+
+        let command_line = "engine stop --socketpath /tmp/taskmaster.sock"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        let args = Args::try_from(command_line).unwrap();
+
+        assert_eq!(args.socketpath, "/tmp/taskmaster.sock".to_string());
+
+        unsafe {
+            std::env::remove_var("TASKMASTER_SOCKETPATH");
+        }
+    }
+
+    #[test]
+    fn unknown_command() {
+        let command_line = "not a command"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        assert!(Args::try_from(command_line).is_err());
+    }
+
+    #[test]
+    fn unknown_engine_subcommand() {
+        let command_line = "engine dance"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        assert!(Args::try_from(command_line).is_err());
+    }
+
+    #[test]
+    fn unknown_attach_subcommand() {
+        let command_line = "attach foo painting"
+            .to_string()
+            .split_ascii_whitespace()
+            .map(String::from)
+            .collect::<Vec<String>>();
+
+        assert!(Args::try_from(command_line).is_err());
     }
 }
