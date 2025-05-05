@@ -130,7 +130,7 @@ fn start_engine(config_path: &str) -> Result<String, String> {
     });
 
     let pid_file = Path::new(PID_FILE_PATH);
-    for backoff in [1, 2, 4, 8] {
+    for backoff in [5, 10, 20, 40, 80] {
         if pid_file.exists() {
             return Ok("started taskmaster engine".to_string());
         }
@@ -139,10 +139,12 @@ fn start_engine(config_path: &str) -> Result<String, String> {
             return Err(format!("failed to start taskmaster engine: {stderr_output}"));
         }
 
-        thread::sleep(Duration::from_secs(backoff));
+        thread::sleep(Duration::from_millis(backoff * 100));
     }
 
-    Err("failed to start taskmaster engine: unknown error".to_string())
+    let _ = child.kill();
+
+    Err(format!("taskmaster engine not running after 15 seconds, no information on stderr - process was killed"))
 }
 
 fn build_request(command: &ShellCommand) -> BuildRequestResult {
