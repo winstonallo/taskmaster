@@ -6,7 +6,7 @@ pub fn help() -> String {
     let mut help_text = String::new();
 
     help_text.push_str("USAGE:\n");
-    help_text.push_str("  taskmaster [OPTIONS] COMMAND [ARGS]\n\n");
+    help_text.push_str("  taskshell [OPTIONS] COMMAND [ARGS]\n\n");
 
     help_text.push_str("OPTIONS:\n");
     help_text.push_str("  -s, --socketpath PATH      Path to taskmaster socket [default: $TASKMASTER_SOCKETPATH or /tmp/taskmaster.sock]\n\n");
