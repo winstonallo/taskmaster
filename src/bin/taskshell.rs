@@ -122,10 +122,8 @@ fn start_engine(config_path: &str) -> Result<String, String> {
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
         let reader = std::io::BufReader::new(stderr);
-        for line in reader.lines() {
-            if let Ok(line) = line {
-                let _ = tx.send(line);
-            }
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = tx.send(line);
         }
     });
 
@@ -144,7 +142,7 @@ fn start_engine(config_path: &str) -> Result<String, String> {
 
     let _ = child.kill();
 
-    Err(format!("taskmaster engine not running after 15 seconds, no information on stderr - process was killed"))
+    Err("taskmaster engine not running after 15 seconds, no information on stderr - process was killed".to_string())
 }
 
 fn build_request(command: &ShellCommand) -> BuildRequestResult {
