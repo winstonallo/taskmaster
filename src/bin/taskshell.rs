@@ -65,11 +65,14 @@ fn build_request_stop(name: &str) -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop(name))
 }
 
-fn build_request_attach(name: &str, to: &str) -> Request {
-    Request::new(
-        ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        RequestType::new_attach(name, if to == "stdout" { AttachFile::StdOut } else { AttachFile::StdErr }),
-    )
+fn build_request_attach(name: &str, to: &AttachFile) -> Request {
+    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_attach(name, to))
+}
+
+enum BuildRequestResult {
+    Request(Request),
+    NoOp(String),
+    Exit(i32),
 }
 
 fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
