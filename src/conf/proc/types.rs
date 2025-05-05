@@ -6,7 +6,7 @@ mod umask;
 
 pub use self::{
     autorestart::AutoRestart,
-    healthcheck::{HealthCheck, HealthCheckType},
+    healthcheck::{CommandHealthCheck, HealthCheck, HealthCheckType, UptimeHealthCheck},
     path::{AccessibleDirectory, ExecutableFile, WritableFile},
     stopsignal::StopSignal,
     umask::Umask,
