@@ -19,7 +19,7 @@ impl TryFrom<&str> for EngineSubcommand {
     }
 }
 
-pub enum Command {
+pub enum ShellCommand {
     Status { process: Option<String> },
     Start { process: String },
     Restart { process: String },
@@ -30,7 +30,7 @@ pub enum Command {
     Engine { subcommand: EngineSubcommand },
 }
 
-impl TryFrom<Vec<String>> for Command {
+impl TryFrom<Vec<String>> for ShellCommand {
     type Error = String;
 
     fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
@@ -99,12 +99,12 @@ impl TryFrom<Vec<String>> for Command {
 }
 
 pub struct Args {
-    command: Command,
+    command: ShellCommand,
     socketpath: String,
 }
 
 impl Args {
-    pub fn command(&self) -> &Command {
+    pub fn command(&self) -> &ShellCommand {
         &self.command
     }
 
@@ -135,7 +135,7 @@ impl TryFrom<Vec<String>> for Args {
                 Err(_) => Some(dflt_socketpath()),
             }
         }
-        let command = Command::try_from(value)?;
+        let command = ShellCommand::try_from(value)?;
         Ok(Self {
             command,
             socketpath: socketpath.unwrap(),

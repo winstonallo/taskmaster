@@ -17,7 +17,7 @@ use tasklib::{
     },
     shell::{
         self,
-        args::{Args, Command, EngineSubcommand},
+        args::{Args, EngineSubcommand, ShellCommand},
     },
 };
 
@@ -115,48 +115,16 @@ fn start_engine(config_path: &str) -> Result<String, String> {
     Ok("started taskmaster engine".to_string())
 }
 
-fn engine_running() -> bool {
-    use std::path::Path;
-
-    let mut pid_file = match std::fs::File::open("/tmp/taskmaster.pid").map_err(|e| e.to_string()) {
-        Ok(file) => file,
-        Err(_) => return true,
-    };
-
-    let mut pid = String::new();
-
-    if pid_file.read_to_string(&mut pid).is_err() {
-        return true;
-    }
-
-    Path::new(&format!("/proc/{pid}")).exists()
-}
-
-fn start_engine(config_path: &str) -> Result<String, String> {
-    if engine_running() {
-        return Ok("taskmaster is already running".to_string());
-    }
-
-    if let Err(e) = Command::new("cargo")
-        .args(["run", "--bin", "taskmaster", "--quiet", config_path])
-        .spawn()
-    {
-        return Err(e.to_string());
-    }
-
-    Ok("started taskmaster engine".to_string())
-}
-
-fn build_request(command: &Command) -> Result<BuildRequestResult, String> {
+fn build_request(command: &ShellCommand) -> Result<BuildRequestResult, String> {
     let request = match command {
-        Command::Status { process } => build_request_status(process),
-        Command::Start { process } => build_request_start(&process),
-        Command::Restart { process } => build_request_restart(&process),
-        Command::Stop { process } => build_request_stop(&process),
-        Command::Attach { process, fd } => build_request_attach(&process, fd),
-        Command::Reload => build_request_reload(),
-        Command::Exit => return Ok(BuildRequestResult::Exit(0)),
-        Command::Engine { subcommand } => match subcommand {
+        ShellCommand::Status { process } => build_request_status(process),
+        ShellCommand::Start { process } => build_request_start(&process),
+        ShellCommand::Restart { process } => build_request_restart(&process),
+        ShellCommand::Stop { process } => build_request_stop(&process),
+        ShellCommand::Attach { process, fd } => build_request_attach(&process, fd),
+        ShellCommand::Reload => build_request_reload(),
+        ShellCommand::Exit => return Ok(BuildRequestResult::Exit(0)),
+        ShellCommand::Engine { subcommand } => match subcommand {
             EngineSubcommand::Start => {
                 /* start engine */
                 return Ok(BuildRequestResult::NoOp("taskmaster engine successfully started".to_string()));
