@@ -10,12 +10,13 @@ use tasklib::{
         request::{AttachFile, RequestType},
         response::{Response, ResponseType},
     },
-    shell,
+    shell::{
+        self,
+        args::{Args, Command, EngineSubcommand},
+    },
 };
 
 use tasklib::jsonrpc::request::Request;
-
-const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
 
 async fn read_from_stream<R>(reader: &mut BufReader<R>) -> Result<String, String>
 where
@@ -45,12 +46,14 @@ fn build_request_halt() -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt())
 }
 
-fn build_request_status() -> Request {
-    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status())
-}
-
-fn build_request_status_single(name: &str) -> Request {
-    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single(name))
+fn build_request_status(name: &Option<String>) -> Request {
+    Request::new(
+        ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        match name {
+            Some(name) => RequestType::new_status_single(&name),
+            None => RequestType::new_status(),
+        },
+    )
 }
 
 fn build_request_start(name: &str) -> Request {
@@ -75,68 +78,25 @@ enum BuildRequestResult {
     Exit(i32),
 }
 
-fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
-    let method = *arguments.first().unwrap();
-
-    let request = match method {
-        "status" => {
-            if arguments.len() == 2 {
-                build_request_status_single(arguments[1])
-            } else if arguments.len() == 1 {
-                build_request_status()
-            } else {
-                return Err("usage: status OR status PROCESS_NAME\n");
+fn build_request(command: &Command) -> Result<BuildRequestResult, String> {
+    let request = match command {
+        Command::Status { process } => build_request_status(process),
+        Command::Start { process } => build_request_start(&process),
+        Command::Restart { process } => build_request_restart(&process),
+        Command::Stop { process } => build_request_stop(&process),
+        Command::Attach { process, fd } => build_request_attach(&process, fd),
+        Command::Reload => build_request_reload(),
+        Command::Exit => return Ok(BuildRequestResult::Exit(0)),
+        Command::Engine { subcommand } => match subcommand {
+            EngineSubcommand::Start => {
+                /* start engine */
+                return Ok(BuildRequestResult::NoOp("taskmaster engine successfully started".to_string()));
             }
-        }
-        "start" => {
-            if arguments.len() == 2 {
-                build_request_start(arguments[1])
-            } else {
-                return Err("usage: start PROCESS_NAME\n");
-            }
-        }
-        "restart" => {
-            if arguments.len() == 2 {
-                build_request_restart(arguments[1])
-            } else {
-                return Err("usage: restart PROCESS_NAME\n");
-            }
-        }
-        "stop" => {
-            if arguments.len() == 2 {
-                build_request_stop(arguments[1])
-            } else {
-                return Err("usage: stop PROCESS_NAME\n");
-            }
-        }
-        "reload" => {
-            if arguments.len() == 1 {
-                build_request_reload()
-            } else {
-                return Err("usage: reload\n");
-            }
-        }
-        "halt" => {
-            if arguments.len() == 1 {
-                build_request_halt()
-            } else {
-                return Err("usage: halt\n");
-            }
-        }
-        "attach" => {
-            if arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2]) {
-                build_request_attach(arguments[1], arguments[2])
-            } else {
-                return Err("usage: attach PROCESS_NAME {stdout | stderr}\n");
-            }
-        }
-        "exit" => exit(0),
-        _ => {
-            return Err("method not implemented\n");
-        }
+            EngineSubcommand::Stop => build_request_halt(),
+        },
     };
 
-    Ok(request)
+    Ok(BuildRequestResult::Request(request))
 }
 
 async fn attach(name: &str, socket_path: &str, to: &str) -> String {
@@ -204,19 +164,20 @@ async fn response_to_str(response: &Response) -> String {
     }
 }
 
-async fn handle_input(input: String) -> Result<String, String> {
-    let arguments: Vec<&str> = input.split_ascii_whitespace().collect();
-    if arguments.is_empty() {
-        return Err("no non white space input given\n".to_owned());
-    }
+async fn handle_input(input: Vec<String>) -> Result<String, String> {
+    let arguments = Args::try_from(input)?;
 
-    let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
+    let mut unix_stream: UnixStream = match UnixStream::connect(arguments.socketpath()).await {
         Ok(s) => s,
         Err(e) => return Err(format!("couldn't establish socket connection: {e}\n")),
     };
 
-    let request = match build_request(&arguments) {
-        Ok(request) => request,
+    let request = match build_request(arguments.command()) {
+        Ok(res) => match res {
+            BuildRequestResult::Exit(code) => exit(code),
+            BuildRequestResult::NoOp(msg) => return Ok(msg),
+            BuildRequestResult::Request(request) => request,
+        },
         Err(e) => return Err(e.to_owned()),
     };
 
@@ -241,7 +202,7 @@ async fn handle_input(input: String) -> Result<String, String> {
 }
 
 async fn docker(args: Vec<String>) {
-    let msg = match handle_input(args.join(" ")).await {
+    let msg = match handle_input(args).await {
         Ok(s) => s,
         Err(s) => s,
     };
@@ -260,10 +221,14 @@ fn print_raw_mode(string: &str) {
 async fn shell() {
     let mut shell = shell::Shell::new("taskshell> ");
     while let Some(line) = shell.next_line() {
-        if line.trim() == "exit" {
-            break;
-        }
-        let msg = match handle_input(line).await {
+        let msg = match handle_input(
+            line.split_ascii_whitespace()
+                .into_iter()
+                .map(String::from)
+                .collect::<Vec<String>>(),
+        )
+        .await
+        {
             Ok(s) => s,
             Err(s) => s,
         };
