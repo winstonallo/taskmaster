@@ -2,6 +2,30 @@ use std::env;
 
 use crate::{conf::defaults::dflt_socketpath, jsonrpc::request::AttachFile};
 
+pub fn help() -> String {
+    let mut help_text = String::new();
+
+    help_text.push_str("USAGE:\n");
+    help_text.push_str("  taskmaster [OPTIONS] COMMAND [ARGS]\n\n");
+
+    help_text.push_str("OPTIONS:\n");
+    help_text.push_str("  -s, --socketpath PATH      Path to taskmaster socket [default: $TASKMASTER_SOCKETPATH or /tmp/taskmaster.sock]\n\n");
+
+    help_text.push_str("COMMANDS:\n");
+    help_text.push_str("  status [PROCESS]           Show status of all processes or a specific process\n");
+    help_text.push_str("  start PROCESS              Start a process\n");
+    help_text.push_str("  restart PROCESS            Restart a process\n");
+    help_text.push_str("  stop PROCESS               Stop a process\n");
+    help_text.push_str("  attach PROCESS SUBCOMMAND  Attach to process output\n");
+    help_text.push_str("  reload                     Reload the configuration\n");
+    help_text.push_str("  exit                       Exit the shell\n");
+    help_text.push_str("  engine SUBCOMMAND          Control the taskmaster engine\n");
+    help_text.push_str("    start CONFIG_PATH        Start the taskmaster engine with the given configuration\n");
+    help_text.push_str("    stop                     Stop the taskmaster engine\n");
+
+    help_text
+}
+
 #[derive(Debug, PartialEq)]
 pub enum EngineSubcommand {
     Start { config_path: String },
@@ -42,6 +66,7 @@ pub enum ShellCommand {
     Reload,
     Exit,
     Engine { subcommand: EngineSubcommand },
+    Help,
 }
 
 impl TryFrom<Vec<String>> for ShellCommand {
@@ -101,10 +126,8 @@ impl TryFrom<Vec<String>> for ShellCommand {
                 let subcommand = EngineSubcommand::try_from(value[1..].to_vec())?;
                 Ok(Self::Engine { subcommand })
             }
-            _ => {
-                // Return help message
-                Err(String::new())
-            }
+            "help" => Ok(Self::Help),
+            _ => Err(format!("command not found\n\n{}", help())),
         }
     }
 }

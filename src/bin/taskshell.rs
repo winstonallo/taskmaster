@@ -18,7 +18,7 @@ use tasklib::{
     },
     shell::{
         self,
-        args::{Args, EngineSubcommand, ShellCommand},
+        args::{Args, EngineSubcommand, ShellCommand, help},
     },
 };
 
@@ -134,6 +134,7 @@ fn build_request(command: &ShellCommand) -> Result<BuildRequestResult, String> {
             }
             EngineSubcommand::Stop => build_request_halt(),
         },
+        ShellCommand::Help => return Ok(BuildRequestResult::NoOp(help())),
     };
 
     Ok(BuildRequestResult::Request(request))
