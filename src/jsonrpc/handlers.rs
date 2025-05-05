@@ -14,7 +14,7 @@ use crate::{
         response::{ResponseResult, ResponseType},
         short_process::ShortProcess,
     },
-    log_info,
+    log_info, proc_info,
     run::{daemon::Daemon, proc::Process, statemachine::states::ProcessState},
 };
 use crate::{log_error, run::daemon::socket::AsyncUnixSocket};
@@ -47,6 +47,8 @@ fn handle_request_status(processes: &mut HashMap<String, Process>) -> ResponseTy
         short_processes.push(ShortProcess::from_process(p));
     }
 
+    log_info!("getting status for all processes");
+
     ResponseType::Result(ResponseResult::Status(short_processes))
 }
 
@@ -54,6 +56,7 @@ fn handle_request_status_single(processes: &mut HashMap<String, Process>, reques
     let process = match processes.get(request.name()) {
         Some(p) => p,
         None => {
+            log_error!("invalid status request",; request = request);
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InvalidParams,
                 message: format!("no process with name {} found", request.name()),
@@ -62,6 +65,8 @@ fn handle_request_status_single(processes: &mut HashMap<String, Process>, reques
         }
     };
 
+    log_info!("getting status for process",; process = process.name());
+
     ResponseType::Result(ResponseResult::StatusSingle(ShortProcess::from_process(process)))
 }
 
@@ -69,6 +74,7 @@ fn handle_request_start(processes: &mut HashMap<String, Process>, request: &Requ
     let process = match processes.get_mut(request.name()) {
         Some(p) => p,
         None => {
+            log_error!("invalid start request",; request = request);
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InvalidParams,
                 message: format!("no process with name {} found", request.name()),
@@ -78,6 +84,8 @@ fn handle_request_start(processes: &mut HashMap<String, Process>, request: &Requ
     };
 
     process.push_desired_state(ProcessState::Healthy);
+
+    proc_info!(&process, "starting");
 
     use ProcessState::*;
     match process.state() {
@@ -90,6 +98,7 @@ fn handle_request_stop(processes: &mut HashMap<String, Process>, request: &Reque
     let process = match processes.get_mut(request.name()) {
         Some(p) => p,
         None => {
+            log_error!("invalid stop request",; request = request);
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InvalidParams,
                 message: format!("no process with name {} found", request.name()),
@@ -99,6 +108,8 @@ fn handle_request_stop(processes: &mut HashMap<String, Process>, request: &Reque
     };
 
     process.push_desired_state(ProcessState::Idle);
+
+    proc_info!(&process, "stopping");
 
     use ProcessState::*;
     match process.state() {
@@ -111,6 +122,7 @@ fn handle_request_restart(processes: &mut HashMap<String, Process>, request: &Re
     let process = match processes.get_mut(request.name()) {
         Some(p) => p,
         None => {
+            log_error!("invalid restart request",; request = request);
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InvalidParams,
                 message: format!("no process with name {} found", request.name()),
@@ -121,6 +133,8 @@ fn handle_request_restart(processes: &mut HashMap<String, Process>, request: &Re
 
     process.push_desired_state(ProcessState::Ready);
 
+    proc_info!(&process, "restarting");
+
     ResponseType::Result(ResponseResult::Restart(format!("restarting process with name {} ", process.name())))
 }
 
@@ -128,6 +142,7 @@ fn handle_request_reload(daemon: &mut Daemon) -> ResponseType {
     let conf = match Config::from_file(daemon.config_path()) {
         Ok(c) => c,
         Err(e) => {
+            log_error!("could not reload config",; error = e.to_string());
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InternalError,
                 message: format!("error while parsing config file: {e}"),
@@ -167,6 +182,8 @@ fn handle_request_reload(daemon: &mut Daemon) -> ResponseType {
         }
     }
 
+    log_info!("reloading config");
+
     ResponseType::Result(ResponseResult::Reload)
 }
 
@@ -175,6 +192,8 @@ fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
         proc.push_desired_state(ProcessState::Stopped);
     }
     daemon.shutdown();
+
+    log_info!("received halt command, shutting down engine");
 
     ResponseType::Result(ResponseResult::Halt)
 }
@@ -295,6 +314,7 @@ async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> 
     let process = match daemon.processes().get(request.name()) {
         Some(p) => p,
         None => {
+            log_error!("invalid attach request",; request = request);
             return ResponseType::Error(ResponseError {
                 code: ErrorCode::InvalidParams,
                 message: format!("process {} not found", request.name()),
@@ -315,7 +335,7 @@ async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> 
         .await
     {
         let message = format!("could not attach to process {}: {e}", request.name());
-        log_error!("{message}");
+        log_error!("attach failed: {message}");
         return ResponseType::Error(ResponseError {
             code: ErrorCode::InternalError,
             message,
