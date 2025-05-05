@@ -125,7 +125,7 @@ fn build_request(command: &ShellCommand) -> BuildRequestResult {
         ShellCommand::Stop { process } => BuildRequestResult::RequestToEngine(build_request_stop(process)),
         ShellCommand::Attach { process, fd } => BuildRequestResult::RequestToEngine(build_request_attach(process, fd)),
         ShellCommand::Reload => BuildRequestResult::RequestToEngine(build_request_reload()),
-        ShellCommand::Exit => return BuildRequestResult::Exit,
+        ShellCommand::Exit => BuildRequestResult::Exit,
         ShellCommand::Engine { subcommand } => match subcommand {
             EngineSubcommand::Start { config_path } => BuildRequestResult::StartEngine {
                 config_path: config_path.to_owned(),
