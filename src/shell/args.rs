@@ -127,7 +127,7 @@ impl TryFrom<Vec<String>> for ShellCommand {
                 Ok(Self::Engine { subcommand })
             }
             "help" => Ok(Self::Help),
-            _ => Err(format!("command not found\n\n{}", help())),
+            _ => Err("command not found".to_string()),
         }
     }
 }
@@ -170,7 +170,10 @@ impl TryFrom<Vec<String>> for Args {
                 Err(_) => Some(dflt_socketpath()),
             }
         }
-        let command = ShellCommand::try_from(value)?;
+        let command = match ShellCommand::try_from(value) {
+            Ok(command) => command,
+            Err(e) => return Err(format!("{e}\n\n{}", help())),
+        };
         Ok(Self {
             command,
             socketpath: socketpath.unwrap(),
