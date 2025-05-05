@@ -55,7 +55,7 @@ fn build_request_status(name: &Option<String>) -> Request {
     Request::new(
         ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
         match name {
-            Some(name) => RequestType::new_status_single(&name),
+            Some(name) => RequestType::new_status_single(name),
             None => RequestType::new_status(),
         },
     )
@@ -118,10 +118,10 @@ fn start_engine(config_path: &str) -> Result<String, String> {
 fn build_request(command: &ShellCommand) -> Result<BuildRequestResult, String> {
     let request = match command {
         ShellCommand::Status { process } => build_request_status(process),
-        ShellCommand::Start { process } => build_request_start(&process),
-        ShellCommand::Restart { process } => build_request_restart(&process),
-        ShellCommand::Stop { process } => build_request_stop(&process),
-        ShellCommand::Attach { process, fd } => build_request_attach(&process, fd),
+        ShellCommand::Start { process } => build_request_start(process),
+        ShellCommand::Restart { process } => build_request_restart(process),
+        ShellCommand::Stop { process } => build_request_stop(process),
+        ShellCommand::Attach { process, fd } => build_request_attach(process, fd),
         ShellCommand::Reload => build_request_reload(),
         ShellCommand::Exit => return Ok(BuildRequestResult::Exit(0)),
         ShellCommand::Engine { subcommand } => match subcommand {
@@ -203,12 +203,6 @@ async fn response_to_str(response: &Response) -> String {
 
 async fn handle_input(input: Vec<String>) -> Result<String, String> {
     let arguments = Args::try_from(input)?;
-
-    let mut unix_stream: UnixStream = match UnixStream::connect(arguments.socketpath()).await {
-        Ok(s) => s,
-        Err(e) => return Err(format!("couldn't establish socket connection: {e}")),
-    };
-
     let request = match build_request(arguments.command()) {
         Ok(res) => match res {
             BuildRequestResult::Exit(code) => exit(code),
@@ -264,14 +258,7 @@ fn print_raw_mode(string: &str) {
 async fn shell() {
     let mut shell = shell::Shell::new("taskshell> ");
     while let Some(line) = shell.next_line() {
-        let msg = match handle_input(
-            line.split_ascii_whitespace()
-                .into_iter()
-                .map(String::from)
-                .collect::<Vec<String>>(),
-        )
-        .await
-        {
+        let msg = match handle_input(line.split_ascii_whitespace().map(String::from).collect::<Vec<String>>()).await {
             Ok(s) => s,
             Err(s) => s,
         };
