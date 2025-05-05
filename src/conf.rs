@@ -3,7 +3,7 @@ use std::{collections::HashMap, error::Error, fs};
 use proc::ProcessConfig;
 use serde::Deserialize;
 
-mod defaults;
+pub mod defaults;
 pub mod proc;
 mod tests;
 
