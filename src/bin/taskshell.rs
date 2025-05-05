@@ -88,7 +88,7 @@ fn engine_running() -> bool {
 
     let mut pid_file = match std::fs::File::open("/tmp/taskmaster.pid").map_err(|e| e.to_string()) {
         Ok(file) => file,
-        Err(_) => return true,
+        Err(_) => return false,
     };
 
     let mut pid = String::new();
@@ -125,8 +125,10 @@ fn build_request(command: &ShellCommand) -> Result<BuildRequestResult, String> {
         ShellCommand::Reload => build_request_reload(),
         ShellCommand::Exit => return Ok(BuildRequestResult::Exit(0)),
         ShellCommand::Engine { subcommand } => match subcommand {
-            EngineSubcommand::Start => {
-                /* start engine */
+            EngineSubcommand::Start { config_path } => {
+                if let Ok(msg) = start_engine(config_path) {
+                    println!("{msg}");
+                }
                 return Ok(BuildRequestResult::NoOp("taskmaster engine successfully started".to_string()));
             }
             EngineSubcommand::Stop => build_request_halt(),
