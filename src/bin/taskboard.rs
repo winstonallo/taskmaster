@@ -1,6 +1,7 @@
-use std::{io::Write, sync::atomic::AtomicU32, time::Duration};
+use std::{env, io::Write, process::exit, sync::atomic::AtomicU32, time::Duration};
 
 use tasklib::{
+    conf::defaults::dflt_socketpath,
     jsonrpc::{
         request::{Request, RequestType},
         response::{Response, ResponseResult, ResponseType},
@@ -17,8 +18,6 @@ use tokio::{
 
 static ID_COUNTER: AtomicU32 = AtomicU32::new(1);
 
-const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
-
 #[derive(Clone, Debug)]
 enum Content {
     Processes(Vec<ShortProcess>),
@@ -33,10 +32,11 @@ struct TaskBoard {
     terminal_width: usize,
     command_started: bool,
     command_arrow: bool,
+    socketpath: String,
 }
 
 impl TaskBoard {
-    pub fn new() -> Self {
+    pub fn new(socketpath: &str) -> Self {
         Self {
             scrolled_lines_down: 0,
             terminal_height: 0,
@@ -44,6 +44,7 @@ impl TaskBoard {
             command_arrow: false,
             command_started: false,
             content: Content::Empty,
+            socketpath: socketpath.to_owned(),
         }
     }
 
@@ -127,7 +128,7 @@ impl TaskBoard {
     }
 
     async fn get_status_from_daemon(&mut self) {
-        let response = match Self::make_json_rpc_status_request().await {
+        let response = match self.make_json_rpc_status_request().await {
             Ok(r) => r,
             Err(e) => {
                 self.content = Content::Error(e);
@@ -149,8 +150,8 @@ impl TaskBoard {
         };
     }
 
-    async fn make_json_rpc_status_request() -> Result<Response, String> {
-        let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
+    async fn make_json_rpc_status_request(&self) -> Result<Response, String> {
+        let mut unix_stream: UnixStream = match UnixStream::connect(&self.socketpath).await {
             Ok(s) => s,
             Err(e) => return Err(format!("couldn't establish socket connection: {e}\n")),
         };
@@ -231,9 +232,52 @@ fn move_cursor_up() {
     print!("\x1b[1A");
 }
 
+#[derive(Debug)]
+struct Args {
+    socketpath: String,
+}
+
+impl TryFrom<Vec<String>> for Args {
+    type Error = String;
+
+    fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
+        if value.len() == 0 {
+            return Ok(Self {
+                socketpath: match env::var("TASKMASTER_SOCKETPATH") {
+                    Ok(path) => path,
+                    Err(_) => dflt_socketpath(),
+                },
+            });
+        }
+
+        if value.len() != 2 {
+            return Err("usage: --socketpath|-s PATH".to_string());
+        }
+
+        if value[0] != "-s" && value[0] != "--socketpath" {
+            return Err(format!("unexpected option: {}\nusage: --socketpath|-s PATH", value[0]));
+        }
+
+        Ok(Self {
+            socketpath: value[1].to_owned(),
+        })
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    let mut taskboard = TaskBoard::new();
+    let mut args: Vec<String> = env::args().collect::<Vec<String>>();
+    args.remove(0);
+
+    let args = match Args::try_from(args) {
+        Ok(args) => args,
+        Err(e) => {
+            eprintln!("{e}");
+            exit(1);
+        }
+    };
+
+    let mut taskboard = TaskBoard::new(&args.socketpath);
     taskboard.run().await;
 }
 
