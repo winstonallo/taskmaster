@@ -11,6 +11,6 @@ RUN apt-get update && apt-get install -y \
 	nginx \
 	&& rm -rf /var/lib/apt/lists/*
 
-RUN rustup component add rustfmt
+RUN rustup component add rustfmt clippy
 
 RUN echo 'export PS1="\W> "' >> ~/.bashrc

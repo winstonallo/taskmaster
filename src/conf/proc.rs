@@ -40,14 +40,14 @@ use types::{AccessibleDirectory, AutoRestart, ExecutableFile, HealthCheck, StopS
 #[serde(deny_unknown_fields)]
 pub struct ProcessConfig {
     /// User to spawn the process as.
-    /// 
+    ///
     /// ```toml
     /// [processes.nginx]
     /// cmd = "/usr/sbin/nginx"
     /// workingdir = "/var/www"
     /// user = "www"
     /// ```
-    /// 
+    ///
     /// Defaults to the user taskmaster was spawned as.
     user: Option<String>,
 

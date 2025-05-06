@@ -1,5 +1,11 @@
 use std::{
-    collections::VecDeque, error::Error, ffi::CString, fs::File, os::unix::process::{CommandExt, ExitStatusExt}, process::{Child, Command, ExitStatus, Stdio}, time::{self, Duration, Instant}
+    collections::VecDeque,
+    error::Error,
+    ffi::CString,
+    fs::File,
+    os::unix::process::{CommandExt, ExitStatusExt},
+    process::{Child, Command, ExitStatus, Stdio},
+    time::{self, Duration, Instant},
 };
 
 use crate::{
@@ -148,7 +154,7 @@ impl Process {
 
     fn get_group_id(group_name: &str) -> Result<u32, String> {
         let c_group = CString::new(group_name).map_err(|e| format!("{e}"))?;
-    
+
         unsafe {
             let grp_ptr = libc::getgrnam(c_group.as_ptr());
             if grp_ptr.is_null() {
@@ -179,7 +185,6 @@ impl Process {
             None
         };
 
-
         let mut child = unsafe {
             Command::new(cmd_path)
                 .args(args)
@@ -188,7 +193,7 @@ impl Process {
                 .stdout(stdout_file)
                 .stderr(stderr_file)
                 .pre_exec(move || {
-                    if let Some(_) = uid {
+                    if uid.is_some() {
                         let empty: [gid_t; 1] = [gid.unwrap_or(0)];
 
                         if setgroups(1, empty.as_ptr()) != 0 {
