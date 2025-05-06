@@ -10,6 +10,8 @@ use std::io::stdout;
 use std::mem::MaybeUninit;
 use std::os::unix::io::AsRawFd;
 
+pub mod args;
+
 fn get_terminal_size() -> io::Result<(u16, u16)> {
     unsafe {
         let mut ws: winsize = MaybeUninit::zeroed().assume_init();

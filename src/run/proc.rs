@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     conf::{self, proc::ProcessConfig},
-    log_error, log_info, proc_info,
+    log_error, proc_info,
 };
 pub use error::ProcessError;
 use libc::umask;
@@ -199,9 +199,9 @@ impl Process {
 
     fn check_signal(&mut self, status: ExitStatus, pid: u32) -> Option<i32> {
         if let Some(signal) = status.signal() {
-            log_info!("PID {} terminated by signal {}", pid, signal);
-        } else {
-            log_info!("PID {} terminated without exit or signal information", pid)
+            proc_info!(self, "terminated",; pid = pid, signal = signal);
+        } else if self.state != ProcessState::Stopped {
+            proc_info!(self, "terminated without exit or signal information",; pid = pid)
         }
         self.state = ProcessState::Stopped;
         None

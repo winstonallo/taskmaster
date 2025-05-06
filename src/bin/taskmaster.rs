@@ -5,7 +5,7 @@ use std::{
     io::Write,
 };
 
-use tasklib::{conf::Config, log, log_error, log_info, run::daemon::Daemon};
+use tasklib::{conf::Config, log, log_info, run::daemon::Daemon};
 
 const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
 
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 
     if env::args().len() != 2 {
-        log_error!("usage: ./taskmaster ./path/to/config.toml");
+        eprintln!("usage: ./taskmaster ./path/to/config.toml");
         std::process::exit(1);
     }
 
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let conf = match Config::from_file(&arg) {
         Ok(c) => c,
         Err(e) => {
-            log_error!("{e}");
+            eprintln!("{e}");
             std::process::exit(1)
         }
     };
