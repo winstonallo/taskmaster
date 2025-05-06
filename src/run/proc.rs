@@ -167,7 +167,6 @@ impl Process {
 
     fn deescalate_privileges(uid: Option<u32>) -> Result<(), std::io::Error> {
         let empty: [gid_t; 1] = [uid.unwrap_or(0)];
-
         unsafe {
             if let Some(uid) = uid {
                 if setgroups(1, empty.as_ptr()) != 0 {
