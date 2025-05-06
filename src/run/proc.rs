@@ -165,6 +165,25 @@ impl Process {
         }
     }
 
+    fn deescalate_privileges(uid: Option<u32>) -> Result<(), std::io::Error> {
+        let empty: [gid_t; 1] = [uid.unwrap_or(0)];
+
+        unsafe {
+            if setgroups(1, empty.as_ptr()) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            if let Some(uid) = uid {
+                if setgid(uid) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if setuid(uid) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn spawn(&self) -> Result<Child, Box<dyn Error + Send + Sync>> {
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
@@ -179,11 +198,6 @@ impl Process {
         } else {
             None
         };
-        let gid = if let Some(user) = self.conf.user() {
-            Some(Process::get_group_id(user).map_err(|e| e.to_string())?)
-        } else {
-            None
-        };
 
         let mut child = unsafe {
             Command::new(cmd_path)
@@ -193,24 +207,7 @@ impl Process {
                 .stdout(stdout_file)
                 .stderr(stderr_file)
                 .pre_exec(move || {
-                    if uid.is_some() {
-                        let empty: [gid_t; 1] = [gid.unwrap_or(0)];
-
-                        if setgroups(1, empty.as_ptr()) != 0 {
-                            return Err(std::io::Error::last_os_error());
-                        }
-                    }
-                    if let Some(gid) = gid {
-                        if setgid(gid) != 0 {
-                            return Err(std::io::Error::last_os_error());
-                        }
-                    }
-
-                    if let Some(uid) = uid {
-                        if setuid(uid) != 0 {
-                            return Err(std::io::Error::last_os_error());
-                        }
-                    }
+                    Process::deescalate_privileges(uid);
                     umask(umask_val);
                     Ok(())
                 })
