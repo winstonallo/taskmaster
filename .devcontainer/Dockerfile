@@ -1,7 +1,5 @@
-# Use an official lightweight base image
-FROM --platform=linux/amd64 rust:1.86-bullseye
+FROM rust:1.86-slim
 
-# Install necessary tools
 RUN apt-get update && apt-get install -y \
 	build-essential \
 	curl \
