@@ -241,7 +241,7 @@ impl TryFrom<Vec<String>> for Args {
     type Error = String;
 
     fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
-        if value.len() == 0 {
+        if value.is_empty() {
             return Ok(Self {
                 socketpath: match env::var("TASKMASTER_SOCKETPATH") {
                     Ok(path) => path,
