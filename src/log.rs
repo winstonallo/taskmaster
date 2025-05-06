@@ -12,18 +12,14 @@ use serde_json::{Value, json};
 use crate::run::statemachine::states::ProcessState;
 
 struct Logger {
-    stderr: Mutex<Box<dyn Write + Send>>,
-    stdout: Mutex<Box<dyn Write + Send>>,
+    logfile: Mutex<Box<dyn Write + Send>>,
 }
 
 impl Logger {
     const FORMAT: &[u8] = b"%Y-%m-%d %H:%M:%S\0";
 
-    pub fn new(stdout: Box<dyn Write + Send>, stderr: Box<dyn Write + Send>) -> Self {
-        Self {
-            stdout: Mutex::new(stdout),
-            stderr: Mutex::new(stderr),
-        }
+    pub fn new(logfile: Box<dyn Write + Send>) -> Self {
+        Self { logfile: Mutex::new(logfile) }
     }
 
     fn get_time_fmt() -> String {
@@ -52,7 +48,7 @@ impl Logger {
 
         let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
 
-        let mut guard = self.stderr.lock().expect("Mutex lock panicked in another thread");
+        let mut guard = self.logfile.lock().expect("Mutex lock panicked in another thread");
         let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
     }
@@ -65,7 +61,7 @@ impl Logger {
 
         let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
 
-        let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
+        let mut guard = self.logfile.lock().expect("Mutex lock panicked in another thread");
         let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
     }
@@ -78,7 +74,7 @@ impl Logger {
 
         let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
 
-        let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
+        let mut guard = self.logfile.lock().expect("Mutex lock panicked in another thread");
         let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
     }
@@ -92,7 +88,7 @@ impl Logger {
 
         let json_str = serde_json::to_string(&log_entry).unwrap_or_else(|_| "{}".to_string());
 
-        let mut guard = self.stdout.lock().expect("Mutex lock panicked in another thread");
+        let mut guard = self.logfile.lock().expect("Mutex lock panicked in another thread");
         let _ = guard.write_all(json_str.as_bytes());
         let _ = guard.write_all(b"\n");
         panic!();
@@ -347,14 +343,14 @@ fn get_logger() -> &'static Logger {
         if INSTANCE.as_ref().is_none() {
             #[cfg(not(test))]
             INIT.call_once(|| {
-                use std::io::{stderr, stdout};
-                let logger = Logger::new(Box::new(stdout()), Box::new(stderr()));
+                use std::io::stdout;
+                let logger = Logger::new(Box::new(stdout()));
                 INSTANCE = Some(logger);
             });
             #[cfg(test)]
             INIT.call_once(|| {
                 use std::io::sink;
-                let logger = Logger::new(Box::new(sink()), Box::new(sink()));
+                let logger = Logger::new(Box::new(sink()));
                 INSTANCE = Some(logger);
             });
         }
@@ -367,9 +363,8 @@ fn get_logger() -> &'static Logger {
 
 pub fn init(logfile: &str) -> Result<(), String> {
     let stdout = std::fs::File::create(logfile).map_err(|e| e.to_string())?;
-    let stderr = std::fs::File::create(logfile).map_err(|e| e.to_string())?;
 
-    let logger = Logger::new(Box::new(stdout), Box::new(stderr));
+    let logger = Logger::new(Box::new(stdout));
     unsafe {
         INSTANCE = Some(logger);
     }

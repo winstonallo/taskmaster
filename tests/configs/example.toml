@@ -77,11 +77,6 @@ env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
 # process is healthy. Overrides `startttime`.
 [processes.sleep.healthcheck]
 
-# Time (in seconds) given for the program to startup - if the program 
-# runs for this time, it will be considered healthy.
-# Defaults to 5, max 65536.
-starttime = 1
-
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.

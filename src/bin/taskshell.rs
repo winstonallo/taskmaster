@@ -1,26 +1,30 @@
 use std::{
     env::args,
-    io::Read,
-    process::{Command, exit},
-    sync::atomic::AtomicU32,
+    io::{BufRead, Read},
+    path::Path,
+    process::{Command, Stdio, exit},
+    sync::{atomic::AtomicU32, mpsc},
+    thread,
+    time::Duration,
 };
-
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     net::UnixStream,
 };
 
 use tasklib::{
+    conf::PID_FILE_PATH,
     jsonrpc::{
         request::{AttachFile, RequestType},
         response::{Response, ResponseType},
     },
-    shell,
+    shell::{
+        self,
+        args::{Args, EngineSubcommand, ShellCommand, help},
+    },
 };
 
 use tasklib::jsonrpc::request::Request;
-
-const SOCKET_PATH: &str = "/tmp/.taskmaster.sock";
 
 async fn read_from_stream<R>(reader: &mut BufReader<R>) -> Result<String, String>
 where
@@ -50,12 +54,14 @@ fn build_request_halt() -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_halt())
 }
 
-fn build_request_status() -> Request {
-    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status())
-}
-
-fn build_request_status_single(name: &str) -> Request {
-    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_status_single(name))
+fn build_request_status(name: &Option<String>) -> Request {
+    Request::new(
+        ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+        match name {
+            Some(name) => RequestType::new_status_single(name),
+            None => RequestType::new_status(),
+        },
+    )
 }
 
 fn build_request_start(name: &str) -> Request {
@@ -70,11 +76,15 @@ fn build_request_stop(name: &str) -> Request {
     Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_stop(name))
 }
 
-fn build_request_attach(name: &str, to: &str) -> Request {
-    Request::new(
-        ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
-        RequestType::new_attach(name, if to == "stdout" { AttachFile::StdOut } else { AttachFile::StdErr }),
-    )
+fn build_request_attach(name: &str, to: &AttachFile) -> Request {
+    Request::new(ID_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed), RequestType::new_attach(name, to))
+}
+
+enum BuildRequestResult {
+    RequestToEngine(Request),
+    Help,
+    StartEngine { config_path: String },
+    Exit,
 }
 
 fn engine_running() -> bool {
@@ -82,7 +92,7 @@ fn engine_running() -> bool {
 
     let mut pid_file = match std::fs::File::open("/tmp/taskmaster.pid").map_err(|e| e.to_string()) {
         Ok(file) => file,
-        Err(_) => return true,
+        Err(_) => return false,
     };
 
     let mut pid = String::new();
@@ -99,72 +109,59 @@ fn start_engine(config_path: &str) -> Result<String, String> {
         return Ok("taskmaster is already running".to_string());
     }
 
-    if let Err(e) = Command::new("cargo")
+    let mut child = match Command::new("cargo")
         .args(["run", "--bin", "taskmaster", "--quiet", config_path])
+        .stderr(Stdio::piped())
         .spawn()
     {
-        return Err(e.to_string());
-    }
-
-    Ok("started taskmaster engine".to_string())
-}
-
-fn build_request(arguments: &Vec<&str>) -> Result<Request, &'static str> {
-    let method = *arguments.first().unwrap();
-
-    let request = match method {
-        "status" => {
-            if arguments.len() == 2 {
-                build_request_status_single(arguments[1])
-            } else if arguments.len() == 1 {
-                build_request_status()
-            } else {
-                return Err("usage: status OR status PROCESS_NAME");
-            }
-        }
-        "start" => {
-            if arguments.len() != 2 {
-                return Err("usage: start PROCESS_NAME");
-            }
-            build_request_start(arguments[1])
-        }
-        "restart" => {
-            if arguments.len() != 2 {
-                return Err("usage: restart PROCESS_NAME");
-            }
-            build_request_restart(arguments[1])
-        }
-        "stop" => {
-            if arguments.len() != 2 {
-                return Err("usage: stop PROCESS_NAME");
-            }
-            build_request_stop(arguments[1])
-        }
-        "reload" => {
-            if arguments.len() != 1 {
-                return Err("usage: reload");
-            }
-            build_request_reload()
-        }
-        "halt" => {
-            if arguments.len() != 1 {
-                return Err("usage: halt");
-            }
-            build_request_halt()
-        }
-        "attach" => {
-            if !(arguments.len() == 3 && ["stdout", "stderr"].contains(&arguments[2])) {
-                return Err("usage: attach PROCESS_NAME {stdout | stderr}");
-            }
-            build_request_attach(arguments[1], arguments[2])
-        }
-        "exit" => exit(0),
-        _ => {
-            return Err("method not implemented");
-        }
+        Ok(child) => child,
+        Err(e) => return Err(e.to_string()),
     };
 
-    Ok(request)
+    let stderr = child.stderr.take().unwrap();
+    let (tx, rx) = mpsc::channel();
+    thread::spawn(move || {
+        let reader = std::io::BufReader::new(stderr);
+        for line in reader.lines().map_while(Result::ok) {
+            let _ = tx.send(line);
+        }
+    });
+
+    let pid_file = Path::new(PID_FILE_PATH);
+    for backoff in [5, 10, 20, 40, 80] {
+        if pid_file.exists() {
+            return Ok("started taskmaster engine".to_string());
+        }
+
+        if let Ok(stderr_output) = rx.try_recv() {
+            return Err(format!("failed to start taskmaster engine: {stderr_output}"));
+        }
+
+        thread::sleep(Duration::from_millis(backoff * 100));
+    }
+
+    let _ = child.kill();
+
+    Err("taskmaster engine not running after 15 seconds, no information on stderr - process was killed".to_string())
+}
+
+fn build_request(command: &ShellCommand) -> BuildRequestResult {
+    match command {
+        ShellCommand::Status { process } => BuildRequestResult::RequestToEngine(build_request_status(process)),
+        ShellCommand::Start { process } => BuildRequestResult::RequestToEngine(build_request_start(process)),
+        ShellCommand::Restart { process } => BuildRequestResult::RequestToEngine(build_request_restart(process)),
+        ShellCommand::Stop { process } => BuildRequestResult::RequestToEngine(build_request_stop(process)),
+        ShellCommand::Attach { process, fd } => BuildRequestResult::RequestToEngine(build_request_attach(process, fd)),
+        ShellCommand::Reload => BuildRequestResult::RequestToEngine(build_request_reload()),
+        ShellCommand::Exit => BuildRequestResult::Exit,
+        ShellCommand::Engine { subcommand } => match subcommand {
+            EngineSubcommand::Start { config_path } => BuildRequestResult::StartEngine {
+                config_path: config_path.to_owned(),
+            },
+            EngineSubcommand::Stop => BuildRequestResult::RequestToEngine(build_request_halt()),
+        },
+        ShellCommand::Help => BuildRequestResult::Help,
+    }
 }
 
 async fn attach(name: &str, socket_path: &str, to: &str) -> String {
@@ -176,7 +173,7 @@ async fn attach(name: &str, socket_path: &str, to: &str) -> String {
             let _ = tx_clone.send(()).await;
         }
     });
-
+    tokio::time::sleep(Duration::from_millis(50)).await;
     let stream = match UnixStream::connect(socket_path).await {
         Ok(stream) => stream,
         Err(e) => {
@@ -230,27 +227,23 @@ async fn response_to_str(response: &Response) -> String {
     }
 }
 
-async fn handle_input(input: String) -> Result<String, String> {
-    let arguments: Vec<&str> = input.split_ascii_whitespace().collect();
-    if arguments.is_empty() {
-        return Err("no non white space input given".to_owned());
-    }
+async fn handle_input(input: Vec<String>) -> Result<String, String> {
+    let arguments = Args::try_from(input)?;
 
-    if arguments[0] == "engine" && arguments[1] == "start" {
-        if arguments.len() != 3 {
-            return Err("usage: engine start CONFIG_PATH".to_string());
-        }
-        return start_engine(arguments[2]);
-    }
-
-    let mut unix_stream: UnixStream = match UnixStream::connect(SOCKET_PATH).await {
-        Ok(s) => s,
-        Err(e) => return Err(format!("couldn't establish socket connection: {e}")),
+    let request = match build_request(arguments.command()) {
+        BuildRequestResult::Exit => exit(0),
+        BuildRequestResult::StartEngine { config_path } => return start_engine(&config_path),
+        BuildRequestResult::Help => return Ok(help()),
+        BuildRequestResult::RequestToEngine(request) => request,
     };
 
-    let request = match build_request(&arguments) {
-        Ok(request) => request,
-        Err(e) => return Err(e.to_owned()),
+    let mut unix_stream: UnixStream = match UnixStream::connect(arguments.socketpath()).await {
+        Ok(s) => s,
+        Err(e) => {
+            return Err(format!(
+                "couldn't establish socket connection: {e} - verify that \n  1. the taskmaster engine is running\n  2. you are using the correct socket path"
+            ));
+        }
     };
 
     let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
@@ -274,14 +267,6 @@ async fn handle_input(input: String) -> Result<String, String> {
     Ok(response_to_str(&response).await)
 }
 
-async fn docker(args: Vec<String>) {
-    let msg = match handle_input(args.join(" ")).await {
-        Ok(s) => s,
-        Err(s) => s,
-    };
-    println!("{msg}");
-}
-
 fn print_raw_mode(string: &str) {
     let mut raw_new_line = String::new();
     raw_new_line.push('\n');
@@ -294,14 +279,11 @@ fn print_raw_mode(string: &str) {
 async fn shell() {
     let mut shell = shell::Shell::new("taskshell> ");
     while let Some(line) = shell.next_line() {
-        if line.trim() == "exit" {
-            break;
-        }
-        let msg = match handle_input(line).await {
+        let msg = match handle_input(line.split_ascii_whitespace().map(String::from).collect::<Vec<String>>()).await {
             Ok(s) => s,
             Err(s) => s,
         };
-        print_raw_mode(&msg);
+        print_raw_mode(&format!("{msg}\n"));
     }
 }
 
@@ -319,6 +301,12 @@ async fn main() {
 
     match args.len() {
         0 => shell().await,
-        _ => docker(args).await,
+        _ => match handle_input(args).await {
+            Ok(data) => print_raw_mode(&format!("{data}\n")),
+            Err(e) => {
+                print_raw_mode(&format!("{e}\n"));
+                exit(1);
+            }
+        },
     };
 }

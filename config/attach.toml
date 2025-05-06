@@ -1,5 +1,4 @@
-socketpath = "/tmp/.taskmaster.sock"
-
+socketpath = "/tmp/taskmaster.sock"
 authgroup = "winstonallo"
 
 [processes.sleepwrite]
