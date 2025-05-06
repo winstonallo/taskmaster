@@ -39,6 +39,18 @@ use types::{AccessibleDirectory, AutoRestart, ExecutableFile, HealthCheck, StopS
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessConfig {
+    /// User to spawn the process as.
+    /// 
+    /// ```toml
+    /// [processes.nginx]
+    /// cmd = "/usr/sbin/nginx"
+    /// workingdir = "/var/www"
+    /// user = "www"
+    /// ```
+    /// 
+    /// Defaults to the user taskmaster was spawned as.
+    user: Option<String>,
+
     /// Command to run in order to start this process.
     ///
     /// ```toml
@@ -233,6 +245,10 @@ pub struct ProcessConfig {
 
 #[allow(unused)]
 impl ProcessConfig {
+    pub fn user(&self) -> &Option<String> {
+        &self.user
+    }
+
     pub fn cmd(&self) -> &types::ExecutableFile {
         &self.cmd
     }
@@ -310,6 +326,7 @@ impl Default for ProcessConfig {
     fn default() -> Self {
         use libc::SIGTERM;
         Self {
+            user: None,
             cmd: types::ExecutableFile::default(),
             args: defaults::dflt_args(),
             processes: 1,
