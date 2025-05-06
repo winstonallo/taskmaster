@@ -207,7 +207,7 @@ impl Process {
                 .stdout(stdout_file)
                 .stderr(stderr_file)
                 .pre_exec(move || {
-                    Process::deescalate_privileges(uid);
+                    Process::deescalate_privileges(uid)?;
                     umask(umask_val);
                     Ok(())
                 })
