@@ -1,0 +1,15 @@
+authgroup = "root"
+
+[processes.root]
+
+cmd = "/workspaces/taskmaster/executables/privilege_deescalation.sh"
+workingdir = "/tmp"
+autostart = true
+
+
+[processes.taskmaster]
+
+user = "taskmaster"
+cmd = "/workspaces/taskmaster/executables/privilege_deescalation.sh"
+workingdir = "/tmp"
+autostart = true
