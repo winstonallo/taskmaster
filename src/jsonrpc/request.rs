@@ -94,10 +94,10 @@ impl RequestType {
         Self::Halt
     }
 
-    pub fn new_attach(name: &str, to: AttachFile) -> Self {
+    pub fn new_attach(name: &str, to: &AttachFile) -> Self {
         Self::Attach(RequestAttach {
             params: ParamsName { name: name.to_owned() },
-            to,
+            to: to.to_owned(),
         })
     }
 }
@@ -139,11 +139,23 @@ impl RequestStop {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, Debug, Clone, Copy)]
 #[serde(rename_all = "lowercase")]
 pub enum AttachFile {
     StdErr,
     StdOut,
+}
+
+impl TryFrom<&str> for AttachFile {
+    type Error = String;
+
+    fn try_from(value: &str) -> Result<Self, Self::Error> {
+        match value {
+            "stdout" => Ok(Self::StdOut),
+            "stderr" => Ok(Self::StdErr),
+            _ => Err(format!("{value}: invalid subcommand for 'attach' (expected stdout | stderr)")),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Debug)]

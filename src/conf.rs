@@ -6,7 +6,9 @@ use defaults::{dflt_authgroup, dflt_logfile, dflt_socketpath};
 use proc::{ProcessConfig, types::WritableFile};
 use serde::Deserialize;
 
-mod defaults;
+pub const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
+
+pub mod defaults;
 pub mod proc;
 mod tests;
 
