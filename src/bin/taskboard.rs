@@ -243,10 +243,7 @@ impl TryFrom<Vec<String>> for Args {
     fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
         if value.is_empty() {
             return Ok(Self {
-                socketpath: match env::var("TASKMASTER_SOCKETPATH") {
-                    Ok(path) => path,
-                    Err(_) => dflt_socketpath(),
-                },
+                socketpath: env::var("TASKMASTER_SOCKETPATH").unwrap_or(dflt_socketpath()),
             });
         }
 

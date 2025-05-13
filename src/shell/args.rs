@@ -168,10 +168,7 @@ impl TryFrom<Vec<String>> for Args {
         }
 
         if socketpath.is_none() {
-            socketpath = match env::var("TASKMASTER_SOCKETPATH") {
-                Ok(val) => Some(val),
-                Err(_) => Some(dflt_socketpath()),
-            }
+            socketpath = Some(env::var("TASKMASTER_SOCKETPATH").unwrap_or(dflt_socketpath()));
         }
         let command = match ShellCommand::try_from(value) {
             Ok(command) => command,

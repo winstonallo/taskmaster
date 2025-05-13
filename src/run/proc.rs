@@ -1,6 +1,7 @@
 use std::{
     collections::VecDeque,
     error::Error,
+    ffi::CString,
     fs::File,
     os::unix::process::{CommandExt, ExitStatusExt},
     process::{Child, Command, ExitStatus, Stdio},
@@ -12,7 +13,7 @@ use crate::{
     log_error, proc_info,
 };
 pub use error::ProcessError;
-use libc::umask;
+use libc::{gid_t, setgid, setgroups, setuid, umask};
 
 use super::statemachine::{healthcheck::HealthCheckRunner, states::ProcessState};
 
@@ -151,6 +152,37 @@ impl Process {
         Instant::now().duration_since(started_at).as_secs() >= self.healthcheck.starttime() as u64
     }
 
+    fn get_group_id(group_name: &str) -> Result<u32, String> {
+        let c_group = CString::new(group_name).map_err(|e| format!("{e}"))?;
+
+        unsafe {
+            let grp_ptr = libc::getgrnam(c_group.as_ptr());
+            if grp_ptr.is_null() {
+                Err(format!("group '{group_name}' not found"))
+            } else {
+                Ok((*grp_ptr).gr_gid)
+            }
+        }
+    }
+
+    fn deescalate_privileges(uid: Option<u32>) -> Result<(), std::io::Error> {
+        let empty: [gid_t; 1] = [uid.unwrap_or(0)];
+        unsafe {
+            if let Some(uid) = uid {
+                if setgroups(1, empty.as_ptr()) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if setgid(uid) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+                if setuid(uid) != 0 {
+                    return Err(std::io::Error::last_os_error());
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn spawn(&self) -> Result<Child, Box<dyn Error + Send + Sync>> {
         let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
         let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
@@ -160,6 +192,11 @@ impl Process {
         let working_dir = self.conf.workingdir().path();
         let stop_signals = self.conf.stopsignals().to_owned();
         let umask_val = self.conf.umask();
+        let uid = if let Some(user) = self.conf.user() {
+            Some(Process::get_group_id(user).map_err(|e| e.to_string())?)
+        } else {
+            None
+        };
 
         let mut child = unsafe {
             Command::new(cmd_path)
@@ -169,6 +206,7 @@ impl Process {
                 .stdout(stdout_file)
                 .stderr(stderr_file)
                 .pre_exec(move || {
+                    Process::deescalate_privileges(uid)?;
                     umask(umask_val);
                     Ok(())
                 })
