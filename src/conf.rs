@@ -1,9 +1,14 @@
 use std::{collections::HashMap, error::Error, fs};
 
-use proc::ProcessConfig;
+#[cfg(test)]
+use defaults::{dflt_authgroup, dflt_logfile, dflt_socketpath};
+
+use proc::{ProcessConfig, types::WritableFile};
 use serde::Deserialize;
 
-mod defaults;
+pub const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
+
+pub mod defaults;
 pub mod proc;
 mod tests;
 
@@ -28,6 +33,15 @@ pub struct Config {
     /// ```
     #[serde(default = "defaults::dflt_authgroup")]
     authgroup: String,
+
+    /// Path to the file the logs will be written to.
+    ///
+    /// Default:
+    /// ```toml
+    /// logfile = "/tmp/tasmaster.log"
+    /// ```
+    #[serde(default = "defaults::dflt_logfile")]
+    logfile: WritableFile,
 
     /// Map of processes to configure individually. For process-level configuration,
     /// see [`crate::conf::proc::ProcessConfig`].
@@ -96,14 +110,19 @@ impl Config {
     pub fn authgroup(&self) -> &str {
         &self.authgroup
     }
+
+    pub fn logfile(&self) -> &str {
+        self.logfile.path()
+    }
 }
 
 #[cfg(test)]
 impl Default for Config {
     fn default() -> Self {
         Self {
-            socketpath: "socketpath".to_string(),
-            authgroup: "authgroup".to_string(),
+            socketpath: dflt_socketpath(),
+            authgroup: dflt_authgroup(),
+            logfile: dflt_logfile(),
             processes: HashMap::new(),
         }
     }

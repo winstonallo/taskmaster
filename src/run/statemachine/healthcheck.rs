@@ -1,11 +1,12 @@
 #![allow(unused)]
 use serde::Deserialize;
 use std::{
+    fmt::UpperExp,
     time::{Duration, Instant},
     vec,
 };
 
-use crate::conf::proc::types::{HealthCheck, HealthCheckType};
+use crate::conf::proc::types::{CommandHealthCheck, HealthCheck, HealthCheckType, UptimeHealthCheck};
 
 #[derive(Debug)]
 pub struct HealthCheckRunner {
@@ -41,28 +42,28 @@ impl HealthCheckRunner {
 
     pub fn cmd(&self) -> String {
         match &self.check {
-            HealthCheckType::Command { cmd, .. } => cmd.to_string(),
+            HealthCheckType::Command(CommandHealthCheck { cmd, .. }) => cmd.to_string(),
             _ => panic!("cmd() called on an Uptime HealthCheck"),
         }
     }
 
     pub fn args(&self) -> Vec<String> {
         match &self.check {
-            HealthCheckType::Command { cmd: _, args, .. } => args.clone(),
+            HealthCheckType::Command(CommandHealthCheck { cmd: _, args, .. }) => args.clone(),
             _ => panic!("args() called on an Uptime HealthCheck"),
         }
     }
 
     pub fn timeout(&self) -> usize {
         match &self.check {
-            HealthCheckType::Command { cmd: _, args: _, timeout } => *timeout,
+            HealthCheckType::Command(CommandHealthCheck { cmd: _, args: _, timeout }) => *timeout,
             _ => panic!("timeout() called on an Uptime HealthCheck"),
         }
     }
 
     pub fn starttime(&self) -> u16 {
         match &self.check {
-            HealthCheckType::Uptime { starttime } => *starttime,
+            HealthCheckType::Uptime(UptimeHealthCheck { starttime }) => *starttime,
             _ => panic!("starttime() called on a Command HealthCheck"),
         }
     }
@@ -140,11 +141,11 @@ mod tests {
     impl HealthCheckRunner {
         pub fn command() -> Self {
             Self {
-                check: HealthCheckType::Command {
+                check: HealthCheckType::Command(CommandHealthCheck {
                     cmd: "/usr/bin/echo".to_string(),
                     args: Vec::new(),
                     timeout: 5,
-                },
+                }),
                 failures: 0,
                 task: None,
                 receiver: None,
@@ -155,7 +156,7 @@ mod tests {
 
         pub fn uptime() -> Self {
             Self {
-                check: HealthCheckType::Uptime { starttime: 5 },
+                check: HealthCheckType::Uptime(UptimeHealthCheck { starttime: 5 }),
                 failures: 0,
                 task: None,
                 receiver: None,

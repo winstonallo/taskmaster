@@ -1,3 +1,4 @@
 [alias]
 tm = "run --bin taskmaster"
 ts = "run --bin taskshell"
+tb = "run --bin taskboard"

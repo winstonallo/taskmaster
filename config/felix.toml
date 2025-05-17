@@ -10,16 +10,16 @@ socketpath = "/tmp/.taskmaster.sock"
 authgroup = "root"
 
 # Process name.
-[processes.ls]
+[processes.sleep]
 
 # Command to run in order to start this process.
 # Must be an absolute path.
 # Required.
-cmd = "/workspaces/taskmaster/a.out"
+cmd = "/bin/sleep"
 
 # Arguments to pass to 'cmd'.
 # Defaults to [].
-args = []
+args = ["3"]
 
 # Number of processes to start.
 # Defaults to 1, max 255.

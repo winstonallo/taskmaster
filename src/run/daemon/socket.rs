@@ -23,7 +23,7 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
     let c_group = CString::new(group_name).map_err(|e| format!("{e}"))?;
 
     unsafe {
-        let grp_ptr = getgrnam(c_group.as_ptr());
+        let grp_ptr = libc::getgrnam(c_group.as_ptr());
         if grp_ptr.is_null() {
             Err(format!("group '{group_name}' not found"))
         } else {
@@ -42,7 +42,7 @@ fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
     let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {e}"))?;
 
     unsafe {
-        if chown(c_path.as_ptr(), u32::MAX, gid as gid_t) != 0 {
+        if libc::chown(c_path.as_ptr(), u32::MAX, gid as libc::gid_t) != 0 {
             return Err(format!(
                 "could not change group ownership: {} - do you have permissions for group '{authgroup}'?",
                 std::io::Error::last_os_error(),

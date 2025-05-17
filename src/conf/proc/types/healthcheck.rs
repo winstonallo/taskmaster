@@ -15,51 +15,56 @@ fn dflt_retries() -> usize {
 #[derive(Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum HealthCheckType {
-    Command {
-        /// Command to run as a healthcheck.
-        ///
-        /// ```toml
-        /// cmd = "/usr/bin/ping"
-        /// ```
-        ///
-        /// Required.
-        cmd: String,
+    Command(CommandHealthCheck),
+    Uptime(UptimeHealthCheck),
+}
 
-        /// Arguments to pass to `cmd`.
-        ///
-        /// ```toml
-        /// cmd = "/usr/bin/ping"
-        /// args = ["-v"]
-        /// ```
-        ///
-        /// Defaults to `[]`.
-        #[serde(default)]
-        args: Vec<String>,
+#[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct CommandHealthCheck {
+    /// Command to run as a healthcheck.
+    ///
+    /// ```toml
+    /// cmd = "/usr/bin/ping"
+    /// ```
+    ///
+    /// Required.
+    pub cmd: String,
 
-        /// Time (in seconds) to let the healthcheck command run through before
-        /// considering it failed.
-        ///
-        /// Arguments to pass to `cmd`.
-        ///
-        /// ```toml
-        /// cmd = "/usr/bin/ping"
-        /// timeout = 10
-        /// ```
-        ///
-        /// Defaults to `[]`.
-        ///
-        /// Defaults to `10`.
-        #[serde(default = "dflt_timeout")]
-        timeout: usize,
-    },
-    Uptime {
-        /// Time (in seconds) after which the process will be deemed healthy.
-        ///
-        /// starttime = 10
-        ///
-        /// Defaults to `1`, max `65536`.
-        starttime: u16,
-    },
+    /// cmd: String,
+
+    /// Arguments to pass to `cmd`.
+    ///
+    /// ```toml
+    /// cmd = "/usr/bin/ping"
+    /// args = ["-v"]
+    /// ```
+    ///
+    /// Defaults to `[]`.
+    #[serde(default)]
+    pub args: Vec<String>,
+
+    /// Time (in seconds) to wait for the healthcheck to exit.
+    ///
+    /// ```toml
+    /// cmd = "/usr/bin/ping"
+    /// timeout = 5
+    /// ```
+    ///
+    /// Defaults to `10`.
+    #[serde(default = "dflt_timeout")]
+    pub timeout: usize,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+#[serde(deny_unknown_fields)]
+pub struct UptimeHealthCheck {
+    /// Time (in seconds) after which the process will be deemed healthy.
+    ///
+    /// starttime = 10
+    ///
+    /// Defaults to `1`, max `65536`.
+    pub starttime: u16,
 }
 
 #[allow(unused)]
@@ -111,7 +116,7 @@ pub struct HealthCheck {
 impl Default for HealthCheck {
     fn default() -> Self {
         Self {
-            check: HealthCheckType::Uptime { starttime: 1 },
+            check: HealthCheckType::Uptime(UptimeHealthCheck { starttime: 1 }),
             retries: dflt_retries(),
             backoff: dflt_backoff(),
         }
@@ -125,28 +130,28 @@ impl HealthCheck {
 
     pub fn cmd(&self) -> &str {
         match &self.check {
-            HealthCheckType::Command { cmd, .. } => cmd,
+            HealthCheckType::Command(CommandHealthCheck { cmd, .. }) => cmd,
             _ => panic!("cmd() called on an Uptime HealthCheck"),
         }
     }
 
     pub fn args(&self) -> &[String] {
         match &self.check {
-            HealthCheckType::Command { cmd: _, args, timeout: _ } => args,
+            HealthCheckType::Command(CommandHealthCheck { cmd: _, args, timeout: _ }) => args,
             _ => panic!("args() called on an Uptime HealthCheck"),
         }
     }
 
     pub fn starttime(&self) -> u16 {
         match &self.check {
-            HealthCheckType::Uptime { starttime } => *starttime,
+            HealthCheckType::Uptime(UptimeHealthCheck { starttime }) => *starttime,
             _ => panic!("starttime() called on a Command HealthCheck"),
         }
     }
 
     pub fn timeout(&self) -> usize {
         match &self.check {
-            HealthCheckType::Command { cmd: _, args: _, timeout } => *timeout,
+            HealthCheckType::Command(CommandHealthCheck { cmd: _, args: _, timeout }) => *timeout,
             _ => panic!("timeout() called on an Uptime HealthCheck"),
         }
     }
@@ -190,11 +195,11 @@ mod tests {
     impl HealthCheck {
         pub fn command() -> Self {
             Self {
-                check: HealthCheckType::Command {
+                check: HealthCheckType::Command(CommandHealthCheck {
                     cmd: "/usr/bin/echo".to_string(),
                     args: Vec::new(),
                     timeout: 5,
-                },
+                }),
                 retries: 5,
                 backoff: 5,
             }
@@ -202,7 +207,7 @@ mod tests {
 
         pub fn uptime() -> Self {
             Self {
-                check: HealthCheckType::Uptime { starttime: 1 },
+                check: HealthCheckType::Uptime(UptimeHealthCheck { starttime: 1 }),
                 retries: 5,
                 backoff: 5,
             }

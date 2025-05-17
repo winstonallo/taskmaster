@@ -4,6 +4,7 @@ mod from_str {
 
     use crate::conf::{
         Config,
+        defaults::dflt_socketpath,
         proc::{defaults, types},
     };
 
@@ -28,7 +29,7 @@ mod from_str {
     #[test]
     fn socketpath_default() {
         let conf_str = "[processes.nginx]\ncmd = \"/usr/sbin/nginx\"\nworkingdir = \"/tmp\"\n";
-        assert_eq!(Config::from_str(conf_str).expect("could not parse config").socketpath(), "/tmp/.taskmaster.sock".to_string())
+        assert_eq!(Config::from_str(conf_str).expect("could not parse config").socketpath(), dflt_socketpath())
     }
 
     #[test]

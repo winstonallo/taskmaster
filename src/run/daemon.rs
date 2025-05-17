@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use socket::AsyncUnixSocket;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::UnixStream;
+use tokio::signal::unix::{SignalKind, signal};
 use tokio::time::sleep;
 
 use super::proc::{self, Process};
@@ -13,6 +14,7 @@ use super::statemachine::states::ProcessState;
 use crate::conf::Config;
 use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
+use crate::log_info;
 use crate::{
     conf,
     jsonrpc::{handlers::handle_request, request::Request},
@@ -82,6 +84,7 @@ impl Daemon {
     }
 
     pub fn shutdown(&mut self) {
+        let _ = std::fs::remove_file("/tmp/taskmaster.pid");
         self.shutting_down = true;
     }
 
@@ -195,6 +198,7 @@ impl Daemon {
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
         let sender = Arc::new(sender);
+        let mut sigint = signal(SignalKind::interrupt())?;
 
         loop {
             tokio::select! {
@@ -215,7 +219,7 @@ impl Daemon {
                             });
                         },
                         Err(e) => {
-                            log_error!("Failed to accept connection: {e}");
+                            log_error!("failed to accept connection: {e}");
                             continue;
                         }
                     }
@@ -251,6 +255,10 @@ impl Daemon {
                     if  self.shutting_down && self.no_process_running(){
                         return Ok(());
                     }
+                }
+                _ = sigint.recv() => {
+                    log_info!("received SIGINT, exiting");
+                    self.shutdown();
                 }
             }
         }
@@ -330,7 +338,7 @@ fn handler_reload() {
 mod tests {
 
     use crate::conf::proc::ProcessConfig;
-    use crate::conf::proc::types::{AutoRestart, HealthCheck, HealthCheckType};
+    use crate::conf::proc::types::{AutoRestart, CommandHealthCheck, HealthCheck, HealthCheckType, UptimeHealthCheck};
 
     use super::conf::Config;
 
@@ -369,7 +377,7 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_completed_uptime() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
+        let hc = hc.set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 2 }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sleep")
@@ -390,7 +398,7 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_failed_uptime() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 2 });
+        let hc = hc.set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 2 }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")
@@ -414,7 +422,7 @@ mod tests {
     async fn healthcheck_to_failed_retry() {
         let mut hc = HealthCheck::default();
         let hc = hc
-            .set_check(HealthCheckType::Uptime { starttime: 2 })
+            .set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 2 }))
             .set_backoff(1)
             .set_retries(2);
         let mut proc = ProcessConfig::default();
@@ -448,7 +456,7 @@ mod tests {
     async fn healthcheck_to_stopped_max_retries_reached() {
         let mut hc = HealthCheck::default();
         let hc = hc
-            .set_check(HealthCheckType::Uptime { starttime: 2 })
+            .set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 2 }))
             .set_backoff(1)
             .set_retries(1);
         let mut proc = ProcessConfig::default();
@@ -491,7 +499,7 @@ mod tests {
     #[tokio::test]
     async fn healthy_to_failed() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Uptime { starttime: 1 });
+        let hc = hc.set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 1 }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")
@@ -536,7 +544,7 @@ mod tests {
     async fn healthy_to_failed_max_retries_reached() {
         let mut hc = HealthCheck::default();
         let hc = hc
-            .set_check(HealthCheckType::Uptime { starttime: 1 })
+            .set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 1 }))
             .set_retries(1)
             .set_backoff(1);
         let mut proc = ProcessConfig::default();
@@ -661,11 +669,11 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_healthy_command() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Command {
+        let hc = hc.set_check(HealthCheckType::Command(CommandHealthCheck {
             cmd: "sleep".to_string(),
             args: vec!["1".to_string()],
             timeout: 10,
-        });
+        }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sleep")
@@ -691,11 +699,11 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_failed_command_timeout() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Command {
+        let hc = hc.set_check(HealthCheckType::Command(CommandHealthCheck {
             cmd: "sleep".to_string(),
             args: vec!["2".to_string()],
             timeout: 1,
-        });
+        }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sleep")
@@ -721,11 +729,11 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_failed_command() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Command {
+        let hc = hc.set_check(HealthCheckType::Command(CommandHealthCheck {
             cmd: "sleep".to_string(),
             args: vec!["asd".to_string()], // Will fail right away.
             timeout: 1,
-        });
+        }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sleep")
@@ -751,11 +759,11 @@ mod tests {
     #[tokio::test]
     async fn healthcheck_to_completed() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Command {
+        let hc = hc.set_check(HealthCheckType::Command(CommandHealthCheck {
             cmd: "sleep".to_string(),
             args: vec!["10".to_string()],
             timeout: 10,
-        });
+        }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sleep")
@@ -781,11 +789,11 @@ mod tests {
     #[tokio::test]
     async fn healthy_to_completed() {
         let mut hc = HealthCheck::default();
-        let hc = hc.set_check(HealthCheckType::Command {
+        let hc = hc.set_check(HealthCheckType::Command(CommandHealthCheck {
             cmd: "sleep".to_string(),
             args: vec!["10".to_string()],
             timeout: 10,
-        });
+        }));
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sleep")
