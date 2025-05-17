@@ -1,5 +1,7 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
+use libc::SIGHUP;
 use serde::{Deserialize, Serialize};
 use socket::AsyncUnixSocket;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -180,11 +182,15 @@ impl Daemon {
                 p.push_desired_state(ProcessState::Stopped);
             }
         }
-        
+
         Ok(())
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        unsafe {
+            libc::signal(SIGHUP, handler_reload as usize);
+        }
+
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
@@ -229,6 +235,17 @@ impl Daemon {
                 },
 
                 _ = sleep(Duration::from_nanos(1)) => {
+                    unsafe {
+
+                    #[allow(static_mut_refs)]
+                    if RELOAD.load(Ordering::Relaxed) {
+                        if let Err(msg) = self.reload() {
+                            log_error!("{msg}");
+                            return Err(Box::<dyn Error>::from(msg));
+                        }
+                        RELOAD.store(false, Ordering::Relaxed);
+                    }
+                    }
                     monitor_state(self.processes_mut()).await;
 
                     if  self.shutting_down && self.no_process_running(){
@@ -297,6 +314,15 @@ async fn handle_client(mut socket: UnixStream, sender: Arc<tokio::sync::mpsc::Se
         Err(e) => {
             log_error!("Error reading from socket: {e}");
         }
+    }
+}
+
+static mut RELOAD: AtomicBool = AtomicBool::new(false);
+
+fn handler_reload() {
+    unsafe {
+        #[allow(static_mut_refs)]
+        RELOAD.store(true, Ordering::Relaxed);
     }
 }
 
