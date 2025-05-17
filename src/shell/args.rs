@@ -73,6 +73,9 @@ impl TryFrom<Vec<String>> for ShellCommand {
     type Error = String;
 
     fn try_from(value: Vec<String>) -> Result<Self, Self::Error> {
+        if value.is_empty() {
+            return Err("".to_string());
+        }
         match value[0].as_str() {
             "status" => {
                 if value.len() > 2 {

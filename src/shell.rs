@@ -2,9 +2,6 @@ use std::io::{self, Read, Write};
 
 extern crate libc;
 
-unsafe extern "C" {
-    fn raw_mod();
-}
 use libc::{TIOCGWINSZ, ioctl, winsize};
 use std::io::stdout;
 use std::mem::MaybeUninit;
@@ -28,6 +25,13 @@ pub struct Shell {
     line: String,
     width: usize,
     history: Vec<String>,
+    orig: libc::termios,
+}
+
+impl Drop for Shell {
+    fn drop(&mut self) {
+        crate::termios::reset_to_termios(self.orig);
+    }
 }
 
 impl Shell {
@@ -36,14 +40,13 @@ impl Shell {
             Ok((width, height)) => (width, height),
             Err(e) => panic!("Failed to get terminal size: {e}"),
         };
-        unsafe {
-            raw_mod();
-        }
+
         Self {
             prompt: prompt.to_owned(),
             line: String::new(),
             width: width as usize,
             history: vec![],
+            orig: crate::termios::change_to_raw_mode(),
         }
     }
 
@@ -90,11 +93,14 @@ impl Shell {
                 (b'B', true) => {
                     history_index = history_index.saturating_sub(1);
                 }
+                (b'C' | b'D', true) => {
+                    history_index = history_index.saturating_sub(1);
+                }
                 (b'[', false) => waiting_for_arrow_command = true,
                 _ => {
                     waiting_for_arrow_command = false;
                     match c {
-                        3 => {
+                        3 | 4 => {
                             break;
                         }
                         91 => {
