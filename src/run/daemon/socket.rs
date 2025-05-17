@@ -34,6 +34,10 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
 
 #[cfg(not(test))]
 fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+
+    use libc::{chown, gid_t};
+
     let gid = get_group_id(authgroup)?;
     let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {e}"))?;
 
