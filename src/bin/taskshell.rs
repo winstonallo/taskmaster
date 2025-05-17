@@ -134,7 +134,11 @@ fn start_engine(config_path: &str) -> Result<String, String> {
         }
 
         if let Ok(stderr_output) = rx.try_recv() {
-            return Err(format!("failed to start taskmaster engine: {stderr_output}"));
+            if let Ok(Some(status)) = child.try_wait() {
+                if status.code() != Some(0) {
+                    return Err(format!("failed to start taskmaster engine: {stderr_output}"));
+                }
+            }
         }
 
         thread::sleep(Duration::from_millis(backoff * 100));
