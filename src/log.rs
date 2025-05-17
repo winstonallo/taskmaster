@@ -1,6 +1,6 @@
 use core::fmt;
 use std::{
-    io::{Write, stderr, stdout},
+    io::Write,
     sync::{Mutex, Once},
     time::{SystemTime, UNIX_EPOCH},
 };

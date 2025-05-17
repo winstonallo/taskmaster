@@ -2,7 +2,6 @@ use std::{
     error::Error,
     ffi::CString,
     fs::{self},
-    os::unix::fs::PermissionsExt,
 };
 
 use tokio::{
@@ -10,7 +9,7 @@ use tokio::{
     net::{UnixListener, UnixStream, unix::SocketAddr},
 };
 
-use libc::{chown, getgrnam, gid_t};
+use libc::getgrnam;
 
 #[allow(unused)]
 pub struct AsyncUnixSocket {

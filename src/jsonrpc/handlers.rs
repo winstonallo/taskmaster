@@ -9,7 +9,6 @@ use super::{
     response::ErrorCode,
 };
 use crate::{
-    conf::Config,
     jsonrpc::{
         response::{ResponseResult, ResponseType},
         short_process::ShortProcess,
