@@ -231,7 +231,7 @@ async fn handle_input(input: Vec<String>) -> Result<String, String> {
     let arguments = Args::try_from(input)?;
 
     let request = match build_request(arguments.command()) {
-        BuildRequestResult::Exit => exit(0),
+        BuildRequestResult::Exit => return Ok("exit".to_string()),
         BuildRequestResult::StartEngine { config_path } => return start_engine(&config_path),
         BuildRequestResult::Help => return Ok(help()),
         BuildRequestResult::RequestToEngine(request) => request,
@@ -283,6 +283,9 @@ async fn shell() {
             Ok(s) => s,
             Err(s) => s,
         };
+        if msg == "exit" {
+            return;
+        }
         print_raw_mode(&format!("{msg}\n"));
     }
 }
