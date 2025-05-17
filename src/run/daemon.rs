@@ -1,5 +1,7 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
+use libc::SIGHUP;
 use serde::{Deserialize, Serialize};
 use socket::AsyncUnixSocket;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -9,6 +11,7 @@ use tokio::time::sleep;
 
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
+use crate::conf::Config;
 use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
 use crate::log_info;
@@ -147,7 +150,50 @@ impl Daemon {
         Ok(())
     }
 
+    pub fn reload(&mut self) -> Result<(), String> {
+        let conf = match Config::from_file(self.config_path()) {
+            Ok(c) => c,
+            Err(e) => return Err(format!("{}", e).to_owned()),
+        };
+        let mut daemon_new = Daemon::from_config(conf, self.config_path().to_owned());
+
+        let mut leftover = vec![];
+        for (name, _p) in self.processes().iter() {
+            leftover.push(name.to_owned());
+        }
+
+        for (process_name_new, process_new) in daemon_new.processes_mut().drain() {
+            match self.processes_mut().get_mut(&process_name_new.to_owned()) {
+                Some(process_old) => {
+                    *process_old.config_mut() = process_new.config().clone();
+
+                    match process_old.config().autostart() {
+                        false => process_old.push_desired_state(ProcessState::Idle),
+                        true => process_old.push_desired_state(ProcessState::Healthy),
+                    }
+
+                    leftover.retain(|n| n != process_old.name());
+                }
+                None => {
+                    let _ = self.processes_mut().insert(process_name_new, process_new);
+                }
+            }
+        }
+
+        for l in leftover.iter() {
+            if let Some(p) = self.processes_mut().get_mut(l) {
+                p.push_desired_state(ProcessState::Stopped);
+            }
+        }
+
+        Ok(())
+    }
+
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        unsafe {
+            libc::signal(SIGHUP, handler_reload as usize);
+        }
+
         let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
@@ -193,6 +239,17 @@ impl Daemon {
                 },
 
                 _ = sleep(Duration::from_nanos(1)) => {
+                    unsafe {
+
+                    #[allow(static_mut_refs)]
+                    if RELOAD.load(Ordering::Relaxed) {
+                        if let Err(msg) = self.reload() {
+                            log_error!("{msg}");
+                            return Err(Box::<dyn Error>::from(msg));
+                        }
+                        RELOAD.store(false, Ordering::Relaxed);
+                    }
+                    }
                     monitor_state(self.processes_mut()).await;
 
                     if  self.shutting_down && self.no_process_running(){
@@ -265,6 +322,15 @@ async fn handle_client(mut socket: UnixStream, sender: Arc<tokio::sync::mpsc::Se
         Err(e) => {
             log_error!("Error reading from socket: {e}");
         }
+    }
+}
+
+static mut RELOAD: AtomicBool = AtomicBool::new(false);
+
+fn handler_reload() {
+    unsafe {
+        #[allow(static_mut_refs)]
+        RELOAD.store(true, Ordering::Relaxed);
     }
 }
 

@@ -9,6 +9,8 @@ use tokio::{
     net::{UnixListener, UnixStream, unix::SocketAddr},
 };
 
+use libc::getgrnam;
+
 #[allow(unused)]
 pub struct AsyncUnixSocket {
     socketpath: String,
@@ -21,7 +23,7 @@ fn get_group_id(group_name: &str) -> Result<u32, String> {
     let c_group = CString::new(group_name).map_err(|e| format!("{e}"))?;
 
     unsafe {
-        let grp_ptr = libc::getgrnam(c_group.as_ptr());
+        let grp_ptr = getgrnam(c_group.as_ptr());
         if grp_ptr.is_null() {
             Err(format!("group '{group_name}' not found"))
         } else {

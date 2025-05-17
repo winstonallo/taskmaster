@@ -9,7 +9,6 @@ use super::{
     response::ErrorCode,
 };
 use crate::{
-    conf::Config,
     jsonrpc::{
         response::{ResponseResult, ResponseType},
         short_process::ShortProcess,
@@ -139,52 +138,14 @@ fn handle_request_restart(processes: &mut HashMap<String, Process>, request: &Re
 }
 
 fn handle_request_reload(daemon: &mut Daemon) -> ResponseType {
-    let conf = match Config::from_file(daemon.config_path()) {
-        Ok(c) => c,
-        Err(e) => {
-            log_error!("could not reload config",; error = e.to_string());
-            return ResponseType::Error(ResponseError {
-                code: ErrorCode::InternalError,
-                message: format!("error while parsing config file: {e}"),
-                data: None,
-            });
-        }
-    };
-
-    let mut daemon_new = Daemon::from_config(conf, daemon.config_path().to_owned());
-
-    let mut leftover = vec![];
-    for (name, _p) in daemon.processes().iter() {
-        leftover.push(name.to_owned());
+    match daemon.reload() {
+        Ok(()) => ResponseType::Result(ResponseResult::Reload),
+        Err(e) => ResponseType::Error(ResponseError {
+            code: ErrorCode::InternalError,
+            message: format!("error while parsing config file: {e}"),
+            data: None,
+        }),
     }
-
-    for (process_name_new, process_new) in daemon_new.processes_mut().drain() {
-        match daemon.processes_mut().get_mut(&process_name_new.to_owned()) {
-            Some(process_old) => {
-                *process_old.config_mut() = process_new.config().clone();
-
-                match process_old.config().autostart() {
-                    false => process_old.push_desired_state(ProcessState::Idle),
-                    true => process_old.push_desired_state(ProcessState::Healthy),
-                }
-
-                leftover.retain(|n| n != process_old.name());
-            }
-            None => {
-                let _ = daemon.processes_mut().insert(process_name_new, process_new);
-            }
-        }
-    }
-
-    for l in leftover.iter() {
-        if let Some(p) = daemon.processes_mut().get_mut(l) {
-            p.push_desired_state(ProcessState::Stopped);
-        }
-    }
-
-    log_info!("reloading config");
-
-    ResponseType::Result(ResponseResult::Reload)
 }
 
 fn handle_request_halt(daemon: &mut Daemon) -> ResponseType {
