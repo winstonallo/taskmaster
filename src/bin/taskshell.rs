@@ -255,31 +255,25 @@ async fn handle_input(input: Vec<String>) -> Result<String, String> {
         BuildRequestResult::RequestToEngine(request) => request,
     };
 
-    let mut unix_stream: UnixStream = match UnixStream::connect(arguments.socketpath()).await {
-        Ok(s) => s,
-        Err(e) => {
-            return Err(format!(
-                "couldn't establish socket connection: {e} - verify that \n  1. the taskmaster engine is running\n  2. you are using the correct socket path"
-            ));
-        }
-    };
+    let mut unix_stream: UnixStream = UnixStream::connect(arguments.socketpath()).await.map_err(|e| {
+        format!(
+            "Could not establish socket connection at socket path {}: {e} - verify that \n  1. the taskmaster engine is running\n  2. you are using the correct socket path",
+            arguments.socketpath()
+        )}
+    )?;
 
-    let request_str = serde_json::to_string(&request).unwrap(); // unwrap because this should never fail
+    let request_str = serde_json::to_string(&request).map_err(|e| format!("Could not serialize request: {e}"))?;
 
     if let Err(e) = write_request(&mut unix_stream, request_str.as_bytes()).await {
-        return Err(format!("error while writing request: {e}"));
+        return Err(format!("Could not write request: {e}"));
     }
 
     let mut reader = BufReader::new(unix_stream);
-    let response = match read_from_stream(&mut reader).await {
-        Ok(resp) => resp,
-        Err(e) => return Err(format!("error while reading socket: {e}")),
-    };
+    let response = read_from_stream(&mut reader)
+        .await
+        .map_err(|e| format!("Error while reading from socket: {e}"))?;
 
-    let mut response = match serde_json::from_str::<Response>(&response) {
-        Ok(resp) => resp,
-        Err(_) => return Err(format!("non json_rpc formatted message: {response}")),
-    };
+    let mut response = serde_json::from_str::<Response>(&response).map_err(|e| format!("Could not deserialize JSON-RPC response: {e}"))?;
     response.set_response_result(request.request_type());
 
     Ok(response_to_str(&response).await)
