@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let arguments: Vec<String> = env::args().collect();
 
-    let arg: String = arguments.get(1).unwrap().to_owned();
+    let arg: String = arguments[1].to_owned();
 
     let conf = match Config::from_file(&arg) {
         Ok(c) => c,
