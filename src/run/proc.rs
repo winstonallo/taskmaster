@@ -9,7 +9,10 @@ use std::{
 };
 
 use crate::{
-    conf::{self, proc::ProcessConfig},
+    conf::{
+        self,
+        proc::{ProcessConfig, types::WritableFile},
+    },
     log_error, proc_info,
 };
 pub use error::ProcessError;
@@ -183,19 +186,27 @@ impl Process {
         Ok(())
     }
 
+    fn create_or_null(file: &Option<WritableFile>) -> Result<Stdio, ProcessError> {
+        match file {
+            Some(file) => Ok(Stdio::from(
+                File::create(file.path()).map_err(|e| ProcessError::Internal(format!("could not create file at path {}: {e}", file.path())))?,
+            )),
+            None => Ok(Stdio::null()),
+        }
+    }
+
     async fn spawn(&self) -> Result<Child, Box<dyn Error + Send + Sync>> {
-        let stdout_file = File::create(self.conf.stdout()).map_err(|err| ProcessError::Internal(err.to_string()))?;
-        let stderr_file = File::create(self.conf.stderr()).map_err(|err| ProcessError::Internal(err.to_string()))?;
+        let stdout = Self::create_or_null(self.conf.stdout())?;
+        let stderr = Self::create_or_null(self.conf.stderr())?;
 
         let cmd_path = self.conf.cmd().path().to_owned();
         let args = self.conf.args().to_owned();
         let working_dir = self.conf.workingdir().path();
-        let stop_signals = self.conf.stopsignals().to_owned();
         let umask_val = self.conf.umask();
-        let uid = if let Some(user) = self.conf.user() {
-            Some(Process::get_group_id(user).map_err(|e| e.to_string())?)
-        } else {
-            None
+        let uid = match self.conf.user().as_ref().map(|user: &String| Process::get_group_id(user)) {
+            Some(Ok(uid)) => Some(uid),
+            Some(Err(e)) => return Err(Box::<dyn Error + Send + Sync>::from(ProcessError::Internal(format!("could not get uid:gid: {e}")))),
+            None => None,
         };
 
         let mut child = unsafe {
@@ -203,8 +214,8 @@ impl Process {
                 .args(args)
                 .envs(self.conf.env().clone())
                 .stdin(Stdio::piped())
-                .stdout(stdout_file)
-                .stderr(stderr_file)
+                .stdout(stdout)
+                .stderr(stderr)
                 .pre_exec(move || {
                     Process::deescalate_privileges(uid)?;
                     umask(umask_val);
