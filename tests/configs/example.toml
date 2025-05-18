@@ -4,11 +4,6 @@
 # Defaults to "/tmp/.taskmaster.sock".
 socketpath = "/tmp/.taskmaster.sock"
 
-# Name of the group to be created for authenticating client (similarly to 
-# the docker group.
-# Defaults to "taskmaster".
-authgroup = "winstonallo"
-
 # Process name.
 [processes.sleep]
 

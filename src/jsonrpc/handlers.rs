@@ -574,7 +574,6 @@ mod tests {
     async fn reload_config_file_gone() {
         let conf = r#"
         socketpath = "/tmp/.taskmaster.sock"
-        authgroup = "winstonallo"
 
         [processes.sleep]
         cmd = "/usr/bin/sleep"
