@@ -34,13 +34,13 @@ mod tests {
             .set_stdout("/tmp/stdout.stdout")
             .set_stderr("/tmp/stderr.stderr")
             .set_autostart(true);
+
         let mut conf = Config::random();
         let conf = conf.add_process("foo", proc.clone());
         let mut daemon = Daemon::from_config(conf.clone(), "bar".into());
 
         let _ = daemon.run_once().await;
         tokio::time::sleep(Duration::from_millis(100)).await;
-        let _ = daemon.run_once().await;
 
         let mut stdout = String::new();
         File::open("/tmp/stdout.stdout")
@@ -60,5 +60,24 @@ mod tests {
 
         assert_eq!(stdout, "stdout\n".to_string());
         assert_eq!(stderr, "stderr\n".to_string());
+    }
+
+    #[tokio::test]
+    async fn no_configured_output() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc
+            .set_cmd("python3")
+            .set_args(vec!["-c".into(), "import sys;print(f'stdout', flush=True);print(f'stderr',flush=True,file=sys.stderr)".into()])
+            .set_autostart(true);
+
+        let mut conf = Config::random();
+        let conf = conf.add_process("foo", proc.clone());
+        let mut daemon = Daemon::from_config(conf.clone(), "bar".into());
+
+        let _ = daemon.run_once().await;
+
+        println!("{:?}", daemon.processes()["foo"].config().stdout());
+        assert!(daemon.processes()["foo"].config().stdout().is_none());
+        assert!(daemon.processes()["foo"].config().stderr().is_none());
     }
 }
