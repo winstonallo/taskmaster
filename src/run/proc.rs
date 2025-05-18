@@ -295,17 +295,12 @@ impl Process {
             None => return Err("child is None"),
         };
 
-        unsafe {
-            libc::kill(
-                child.id() as i32,
-                self.config()
-                    .stopsignals()
-                    .first()
-                    .expect("something went terribly wrong")
-                    .signal(),
-            );
+        for sig in self.config().stopsignals() {
+            unsafe {
+                libc::kill(child.id() as i32, sig.signal());
+            }
         }
-        proc_info!(self, "shutting down, PID {} gracefully", child.id());
+        proc_info!(self, "attempting graceful shutdown",; pid = child.id(), signals = self.config().stopsignals());
 
         Ok(())
     }
