@@ -338,8 +338,8 @@ impl Default for ProcessConfig {
             healthcheck: HealthCheck::default(),
             stopsignals: vec![types::StopSignal(SIGTERM)],
             stoptime: 5,
-            stdout: Some(types::WritableFile::from_path("/tmp/taskmaster_test.stdout")),
-            stderr: Some(types::WritableFile::from_path("/tmp/taskmaster_test.stderr")),
+            stdout: None,
+            stderr: None,
             env: Vec::new(),
         }
     }
