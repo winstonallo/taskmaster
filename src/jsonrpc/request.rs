@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::{Deserialize, Deserializer, Serialize, de::Error};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -144,6 +146,15 @@ impl RequestStop {
 pub enum AttachFile {
     StdErr,
     StdOut,
+}
+
+impl Display for AttachFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AttachFile::StdErr => write!(f, "standard error"),
+            AttachFile::StdOut => write!(f, "standard output"),
+        }
+    }
 }
 
 impl TryFrom<&str> for AttachFile {
