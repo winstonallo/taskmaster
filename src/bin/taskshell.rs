@@ -1,6 +1,7 @@
 use std::{
     env::args,
-    io::{BufRead, Read},
+    fs,
+    io::Read,
     path::Path,
     process::{Command, Stdio, exit},
     sync::{atomic::AtomicU32, mpsc},
@@ -101,7 +102,13 @@ fn engine_running() -> bool {
         return true;
     }
 
-    Path::new(&format!("/proc/{pid}")).exists()
+    match Path::new(&format!("/proc/{pid}")).exists() {
+        true => true,
+        false => {
+            let _ = fs::remove_file(PID_FILE_PATH);
+            false
+        }
+    }
 }
 
 fn start_engine(config_path: &str) -> Result<String, String> {
