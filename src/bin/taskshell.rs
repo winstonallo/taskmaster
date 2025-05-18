@@ -325,7 +325,7 @@ async fn main() {
         _ => match handle_input(args).await {
             Ok(data) => print_raw_mode(&format!("{data}\n")),
             Err(e) => {
-                print_raw_mode(&format!("{e}"));
+                print_raw_mode(&e.to_string());
                 exit(1);
             }
         },

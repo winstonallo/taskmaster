@@ -8,9 +8,9 @@ pub struct AuthGroup {
 
 impl AuthGroup {
     pub fn from_group_name(group_name: &str) -> Result<Self, String> {
-        match get_group_id(&group_name) {
+        match get_group_id(group_name) {
             Ok(id) => Ok(AuthGroup { id, name: group_name.into() }),
-            Err(e) => Err(e.into()),
+            Err(e) => Err(e),
         }
     }
 
