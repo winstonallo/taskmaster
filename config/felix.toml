@@ -1,87 +1,17 @@
-# Example config for taskmaster.
-
-# Path to the socket used for connections between taskmaster and its client.
-# Defaults to "/tmp/taskmaster.sock".
 socketpath = "/tmp/taskmaster.sock"
-
-# Name of the group to be created for authenticating client (similarly to 
-# the docker group.
-# Defaults to "taskmaster".
 authgroup = "root"
 
-# Process name.
 [processes.sleep]
-
-# Command to run in order to start this process.
-# Must be an absolute path.
-# Required.
 cmd = "/bin/sleep"
-
-# Arguments to pass to 'cmd'.
-# Defaults to [].
 args = ["3"]
-
-# Number of processes to start.
-# Defaults to 1, max 255.
 processes = 40
-
-# Mask for files created by the process.
-# Defaults to "022".
 umask = "022"
-
-# Working directory for the process.
-# Must be an absolute path.
-# Required.
 workingdir = "/tmp"
-
-# Start the program automatically when starting taskmaster. 
-# Defaults to false.
 autostart = true
-
-# Restart the process when it quits, options are:
-# - "no" (default): Never restart the process automatically.
-# - "on-failure[:max-retries]": Try to restart the process 
-#   <max-retries> times when it exits unexpectedly. Maximum value for 
-#   max-retries is 255.
-# - "always": Always restart when exiting, no matter the status.
 autorestart = "on-failure[:5]"
-
-# Backoff time (in seconds) for retries.
-# Defaults to 5, max 255.
-# backoff = 1
-
-# List of exit codes to be interpreted as success.
-# Defaults to [0].
 exitcodes = [0, 2]
-
-# Number of attempts to start the program before giving up.
-# Defaults to 3, max 255.
-# startretries = 3
-
-# Time (in seconds) given for the program to startup - if the program 
-# does not start within this time, it will be considered a failure.
-# Defaults to 5, max 65536.
-# starttime = 1
-
-# List of signals triggering a stop of the process, options are any 
-# FreeBSD signal (https://www.math.stonybrook.edu/~ccc/dfc/dfc/signals.html).
-# Defaults to ["TERM"].
 stopsignals = ["TERM", "USR1"]
-
-# Time (in seconds) to wait for the process to stop. If it does not stop 
-# within this time, it will be forcibly killed.
-# Defaults to 5, max 255.
 stoptime = 5
-
-# File the standard output of the process should be redirected to.
-# Defaults to "/tmp/<process name>.stdout".
 stdout = "/tmp/ls.stdout"
-
-# File the standard error of the process should be redirected to.
-# Defaults to "/tmp/<process name>.stderr".
 stderr = "/tmp/ls.stderr"
-
-# Key value pairs of environment variables to be injected into the process
-# at startup.
-# Defaults to [[]].
 env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]

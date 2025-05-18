@@ -62,9 +62,6 @@ impl<'de> Deserialize<'de> for AccessibleDirectory {
         }
 
         let test_path = Path::new(&s).join(get_random_string(10));
-        if !test_path.is_absolute() {
-            return Err(serde::de::Error::custom("expected absolute path".to_string()));
-        }
 
         match OpenOptions::new().write(true).create_new(true).open(&test_path) {
             Ok(file) => {

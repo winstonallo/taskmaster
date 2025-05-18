@@ -285,9 +285,19 @@ async fn handle_request_attach(daemon: &mut Daemon, request: &RequestAttach) -> 
     };
 
     let socketpath = format!("/tmp/{}.sock", rng().sample_iter(&Alphanumeric).take(8).map(char::from).collect::<String>());
-    let attach_path = match request.to {
+    let attach_path = match match request.to {
         AttachFile::StdOut => process.config().stdout(),
         AttachFile::StdErr => process.config().stderr(),
+    } {
+        Some(file) => file.path(),
+        None => {
+            log_error!("invalid attach request, no output file configured for {}'s {}", process.name(), request.to; request = request);
+            return ResponseType::Error(ResponseError {
+                code: ErrorCode::InternalError,
+                message: format!("no output file configured for {}'s {}", process.name(), request.to),
+                data: None,
+            });
+        }
     };
 
     if let Err(e) = daemon

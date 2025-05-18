@@ -2,3 +2,4 @@ a.out
 target/
 *.c
 *.txt
+__pycache__

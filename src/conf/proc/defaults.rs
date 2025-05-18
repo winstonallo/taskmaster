@@ -33,11 +33,3 @@ pub fn dflt_stopsignals() -> Vec<types::StopSignal> {
 pub fn dflt_stoptime() -> u8 {
     5
 }
-
-pub fn dflt_stdout() -> types::WritableFile {
-    types::WritableFile::default()
-}
-
-pub fn dflt_stderr() -> types::WritableFile {
-    types::WritableFile::default()
-}

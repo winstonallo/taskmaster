@@ -21,8 +21,8 @@ mod from_str {
         assert_eq!(conf.processes()["nginx"].exitcodes(), &defaults::dflt_exitcodes());
         assert_eq!(conf.processes()["nginx"].stopsignals(), &defaults::dflt_stopsignals());
         assert_eq!(conf.processes()["nginx"].stoptime(), defaults::dflt_stoptime());
-        assert_eq!(conf.processes()["nginx"].stdout(), "/tmp/nginx.stdout");
-        assert_eq!(conf.processes()["nginx"].stderr(), "/tmp/nginx.stderr");
+        assert!(conf.processes()["nginx"].stdout().is_none());
+        assert!(conf.processes()["nginx"].stderr().is_none());
         assert_eq!(conf.processes()["nginx"].env(), &Vec::new());
     }
 
@@ -385,8 +385,8 @@ mod from_file {
         assert_eq!(conf.processes()["sleep"].exitcodes(), &vec![0, 2]);
         assert_eq!(conf.processes()["sleep"].stopsignals(), &vec![StopSignal(SIGTERM), StopSignal(SIGUSR1)]);
         assert_eq!(conf.processes()["sleep"].stoptime(), 5);
-        assert_eq!(conf.processes()["sleep"].stdout(), ("/tmp/sleep.stdout".to_string()));
-        assert_eq!(conf.processes()["sleep"].stderr(), ("/tmp/sleep.stderr".to_string()));
+        assert_eq!(conf.processes()["sleep"].stdout().clone().unwrap().path(), ("/tmp/sleep.stdout".to_string()));
+        assert_eq!(conf.processes()["sleep"].stderr().clone().unwrap().path(), ("/tmp/sleep.stderr".to_string()));
         assert_eq!(
             conf.processes()["sleep"].env(),
             &vec![(("STARTED_BY".to_string()), ("abied-ch".to_string())), (("ANSWER".to_string()), ("42".to_string()))]
