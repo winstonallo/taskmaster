@@ -227,7 +227,7 @@ pub fn monitor_stopping(killed_at: Instant, p: &mut Process) -> Option<ProcessSt
                 Some(ProcessState::Stopped)
             }
             _ => {
-                if killed_at.elapsed().as_secs() > p.config().stoptime() as u64 {
+                if killed_at.elapsed().as_secs() >= p.config().stoptime() as u64 {
                     proc_info!(p, "will now be killed forcefully");
                     let _ = p.kill_forcefully();
                     Some(ProcessState::Stopped)
