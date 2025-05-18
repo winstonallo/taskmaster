@@ -211,9 +211,8 @@ pub struct ProcessConfig {
     /// stdout = "nginx.stdout"
     /// ```
     ///
-    /// Defaults to `/tmp/<process_name>.stdout`.
-    #[serde(default = "defaults::dflt_stdout")]
-    stdout: types::WritableFile,
+    /// Default behavior is to ignore stdout.
+    stdout: Option<types::WritableFile>,
 
     /// File the standard error of the process should be redirected to.
     ///
@@ -224,9 +223,8 @@ pub struct ProcessConfig {
     /// stderr = "nginx.stderr"
     /// ```
     ///
-    /// Defaults to `/tmp/<process_name>.stderr`.
-    #[serde(default = "defaults::dflt_stderr")]
-    stderr: types::WritableFile,
+    /// Default behavior is to ignore stderr.
+    stderr: Option<types::WritableFile>,
 
     /// Key value pairs of environment variables to be injected into the process
     /// at startup.
@@ -293,24 +291,26 @@ impl ProcessConfig {
         self.stoptime
     }
 
-    pub fn stdout(&self) -> &str {
-        self.stdout.path()
+    pub fn stdout(&self) -> &Option<WritableFile> {
+        &self.stdout
     }
 
-    pub fn stderr(&self) -> &str {
-        self.stderr.path()
+    pub fn stderr(&self) -> &Option<WritableFile> {
+        &self.stderr
     }
 
     pub fn env(&self) -> &Vec<(String, String)> {
         &self.env
     }
 
-    pub fn set_stdout(&mut self, path: &str) {
-        self.stdout = types::WritableFile::from_path(path);
+    pub fn set_stdout(&mut self, path: &str) -> &mut Self {
+        self.stdout = Some(types::WritableFile::from_path(path));
+        self
     }
 
-    pub fn set_stderr(&mut self, path: &str) {
-        self.stderr = types::WritableFile::from_path(path);
+    pub fn set_stderr(&mut self, path: &str) -> &mut Self {
+        self.stderr = Some(types::WritableFile::from_path(path));
+        self
     }
 
     #[cfg(test)]
@@ -338,8 +338,8 @@ impl Default for ProcessConfig {
             healthcheck: HealthCheck::default(),
             stopsignals: vec![types::StopSignal(SIGTERM)],
             stoptime: 5,
-            stdout: types::WritableFile::from_path("/tmp/taskmaster_test.stdout"),
-            stderr: types::WritableFile::from_path("/tmp/taskmaster_test.stderr"),
+            stdout: None,
+            stderr: None,
             env: Vec::new(),
         }
     }
@@ -403,12 +403,12 @@ impl ProcessConfig {
     }
 
     pub fn set_test_stdout(&mut self, path: &str) -> &mut Self {
-        self.stdout = WritableFile::from_path(path);
+        self.stdout = Some(WritableFile::from_path(path));
         self
     }
 
     pub fn set_test_stderr_test(&mut self, path: &str) -> &mut Self {
-        self.stderr = WritableFile::from_path(path);
+        self.stderr = Some(WritableFile::from_path(path));
         self
     }
 

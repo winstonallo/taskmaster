@@ -75,7 +75,7 @@ impl Config {
     }
 
     fn parse(config_str: &str) -> Result<Self, Box<dyn Error>> {
-        let mut conf: Config = match toml::from_str(config_str) {
+        let conf: Config = match toml::from_str(config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
                 return Err(err.into());
@@ -84,16 +84,6 @@ impl Config {
 
         if conf.processes.is_empty() {
             return Err("taskmaster expects at least one process to be defined to operate".into());
-        }
-
-        // Did not find a way to have serde defaults depend on other field's values.
-        for (proc_name, proc) in &mut conf.processes {
-            if proc.stdout().is_empty() {
-                proc.set_stdout(&format!("/tmp/{proc_name}.stdout"));
-            }
-            if proc.stderr().is_empty() {
-                proc.set_stderr(&format!("/tmp/{proc_name}.stderr"));
-            }
         }
 
         Ok(conf)
