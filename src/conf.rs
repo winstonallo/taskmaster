@@ -1,9 +1,12 @@
 use std::{collections::HashMap, error::Error, fs};
 
 #[cfg(test)]
-use defaults::{dflt_authgroup, dflt_logfile, dflt_socketpath};
+use defaults::{dflt_logfile, dflt_socketpath};
 
-use proc::{ProcessConfig, types::WritableFile};
+use proc::{
+    ProcessConfig,
+    types::{AuthGroup, WritableFile},
+};
 use serde::Deserialize;
 
 pub const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
@@ -31,8 +34,7 @@ pub struct Config {
     /// ```toml
     /// authgroup = "taskmaster"
     /// ```
-    #[serde(default = "defaults::dflt_authgroup")]
-    authgroup: String,
+    authgroup: Option<AuthGroup>,
 
     /// Path to the file the logs will be written to.
     ///
@@ -97,7 +99,7 @@ impl Config {
         &self.socketpath
     }
 
-    pub fn authgroup(&self) -> &str {
+    pub fn authgroup(&self) -> &Option<AuthGroup> {
         &self.authgroup
     }
 
@@ -111,7 +113,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             socketpath: dflt_socketpath(),
-            authgroup: dflt_authgroup(),
+            authgroup: None,
             logfile: dflt_logfile(),
             processes: HashMap::new(),
         }
@@ -125,8 +127,8 @@ impl Config {
         self
     }
 
-    pub fn set_authgroup(&mut self, authgroup: &str) -> &mut Self {
-        self.authgroup = authgroup.to_string();
+    pub fn set_authgroup(&mut self, authgroup: AuthGroup) -> &mut Self {
+        self.authgroup = Some(authgroup);
         self
     }
 
