@@ -11,7 +11,8 @@ use tokio::time::sleep;
 
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
-use crate::conf::Config;
+use crate::conf::proc::types::AuthGroup;
+use crate::conf::{Config, PID_FILE_PATH};
 use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
 use crate::log_info;
@@ -26,7 +27,7 @@ pub mod socket;
 pub struct Daemon {
     processes: HashMap<String, proc::Process>,
     socket_path: String,
-    auth_group: String,
+    auth_group: Option<AuthGroup>,
     config_path: String,
     shutting_down: bool,
     attachment_manager: AttachmentManager,
@@ -71,7 +72,7 @@ impl Daemon {
         &self.socket_path
     }
 
-    pub fn auth_group(&self) -> &str {
+    pub fn auth_group(&self) -> &Option<AuthGroup> {
         &self.auth_group
     }
 
@@ -84,7 +85,7 @@ impl Daemon {
     }
 
     pub fn shutdown(&mut self) {
-        let _ = std::fs::remove_file("/tmp/taskmaster.pid");
+        let _ = std::fs::remove_file(PID_FILE_PATH);
         self.shutting_down = true;
     }
 
@@ -194,7 +195,10 @@ impl Daemon {
             libc::signal(SIGHUP, handler_reload as usize);
         }
 
-        let mut listener = AsyncUnixSocket::new(self.socket_path(), self.auth_group()).unwrap();
+        let mut listener = match AsyncUnixSocket::new(self.socket_path(), self.auth_group()) {
+            Ok(listener) => listener,
+            Err(e) => return Err(Box::<dyn Error>::from(format!("Failed starting the taskmaster daemon: {e}"))),
+        };
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
         let sender = Arc::new(sender);
@@ -212,14 +216,14 @@ impl Daemon {
 
                             tokio::spawn(async move {
                                 if shutting_down {
-                                    let _ = sock.write("not accepting requests - currently shutting down".as_bytes()).await;
+                                    let _ = sock.write("Taskmaster is shutting down - not accepting requests".as_bytes()).await;
                                 } else {
                                     handle_client(sock, clone).await;
                                 }
                             });
                         },
                         Err(e) => {
-                            log_error!("failed to accept connection: {e}");
+                            log_error!("Could not accept connection: {e}");
                             continue;
                         }
                     }
