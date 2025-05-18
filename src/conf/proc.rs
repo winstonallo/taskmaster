@@ -303,12 +303,14 @@ impl ProcessConfig {
         &self.env
     }
 
-    pub fn set_stdout(&mut self, path: &str) {
+    pub fn set_stdout(&mut self, path: &str) -> &mut Self {
         self.stdout = Some(types::WritableFile::from_path(path));
+        self
     }
 
-    pub fn set_stderr(&mut self, path: &str) {
+    pub fn set_stderr(&mut self, path: &str) -> &mut Self {
         self.stderr = Some(types::WritableFile::from_path(path));
+        self
     }
 
     #[cfg(test)]
