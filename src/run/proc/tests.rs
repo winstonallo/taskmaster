@@ -121,4 +121,38 @@ mod tests {
         assert!(stdout.contains(&format!("SIGNAL RECEIVED: {}", SIGHUP)));
         assert!(stdout.contains(&format!("SIGNAL RECEIVED: {}", SIGABRT)));
     }
+
+    #[tokio::test]
+    async fn forceful_kill_after_stoptime() {
+        let mut proc = ProcessConfig::default();
+        let proc = proc
+            .set_cmd("python3")
+            .set_args(vec!["executables/signals.py".into()])
+            .set_workingdir(".")
+            .set_stdout("/tmp/signal.stdout")
+            .set_stopsignals(vec![StopSignal(SIGHUP)])
+            .set_stoptime(1);
+
+        let mut conf = Config::random();
+        let conf = conf.add_process("foo", proc.clone());
+        let mut daemon = Daemon::from_config(conf.clone(), "bar".into());
+
+        let _ = daemon.run_once().await;
+
+        daemon
+            .processes_mut()
+            .get_mut("foo")
+            .unwrap()
+            .push_desired_state(ProcessState::Stopped);
+
+        let _ = daemon.run_once().await;
+        assert!(matches!(daemon.processes()["foo"].state, ProcessState::Stopping(_)));
+
+        // Since executables/signals.py only logs the signals and does not act on them, the process
+        // should be forcefully killed after stoptime (1) second.
+        tokio::time::sleep(Duration::from_millis(1100)).await;
+        let _ = daemon.run_once().await;
+
+        assert_eq!(daemon.processes()["foo"].state(), ProcessState::Stopped);
+    }
 }
