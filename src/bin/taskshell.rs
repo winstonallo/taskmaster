@@ -1,6 +1,7 @@
 use std::{
     env::args,
-    io::{BufRead, Read},
+    fs,
+    io::Read,
     path::Path,
     process::{Command, Stdio, exit},
     sync::{atomic::AtomicU32, mpsc},
@@ -101,12 +102,18 @@ fn engine_running() -> bool {
         return true;
     }
 
-    Path::new(&format!("/proc/{pid}")).exists()
+    match Path::new(&format!("/proc/{pid}")).exists() {
+        true => true,
+        false => {
+            let _ = fs::remove_file(PID_FILE_PATH);
+            false
+        }
+    }
 }
 
 fn start_engine(config_path: &str) -> Result<String, String> {
     if engine_running() {
-        return Ok("taskmaster is already running".to_string());
+        return Ok("The Taskmaster is already running".to_string());
     }
 
     let mut child = match Command::new("cargo")
@@ -115,28 +122,35 @@ fn start_engine(config_path: &str) -> Result<String, String> {
         .spawn()
     {
         Ok(child) => child,
-        Err(e) => return Err(e.to_string()),
+        Err(e) => return Err(format!("Could not start Taskmaster engine: {e}")),
     };
 
-    let stderr = child.stderr.take().unwrap();
+    let stderr = match child.stderr.take() {
+        Some(stderr) => stderr,
+        None => {
+            let _ = child.kill();
+            return Err("Could not start Taskmaster engine:\nNo output available from child process".into());
+        }
+    };
+
     let (tx, rx) = mpsc::channel();
     thread::spawn(move || {
-        let reader = std::io::BufReader::new(stderr);
-        for line in reader.lines().map_while(Result::ok) {
-            let _ = tx.send(line);
-        }
+        let mut reader = std::io::BufReader::new(stderr);
+        let mut output = String::new();
+        let _ = reader.read_to_string(&mut output);
+        let _ = tx.send(output);
     });
 
     let pid_file = Path::new(PID_FILE_PATH);
     for backoff in [5, 10, 20, 40, 80] {
         if pid_file.exists() {
-            return Ok("started taskmaster engine".to_string());
+            return Ok("Started Taskmaster engine".to_string());
         }
 
         if let Ok(stderr_output) = rx.try_recv() {
             if let Ok(Some(status)) = child.try_wait() {
                 if status.code() != Some(0) {
-                    return Err(format!("failed to start taskmaster engine: {stderr_output}"));
+                    return Err(format!("Could not start Taskmaster engine:\n\n{stderr_output}"));
                 }
             }
         }
@@ -146,7 +160,7 @@ fn start_engine(config_path: &str) -> Result<String, String> {
 
     let _ = child.kill();
 
-    Err("taskmaster engine not running after 15 seconds, no information on stderr - process was killed".to_string())
+    Err("Unexpected error: The Taskmaster engine is not running after 15 seconds, no information on stderr - process killed.".to_string())
 }
 
 fn build_request(command: &ShellCommand) -> BuildRequestResult {
@@ -311,7 +325,7 @@ async fn main() {
         _ => match handle_input(args).await {
             Ok(data) => print_raw_mode(&format!("{data}\n")),
             Err(e) => {
-                print_raw_mode(&format!("{e}\n"));
+                print_raw_mode(&e.to_string());
                 exit(1);
             }
         },

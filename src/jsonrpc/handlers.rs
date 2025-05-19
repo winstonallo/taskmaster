@@ -9,6 +9,7 @@ use super::{
     response::ErrorCode,
 };
 use crate::{
+    conf::proc::types::AuthGroup,
     jsonrpc::{
         response::{ResponseResult, ResponseType},
         short_process::ShortProcess,
@@ -185,9 +186,9 @@ async fn update_attach_stream(file: &mut tokio::fs::File, pos: u64, len: u64, li
     Ok(pos)
 }
 
-async fn attach(socketpath: &str, to: &str, authgroup: String) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn attach(socketpath: &str, to: &str, authgroup: &Option<AuthGroup>) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut listener =
-        AsyncUnixSocket::new(socketpath, &authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
+        AsyncUnixSocket::new(socketpath, authgroup).map_err(|e| Box::<dyn Error + Send + Sync>::from(format!("could not create new socket stream: {e}")))?;
 
     let mut file = tokio::fs::File::open(&to)
         .await
@@ -221,7 +222,11 @@ pub struct AttachmentManager {
 }
 
 enum AttachmentRequest {
-    New { socketpath: String, to: String, authgroup: String },
+    New {
+        socketpath: String,
+        to: String,
+        authgroup: Option<AuthGroup>,
+    },
 }
 
 impl Default for AttachmentManager {
@@ -239,7 +244,7 @@ impl AttachmentManager {
                 match req {
                     AttachmentRequest::New { socketpath, to, authgroup } => {
                         tokio::spawn(async move {
-                            if let Err(e) = attach(&socketpath, &to, authgroup).await {
+                            if let Err(e) = attach(&socketpath, &to, &authgroup).await {
                                 if e.to_string().contains("Broken pipe") {
                                     log_info!("connection on {socketpath} closed");
                                     if let Ok(c_socketpath) = std::ffi::CString::new(socketpath.clone()) {
@@ -259,7 +264,7 @@ impl AttachmentManager {
         Self { tx }
     }
 
-    pub async fn attach(&self, socketpath: &str, to: &str, authgroup: &str) -> Result<(), Box<dyn Error + Send + Sync>> {
+    pub async fn attach(&self, socketpath: &str, to: &str, authgroup: &Option<AuthGroup>) -> Result<(), Box<dyn Error + Send + Sync>> {
         self.tx
             .send(AttachmentRequest::New {
                 socketpath: socketpath.to_owned(),
@@ -569,7 +574,6 @@ mod tests {
     async fn reload_config_file_gone() {
         let conf = r#"
         socketpath = "/tmp/.taskmaster.sock"
-        authgroup = "winstonallo"
 
         [processes.sleep]
         cmd = "/usr/bin/sleep"

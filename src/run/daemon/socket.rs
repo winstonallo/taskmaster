@@ -1,6 +1,5 @@
 use std::{
     error::Error,
-    ffi::CString,
     fs::{self},
 };
 
@@ -9,41 +8,28 @@ use tokio::{
     net::{UnixListener, UnixStream, unix::SocketAddr},
 };
 
-use libc::getgrnam;
+use crate::conf::proc::types::AuthGroup;
 
 #[allow(unused)]
 pub struct AsyncUnixSocket {
     socketpath: String,
-    authgroup: String,
+    authgroup: Option<AuthGroup>,
     listener: Option<UnixListener>,
     stream: Option<UnixStream>,
 }
 
-fn get_group_id(group_name: &str) -> Result<u32, String> {
-    let c_group = CString::new(group_name).map_err(|e| format!("{e}"))?;
-
-    unsafe {
-        let grp_ptr = getgrnam(c_group.as_ptr());
-        if grp_ptr.is_null() {
-            Err(format!("group '{group_name}' not found"))
-        } else {
-            Ok((*grp_ptr).gr_gid)
-        }
-    }
-}
-
 #[cfg(not(test))]
-fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
+fn set_permissions(socketpath: &str, authgroup: &AuthGroup) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
-    let gid = get_group_id(authgroup)?;
-    let c_path = CString::new(socketpath).map_err(|e| format!("invalid path: {e}"))?;
+    let c_path = std::ffi::CString::new(socketpath).map_err(|e| format!("invalid path: {e}"))?;
 
     unsafe {
-        if libc::chown(c_path.as_ptr(), u32::MAX, gid as libc::gid_t) != 0 {
+        if libc::chown(c_path.as_ptr(), u32::MAX, authgroup.id() as libc::gid_t) != 0 {
             return Err(format!(
-                "could not change group ownership: {} - do you have permissions for group '{authgroup}'?",
+                "could not change group ownership: {} - do you have permissions for group '{}'?",
                 std::io::Error::last_os_error(),
+                authgroup.name()
             ));
         }
     }
@@ -52,7 +38,7 @@ fn set_permissions(socketpath: &str, authgroup: &str) -> Result<(), String> {
 }
 
 impl AsyncUnixSocket {
-    pub fn new(socketpath: &str, authgroup: &str) -> Result<Self, String> {
+    pub fn new(socketpath: &str, authgroup: &Option<AuthGroup>) -> Result<Self, String> {
         if fs::metadata(socketpath).is_ok() {
             let _ = fs::remove_file(socketpath);
         }
@@ -65,11 +51,15 @@ impl AsyncUnixSocket {
         };
 
         #[cfg(not(test))]
-        set_permissions(socketpath, authgroup)?;
+        if authgroup.is_some() {
+            if let Err(e) = set_permissions(socketpath, authgroup.as_ref().unwrap()) {
+                return Err(format!("could not create UNIX socket at path {socketpath}: {e}"));
+            }
+        }
 
         Ok(Self {
             socketpath: socketpath.to_string(),
-            authgroup: authgroup.to_string(),
+            authgroup: authgroup.to_owned(),
             listener: Some(listener),
             stream: None,
         })
@@ -115,20 +105,5 @@ impl AsyncUnixSocket {
         } else {
             Err(Box::<dyn Error + Send + Sync>::from("no connection established"))
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn get_group_id_success() {
-        assert_eq!(get_group_id("root").unwrap(), 0);
-    }
-
-    #[test]
-    fn get_group_id_nonexisting() {
-        assert!(get_group_id("randomaaaahgroup").is_err());
     }
 }
