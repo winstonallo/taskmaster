@@ -1,0 +1,15 @@
+[processes.000]
+
+cmd = "/usr/bin/touch"
+args = ["000"]
+workingdir = "."
+autostart = true
+umask = "000"
+
+[processes.022]
+
+cmd = "/usr/bin/touch"
+args = ["022"]
+workingdir = "."
+autostart = true
+umask = "022"

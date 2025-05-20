@@ -1,0 +1,13 @@
+[processes.succcess]
+cmd = "/bin/bash"
+args = ["-c", "exit 0"]
+workingdir = "."
+exitcodes = [0]
+autostart = true
+
+[processes.failure]
+cmd = "/bin/bash"
+args = ["-c", "exit 1"]
+workingdir = "."
+exitcodes = [0]
+autostart = true

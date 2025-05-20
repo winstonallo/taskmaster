@@ -1,0 +1,21 @@
+[processes.retries_1]
+cmd = "/usr/bin/sleep"
+args = ["1"]
+workingdir = "."
+autostart = true
+exitcodes = [1]
+[processes.retries_1.healthcheck]
+starttime = 2
+retries = 1
+backoff = 2
+
+[processes.retries_5]
+cmd = "/usr/bin/sleep"
+args = ["1"]
+workingdir = "."
+autostart = true
+exitcodes = [1]
+[processes.retries_5.healthcheck]
+starttime = 2
+retries = 5
+backoff = 2

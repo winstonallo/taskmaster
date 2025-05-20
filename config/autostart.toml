@@ -1,0 +1,9 @@
+[processes.autostart]
+cmd = "/usr/bin/ls"
+workingdir = "."
+autostart = true
+
+[processes.notautostart]
+cmd = "/usr/bin/ls"
+workingdir = "."
+autostart = false
