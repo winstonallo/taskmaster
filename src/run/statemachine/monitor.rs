@@ -147,7 +147,7 @@ pub fn failed_healthy(p: &mut Process) -> Option<ProcessState> {
 pub fn failed_healthcheck(p: &mut Process) -> Option<ProcessState> {
     p.increment_healthcheck_failures();
 
-    if p.healthcheck_failures() == p.healthcheck().retries() {
+    if p.healthcheck_failures() > p.healthcheck().retries() {
         p.push_desired_state(ProcessState::Stopped);
 
         proc_warning!(p, "not healthy after {} attempts, giving up", p.healthcheck().retries());
