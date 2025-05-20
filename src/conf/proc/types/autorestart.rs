@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer};
 ///
 /// Implements the `serde::Deserializer` trait for the `autorestart` field of the configuration.
 #[allow(unused)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AutoRestart {
     pub mode: String,
     pub max_retries: Option<u8>,

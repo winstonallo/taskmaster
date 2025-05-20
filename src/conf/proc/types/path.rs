@@ -82,7 +82,7 @@ impl<'de> Deserialize<'de> for AccessibleDirectory {
 ///
 /// Implements the `serde::Deserializer` trait for the `cmd` field of the configuration.
 #[allow(unused)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ExecutableFile {
     path: String,
 }
@@ -138,7 +138,7 @@ impl<'de> Deserialize<'de> for ExecutableFile {
 ///
 /// Implements the `serde::Deserializer` trait for the `stdout` and `stderr` fields of the configuration.
 #[allow(unused)]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct WritableFile {
     path: String,
 }

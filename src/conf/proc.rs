@@ -36,7 +36,7 @@ use types::{AccessibleDirectory, AutoRestart, ExecutableFile, HealthCheck, StopS
 /// Rust representation of the `taskmaster` config. All its types implement
 /// the `Deserializer` trait.
 #[allow(unused)]
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct ProcessConfig {
     /// User to spawn the process as.

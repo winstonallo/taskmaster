@@ -12,14 +12,14 @@ fn dflt_retries() -> usize {
     5
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(untagged)]
 pub enum HealthCheckType {
     Command(CommandHealthCheck),
     Uptime(UptimeHealthCheck),
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct CommandHealthCheck {
     /// Command to run as a healthcheck.
@@ -56,7 +56,7 @@ pub struct CommandHealthCheck {
     pub timeout: usize,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct UptimeHealthCheck {
     /// Time (in seconds) after which the process will be deemed healthy.
@@ -68,7 +68,7 @@ pub struct UptimeHealthCheck {
 }
 
 #[allow(unused)]
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Debug, Clone, PartialEq)]
 pub struct HealthCheck {
     /// Inferred from the configured fields.
     ///
