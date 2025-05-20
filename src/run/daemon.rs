@@ -480,7 +480,7 @@ mod tests {
         let hc = hc
             .set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 2 }))
             .set_backoff(1)
-            .set_retries(1);
+            .set_retries(0);
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")
