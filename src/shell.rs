@@ -30,7 +30,7 @@ pub struct Shell {
 
 impl Drop for Shell {
     fn drop(&mut self) {
-        crate::termios::reset_to_termios(self.orig);
+        crate::termios::reset_to_termios(&mut self.orig);
     }
 }
 
@@ -59,6 +59,10 @@ impl Shell {
                 self.clear_line();
             }
         }
+    }
+
+    pub fn orig_mut(&mut self) -> &mut libc::termios {
+        &mut self.orig
     }
 
     pub fn next_line(&mut self) -> Option<String> {

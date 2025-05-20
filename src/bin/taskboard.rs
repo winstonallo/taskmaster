@@ -52,7 +52,7 @@ impl TaskBoard {
         self.load_terminal_dimnsions();
         self.clear_screen();
 
-        let orig_termios = change_to_raw_mode();
+        let mut orig_termios = change_to_raw_mode();
 
         let mut buf: [u8; 1] = [0; 1];
 
@@ -72,7 +72,7 @@ impl TaskBoard {
             self.display_content();
         }
         self.clear_screen();
-        reset_to_termios(orig_termios);
+        reset_to_termios(&mut orig_termios);
     }
 
     fn display_content(&mut self) {

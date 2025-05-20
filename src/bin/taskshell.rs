@@ -23,6 +23,7 @@ use tasklib::{
         self,
         args::{Args, EngineSubcommand, ShellCommand, help},
     },
+    termios::{change_to_raw_mode, reset_to_termios},
 };
 
 use tasklib::jsonrpc::request::Request;
@@ -182,7 +183,11 @@ fn build_request(command: &ShellCommand) -> BuildRequestResult {
     }
 }
 
-async fn attach(name: &str, socket_path: &str, to: &str) -> String {
+async fn attach(name: &str, socket_path: &str, to: &str, mut orig: Option<&mut libc::termios>) -> String {
+    if let Some(o) = orig.as_mut() {
+        reset_to_termios(o);
+    }
+
     let (tx, mut rx) = tokio::sync::mpsc::channel::<()>(1);
     let tx_clone = tx.clone();
 
@@ -219,10 +224,13 @@ async fn attach(name: &str, socket_path: &str, to: &str) -> String {
             }
         }
     }
+    if let Some(orig) = orig {
+        *orig = change_to_raw_mode();
+    }
     "".to_string()
 }
 
-async fn response_to_str(response: &Response) -> String {
+async fn response_to_str(response: &Response, orig: Option<&mut libc::termios>) -> String {
     match response.response_type() {
         ResponseType::Result(res) => {
             use tasklib::jsonrpc::response::ResponseResult::*;
@@ -238,14 +246,14 @@ async fn response_to_str(response: &Response) -> String {
                 Restart(name) => format!("restarting: {name}"),
                 Reload => "reloading configuration".to_string(),
                 Halt => "shutting down taskmaster".to_string(),
-                Attach { name, socketpath, to } => attach(name, socketpath, to).await,
+                Attach { name, socketpath, to } => attach(name, socketpath, to, orig).await,
             }
         }
         ResponseType::Error(err) => err.message.to_string(),
     }
 }
 
-async fn handle_input(input: Vec<String>) -> Result<String, String> {
+async fn handle_input(input: Vec<String>, orig: Option<&mut libc::termios>) -> Result<String, String> {
     let arguments = Args::try_from(input)?;
 
     let request = match build_request(arguments.command()) {
@@ -282,7 +290,7 @@ async fn handle_input(input: Vec<String>) -> Result<String, String> {
     };
     response.set_response_result(request.request_type());
 
-    Ok(response_to_str(&response).await)
+    Ok(response_to_str(&response, orig).await)
 }
 
 fn print_raw_mode(string: &str) {
@@ -297,7 +305,7 @@ fn print_raw_mode(string: &str) {
 async fn shell() {
     let mut shell = shell::Shell::new("taskshell> ");
     while let Some(line) = shell.next_line() {
-        let msg = match handle_input(line.split_ascii_whitespace().map(String::from).collect::<Vec<String>>()).await {
+        let msg = match handle_input(line.split_ascii_whitespace().map(String::from).collect::<Vec<String>>(), Some(shell.orig_mut())).await {
             Ok(s) => s,
             Err(s) => s,
         };
@@ -322,7 +330,7 @@ async fn main() {
 
     match args.len() {
         0 => shell().await,
-        _ => match handle_input(args).await {
+        _ => match handle_input(args, None).await {
             Ok(data) => print_raw_mode(&format!("{data}\n")),
             Err(e) => {
                 print_raw_mode(&e.to_string());
