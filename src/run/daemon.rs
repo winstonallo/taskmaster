@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
@@ -11,7 +12,6 @@ use tokio::time::sleep;
 
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
-use crate::conf::proc::types::AuthGroup;
 use crate::conf::{Config, PID_FILE_PATH};
 use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
@@ -27,7 +27,7 @@ pub mod socket;
 pub struct Daemon {
     processes: HashMap<String, proc::Process>,
     socket_path: String,
-    auth_group: Option<AuthGroup>,
+    auth_group: String,
     config_path: String,
     shutting_down: bool,
     attachment_manager: AttachmentManager,
@@ -72,7 +72,7 @@ impl Daemon {
         &self.socket_path
     }
 
-    pub fn auth_group(&self) -> &Option<AuthGroup> {
+    pub fn auth_group(&self) -> &str {
         &self.auth_group
     }
 
@@ -152,6 +152,7 @@ impl Daemon {
     }
 
     pub fn reload(&mut self) -> Result<(), String> {
+        log_info!("reloading configuration");
         let conf = match Config::from_file(self.config_path()) {
             Ok(c) => c,
             Err(e) => return Err(format!("{}", e).to_owned()),
@@ -168,14 +169,18 @@ impl Daemon {
                 Some(process_old) => {
                     if process_old.config() != process_new.config() {
                         process_old.push_desired_state(ProcessState::Stopped);
-                    }
-                    *process_old.config_mut() = process_new.config().clone();
+                        *process_old.config_mut() = process_new.config().clone();
+                        (*process_old)
+                            .healthcheck_mut()
+                            .set_healthcheck(process_new.healthcheck().check())
+                            .set_backoff(process_new.healthcheck().backoff())
+                            .set_retries(process_new.healthcheck().retries());
 
-                    match process_old.config().autostart() {
-                        false => process_old.push_desired_state(ProcessState::Idle),
-                        true => process_old.push_desired_state(ProcessState::Healthy),
+                        match process_old.config().autostart() {
+                            false => process_old.push_desired_state(ProcessState::Idle),
+                            true => process_old.push_desired_state(ProcessState::Healthy),
+                        }
                     }
-
                     leftover.retain(|n| n != process_old.name());
                 }
                 None => {
@@ -193,6 +198,13 @@ impl Daemon {
         Ok(())
     }
 
+    fn write_pid_file() -> Result<(), Box<dyn Error>> {
+        let pid = unsafe { libc::getpid() };
+        let mut pid_file = std::fs::File::create(PID_FILE_PATH)?;
+        pid_file.write_all(pid.to_string().as_bytes())?;
+        Ok(())
+    }
+
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         unsafe {
             libc::signal(SIGHUP, handler_reload as usize);
@@ -206,6 +218,8 @@ impl Daemon {
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
         let sender = Arc::new(sender);
         let mut sigint = signal(SignalKind::interrupt())?;
+
+        Self::write_pid_file()?;
 
         loop {
             tokio::select! {
@@ -465,7 +479,7 @@ mod tests {
         let hc = hc
             .set_check(HealthCheckType::Uptime(UptimeHealthCheck { starttime: 2 }))
             .set_backoff(1)
-            .set_retries(1);
+            .set_retries(0);
         let mut proc = ProcessConfig::default();
         let proc = proc
             .set_cmd("sh")

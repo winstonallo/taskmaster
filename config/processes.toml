@@ -1,0 +1,8 @@
+[processes.processes]
+
+cmd = "/usr/bin/sleep"
+args = ["1"]
+workingdir = "."
+autorestart = "no"
+autostart = true
+processes = 10

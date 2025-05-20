@@ -1,0 +1,18 @@
+[processes.no]
+workingdir = "."
+cmd = "/usr/bin/ls"
+autorestart = "no"
+autostart = true
+
+[processes.always]
+workingdir = "."
+cmd = "/usr/bin/ls"
+autorestart = "always"
+autostart = true
+
+[processes.on-failure]
+workingdir = "."
+cmd = "/usr/bin/ls"
+autorestart = "on-failure[:5]"
+exitcodes = [1]
+autostart = true

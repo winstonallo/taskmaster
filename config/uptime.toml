@@ -1,0 +1,17 @@
+[processes.uptime_success]
+cmd = "/usr/bin/sleep"
+args = ["10"]
+workingdir = "."
+autostart = true
+[processes.uptime_success.healthcheck]
+starttime = 2
+
+[processes.uptime_failure]
+cmd = "/usr/bin/sleep"
+args = ["1"]
+workingdir = "."
+autostart = true
+exitcodes = [1]
+[processes.uptime_failure.healthcheck]
+starttime = 2
+retries = 1

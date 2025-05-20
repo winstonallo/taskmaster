@@ -200,7 +200,7 @@ async fn attach(name: &str, socket_path: &str, to: &str, mut orig: Option<&mut l
     let stream = match UnixStream::connect(socket_path).await {
         Ok(stream) => stream,
         Err(e) => {
-            eprintln!("could not establish connection on attach socket at path {socket_path}: {e}");
+            eprintln!("Could not establish connection on attach socket at path {socket_path}: {e}.\nIs the process running?");
             return "".to_string();
         }
     };

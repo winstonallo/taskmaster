@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, time::Instant};
 
 use serde::{Deserialize, Serialize};
 
@@ -48,7 +48,7 @@ impl State {
             ProcessState::HealthCheck(instant) => Self::HealthCheck(instant.elapsed().as_secs()),
             ProcessState::Healthy => Self::Healthy,
             ProcessState::Failed(_) => Self::Failed,
-            ProcessState::WaitingForRetry(instant) => Self::WaitingForRetry(instant.elapsed().as_secs()),
+            ProcessState::WaitingForRetry(instant) => Self::WaitingForRetry(instant.duration_since(Instant::now()).as_secs()),
             ProcessState::Completed => Self::Completed,
             ProcessState::Stopping(instant) => Self::Stopping(instant.elapsed().as_secs()),
             ProcessState::Stopped => Self::Stopped,
@@ -66,7 +66,7 @@ impl fmt::Display for State {
             HealthCheck(s) => format!("healthcheck since {s} seconds"),
             Healthy => "healthy".to_owned(),
             Failed => "failed".to_owned(),
-            WaitingForRetry(s) => format!("waiting for retry since {s} seconds"),
+            WaitingForRetry(s) => format!("waiting for retry - {s} seconds left"),
             Completed => "completed".to_owned(),
             Stopping(s) => format!("stopping since {s} seconds"),
             Stopped => "stopped".to_owned(),

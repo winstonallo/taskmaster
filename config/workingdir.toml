@@ -1,0 +1,13 @@
+[processes.workingdir_dot]
+
+cmd = "/usr/bin/pwd"
+workingdir = "."
+stdout = "/tmp/workingdir_dot.stdout"
+autostart = true
+
+[processes.workingdir_tmp]
+
+cmd = "/usr/bin/pwd"
+workingdir = "/tmp"
+stdout = "/tmp/workingdir_tmp.stdout"
+autostart = true

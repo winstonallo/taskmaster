@@ -5,4 +5,5 @@ args = ["executables/signals.py"]
 workingdir = "."
 autostart = true
 stopsignals = ["TERM", "USR1", "ILL"]
+stoptime = 5
 stdout = "/tmp/signal.stdout"

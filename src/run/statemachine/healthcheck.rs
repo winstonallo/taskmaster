@@ -35,6 +35,24 @@ impl HealthCheckRunner {
             backoff: hc.backoff(),
         }
     }
+    pub fn set_healthcheck(&mut self, check: HealthCheckType) -> &mut Self {
+        self.check = check;
+        self
+    }
+
+    pub fn set_retries(&mut self, retries: usize) -> &mut Self {
+        self.retries = retries;
+        self
+    }
+
+    pub fn set_backoff(&mut self, backoff: usize) -> &mut Self {
+        self.backoff = backoff;
+        self
+    }
+
+    pub fn check(&self) -> HealthCheckType {
+        self.check.clone()
+    }
 
     pub fn has_command_healthcheck(&self) -> bool {
         matches!(self.check, HealthCheckType::Command { .. })

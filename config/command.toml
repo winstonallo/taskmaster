@@ -1,0 +1,5 @@
+[processes.command]
+
+cmd = "/usr/bin/echo"
+args = ["Hello, World!"]
+workingdir = "."
