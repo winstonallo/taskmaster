@@ -1,5 +1,3 @@
-authgroup = "root"
-
 [processes.root]
 
 cmd = "/usr/bin/id"

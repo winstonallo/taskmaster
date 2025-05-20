@@ -1,4 +1,3 @@
-authgroup = "asdpihgasbldkjalshdbliasjdlkasbdasd"
 
 [processes.sleep]
 cmd = "/usr/bin/sleep"

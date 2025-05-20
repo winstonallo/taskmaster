@@ -1,6 +1,3 @@
-socketpath = "/tmp/.taskmaster.sock"
-
-
 [processes.sleep]
 
 cmd = "/usr/bin/sleep"
@@ -20,5 +17,5 @@ env = [["STARTED_BY", "abied-ch"], ["ANSWER", "42"]]
 cmd = "/usr/bin/sleep"
 args = ["2"]
 backoff = 1
-timeout = 1
+timeout = 5
 retries = 1

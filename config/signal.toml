@@ -1,5 +1,3 @@
-authgroup = "winstonallo"
-
 [processes.signal]
 
 cmd = "/usr/bin/python3"
