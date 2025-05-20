@@ -1,3 +1,4 @@
+use libc::termios;
 use std::{
     env::args,
     fs,
@@ -8,7 +9,6 @@ use std::{
     thread,
     time::Duration,
 };
-use libc::termios;
 use tokio::{
     io::{AsyncBufReadExt, AsyncRead, AsyncWriteExt, BufReader},
     net::UnixStream,
@@ -22,8 +22,9 @@ use tasklib::{
     },
     shell::{
         self,
-        args::{help, Args, EngineSubcommand, ShellCommand},
-    }, termios::{change_to_raw_mode, get_current_termios, reset_to_termios},
+        args::{Args, EngineSubcommand, ShellCommand, help},
+    },
+    termios::{change_to_raw_mode, get_current_termios, reset_to_termios},
 };
 
 use tasklib::jsonrpc::request::Request;
@@ -228,7 +229,6 @@ async fn attach(name: &str, socket_path: &str, to: &str, mut orig: Option<&mut l
         *orig = change_to_raw_mode();
     }
     "".to_string()
-
 }
 
 async fn response_to_str(response: &Response, orig: Option<&mut libc::termios>) -> String {
