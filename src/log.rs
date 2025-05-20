@@ -40,6 +40,12 @@ impl Logger {
         String::from_utf8_lossy(&buf[..ret as usize]).into_owned()
     }
 
+    pub fn plain(&self, message: &str) {
+        let mut guard = self.logfile.lock().expect("Mutex lock panicked in another thread");
+        let _ = guard.write_all(message.as_bytes());
+        let _ = guard.write_all(b"\n");
+    }
+
     pub fn error(&self, message: fmt::Arguments, fields: BTreeMap<String, Value>) {
         let mut log_entry = fields;
         log_entry.insert("timestamp".to_string(), json!(Logger::get_time_fmt()));
@@ -97,6 +103,10 @@ impl Logger {
 
 static mut INSTANCE: Option<Logger> = None;
 static INIT: Once = Once::new();
+
+pub fn plain(message: &str) {
+    get_logger().plain(message);
+}
 
 pub fn error(message: fmt::Arguments, fields: BTreeMap<String, Value>) {
     get_logger().error(message, fields);
