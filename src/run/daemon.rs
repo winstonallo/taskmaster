@@ -211,11 +211,11 @@ impl Daemon {
             Err(e) => return Err(Box::<dyn Error>::from(format!("Failed starting the taskmaster daemon: {e}"))),
         };
 
-        Self::write_pid_file()?;
-
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
         let sender = Arc::new(sender);
         let mut sigint = signal(SignalKind::interrupt())?;
+
+        Self::write_pid_file()?;
 
         loop {
             tokio::select! {
