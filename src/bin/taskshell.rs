@@ -1,4 +1,3 @@
-use libc::termios;
 use std::{
     env::args,
     fs,
@@ -24,7 +23,7 @@ use tasklib::{
         self,
         args::{Args, EngineSubcommand, ShellCommand, help},
     },
-    termios::{change_to_raw_mode, get_current_termios, reset_to_termios},
+    termios::{change_to_raw_mode, reset_to_termios},
 };
 
 use tasklib::jsonrpc::request::Request;
