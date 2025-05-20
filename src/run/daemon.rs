@@ -166,6 +166,10 @@ impl Daemon {
         for (process_name_new, process_new) in daemon_new.processes_mut().drain() {
             match self.processes_mut().get_mut(&process_name_new.to_owned()) {
                 Some(process_old) => {
+                    if process_old.config() != process_new.config() {
+
+                        process_old.push_desired_state(ProcessState::Stopped);
+                    }
                     *process_old.config_mut() = process_new.config().clone();
 
                     match process_old.config().autostart() {
