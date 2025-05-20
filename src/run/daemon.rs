@@ -1,3 +1,4 @@
+use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{collections::HashMap, error::Error, sync::Arc, time::Duration};
 
@@ -193,6 +194,13 @@ impl Daemon {
         Ok(())
     }
 
+    fn write_pid_file() -> Result<(), Box<dyn Error>> {
+        let pid = unsafe { libc::getpid() };
+        let mut pid_file = std::fs::File::create(PID_FILE_PATH)?;
+        pid_file.write_all(pid.to_string().as_bytes())?;
+        Ok(())
+    }
+
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         unsafe {
             libc::signal(SIGHUP, handler_reload as usize);
@@ -202,6 +210,8 @@ impl Daemon {
             Ok(listener) => listener,
             Err(e) => return Err(Box::<dyn Error>::from(format!("Failed starting the taskmaster daemon: {e}"))),
         };
+
+        Self::write_pid_file()?;
 
         let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
         let sender = Arc::new(sender);

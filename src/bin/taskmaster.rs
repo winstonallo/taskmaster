@@ -2,19 +2,11 @@ use std::{
     env::{self},
     error::Error,
     fs::remove_file,
-    io::Write,
 };
 
 use tasklib::{conf::Config, log, log_info, run::daemon::Daemon};
 
-const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
-
-fn write_pid_file() -> Result<(), Box<dyn Error>> {
-    let pid = unsafe { libc::getpid() };
-    let mut pid_file = std::fs::File::create(PID_FILE_PATH)?;
-    pid_file.write_all(pid.to_string().as_bytes())?;
-    Ok(())
-}
+pub const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -39,8 +31,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             std::process::exit(1)
         }
     };
-
-    write_pid_file()?;
 
     log::init(conf.logfile())?;
 
