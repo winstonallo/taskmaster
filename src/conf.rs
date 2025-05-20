@@ -1,12 +1,8 @@
 use std::{collections::HashMap, error::Error, fs};
 
-#[cfg(test)]
-use defaults::{dflt_logfile, dflt_socketpath};
+use defaults::{dflt_authgroup, dflt_logfile, dflt_socketpath};
 
-use proc::{
-    ProcessConfig,
-    types::{AuthGroup, WritableFile},
-};
+use proc::ProcessConfig;
 use serde::Deserialize;
 
 pub const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
@@ -22,9 +18,9 @@ pub struct Config {
     ///
     /// Default:
     /// ```toml
-    /// socketpath = "/tmp/.taskmaster.sock"
+    /// socketpath = "/tmp/taskmaster.sock"
     /// ```
-    #[serde(default = "defaults::dflt_socketpath")]
+    #[serde(skip)]
     socketpath: String,
 
     /// Name of the group to be used for authenticating the client (similarly to
@@ -34,7 +30,8 @@ pub struct Config {
     /// ```toml
     /// authgroup = "taskmaster"
     /// ```
-    authgroup: Option<AuthGroup>,
+    #[serde(skip)]
+    authgroup: String,
 
     /// Path to the file the logs will be written to.
     ///
@@ -42,8 +39,8 @@ pub struct Config {
     /// ```toml
     /// logfile = "/tmp/tasmaster.log"
     /// ```
-    #[serde(default = "defaults::dflt_logfile")]
-    logfile: WritableFile,
+    #[serde(skip)]
+    logfile: String,
 
     /// Map of processes to configure individually. For process-level configuration,
     /// see [`crate::conf::proc::ProcessConfig`].
@@ -77,12 +74,16 @@ impl Config {
     }
 
     fn parse(config_str: &str) -> Result<Self, Box<dyn Error>> {
-        let conf: Config = match toml::from_str(config_str) {
+        let mut conf: Config = match toml::from_str(config_str) {
             Ok(cnf) => cnf,
             Err(err) => {
                 return Err(err.into());
             }
         };
+
+        conf.authgroup = dflt_authgroup();
+        conf.socketpath = dflt_socketpath();
+        conf.logfile = dflt_logfile();
 
         if conf.processes.is_empty() {
             return Err("taskmaster expects at least one process to be defined to operate".into());
@@ -99,12 +100,12 @@ impl Config {
         &self.socketpath
     }
 
-    pub fn authgroup(&self) -> &Option<AuthGroup> {
+    pub fn authgroup(&self) -> &str {
         &self.authgroup
     }
 
     pub fn logfile(&self) -> &str {
-        self.logfile.path()
+        &self.logfile
     }
 }
 
@@ -113,7 +114,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             socketpath: dflt_socketpath(),
-            authgroup: None,
+            authgroup: dflt_authgroup(),
             logfile: dflt_logfile(),
             processes: HashMap::new(),
         }
@@ -127,8 +128,8 @@ impl Config {
         self
     }
 
-    pub fn set_authgroup(&mut self, authgroup: AuthGroup) -> &mut Self {
-        self.authgroup = Some(authgroup);
+    pub fn set_authgroup(&mut self, authgroup: &str) -> &mut Self {
+        self.authgroup = authgroup.into();
         self
     }
 
