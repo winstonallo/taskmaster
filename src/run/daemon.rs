@@ -12,7 +12,6 @@ use tokio::time::sleep;
 
 use super::proc::{self, Process};
 use super::statemachine::states::ProcessState;
-use crate::conf::proc::types::AuthGroup;
 use crate::conf::{Config, PID_FILE_PATH};
 use crate::jsonrpc::handlers::AttachmentManager;
 use crate::jsonrpc::response::{Response, ResponseError, ResponseType};
@@ -28,7 +27,7 @@ pub mod socket;
 pub struct Daemon {
     processes: HashMap<String, proc::Process>,
     socket_path: String,
-    auth_group: Option<AuthGroup>,
+    auth_group: String,
     config_path: String,
     shutting_down: bool,
     attachment_manager: AttachmentManager,
@@ -73,7 +72,7 @@ impl Daemon {
         &self.socket_path
     }
 
-    pub fn auth_group(&self) -> &Option<AuthGroup> {
+    pub fn auth_group(&self) -> &str {
         &self.auth_group
     }
 
@@ -171,6 +170,11 @@ impl Daemon {
                         process_old.push_desired_state(ProcessState::Stopped);
                     }
                     *process_old.config_mut() = process_new.config().clone();
+                    (*process_old)
+                        .healthcheck_mut()
+                        .set_healthcheck(process_new.healthcheck().check())
+                        .set_backoff(process_new.healthcheck().backoff())
+                        .set_retries(process_new.healthcheck().retries());
 
                     match process_old.config().autostart() {
                         false => process_old.push_desired_state(ProcessState::Idle),

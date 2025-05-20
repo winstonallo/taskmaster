@@ -8,28 +8,40 @@ use tokio::{
     net::{UnixListener, UnixStream, unix::SocketAddr},
 };
 
-use crate::conf::proc::types::AuthGroup;
-
 #[allow(unused)]
 pub struct AsyncUnixSocket {
     socketpath: String,
-    authgroup: Option<AuthGroup>,
+    authgroup: String,
     listener: Option<UnixListener>,
     stream: Option<UnixStream>,
 }
 
 #[cfg(not(test))]
-fn set_permissions(socketpath: &str, authgroup: &AuthGroup) -> Result<(), String> {
+fn get_group_id(group_name: &str) -> Result<u32, String> {
+    let c_group = std::ffi::CString::new(group_name).map_err(|e| format!("{e}"))?;
+
+    unsafe {
+        let grp_ptr = libc::getgrnam(c_group.as_ptr());
+        if grp_ptr.is_null() {
+            Err(format!("Group '{group_name}' not found"))
+        } else {
+            Ok((*grp_ptr).gr_gid)
+        }
+    }
+}
+
+#[cfg(not(test))]
+fn set_permissions(socketpath: &str, authgroup: &str, gid: u32) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
     let c_path = std::ffi::CString::new(socketpath).map_err(|e| format!("invalid path: {e}"))?;
 
     unsafe {
-        if libc::chown(c_path.as_ptr(), u32::MAX, authgroup.id() as libc::gid_t) != 0 {
+        if libc::chown(c_path.as_ptr(), u32::MAX, gid as libc::gid_t) != 0 {
             return Err(format!(
                 "could not change group ownership: {} - do you have permissions for group '{}'?",
                 std::io::Error::last_os_error(),
-                authgroup.name()
+                authgroup
             ));
         }
     }
@@ -38,7 +50,7 @@ fn set_permissions(socketpath: &str, authgroup: &AuthGroup) -> Result<(), String
 }
 
 impl AsyncUnixSocket {
-    pub fn new(socketpath: &str, authgroup: &Option<AuthGroup>) -> Result<Self, String> {
+    pub fn new(socketpath: &str, authgroup: &str) -> Result<Self, String> {
         if fs::metadata(socketpath).is_ok() {
             let _ = fs::remove_file(socketpath);
         }
@@ -51,10 +63,10 @@ impl AsyncUnixSocket {
         };
 
         #[cfg(not(test))]
-        if authgroup.is_some() {
-            if let Err(e) = set_permissions(socketpath, authgroup.as_ref().unwrap()) {
-                return Err(format!("could not create UNIX socket at path {socketpath}: {e}"));
-            }
+        let gid = get_group_id(authgroup)?;
+        #[cfg(not(test))]
+        if let Err(e) = set_permissions(socketpath, authgroup, gid) {
+            return Err(format!("could not create UNIX socket at path {socketpath}: {e}"));
         }
 
         Ok(Self {
