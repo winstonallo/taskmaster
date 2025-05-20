@@ -1,4 +1,4 @@
-[processes.succcess]
+[processes.success]
 cmd = "/bin/bash"
 args = ["-c", "exit 0"]
 workingdir = "."

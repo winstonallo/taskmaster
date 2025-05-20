@@ -48,7 +48,7 @@ impl State {
             ProcessState::HealthCheck(instant) => Self::HealthCheck(instant.elapsed().as_secs()),
             ProcessState::Healthy => Self::Healthy,
             ProcessState::Failed(_) => Self::Failed,
-        ProcessState::WaitingForRetry(instant) => Self::WaitingForRetry(instant.duration_since(Instant::now()).as_secs()),
+            ProcessState::WaitingForRetry(instant) => Self::WaitingForRetry(instant.duration_since(Instant::now()).as_secs()),
             ProcessState::Completed => Self::Completed,
             ProcessState::Stopping(instant) => Self::Stopping(instant.elapsed().as_secs()),
             ProcessState::Stopped => Self::Stopped,
