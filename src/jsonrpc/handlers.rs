@@ -568,8 +568,6 @@ mod tests {
     #[tokio::test]
     async fn reload_config_file_gone() {
         let conf = r#"
-        socketpath = "/tmp/.taskmaster.sock"
-
         [processes.sleep]
         cmd = "/usr/bin/sleep"
         args = ["2"]

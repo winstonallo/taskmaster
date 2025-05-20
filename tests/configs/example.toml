@@ -1,9 +1,3 @@
-# Example config for taskmaster.
-
-# Path to the socket used for connections between taskmaster and its client.
-# Defaults to "/tmp/.taskmaster.sock".
-socketpath = "/tmp/.taskmaster.sock"
-
 # Process name.
 [processes.sleep]
 
