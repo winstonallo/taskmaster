@@ -1,8 +1,8 @@
-use std::{collections::HashMap, error::Error, fs};
+use std::{collections::{HashMap, HashSet}, error::Error, fs};
 
 use defaults::{dflt_authgroup, dflt_logfile, dflt_socketpath};
 
-use proc::ProcessConfig;
+use proc::{ProcessConfig};
 use serde::Deserialize;
 
 pub const PID_FILE_PATH: &str = "/tmp/taskmaster.pid";
@@ -87,6 +87,28 @@ impl Config {
 
         if conf.processes.is_empty() {
             return Err("taskmaster expects at least one process to be defined to operate".into());
+        }
+
+        let mut seen = HashSet::new();
+        let duplicates = conf.processes.iter()
+            .filter(|p| p.1.stdout().is_some())
+            .map(|p| p.1.stdout().as_ref().unwrap().path().to_owned())
+            .filter(|path| !seen.insert(path.clone()))
+            .collect::<HashSet<String>>();
+
+        if !duplicates.is_empty() {
+            return Err(Box::<dyn Error>::from(format!("Found duplicated stdout paths: {duplicates:?}")));
+        }
+
+        let mut seen = HashSet::new();
+        let duplicates = conf.processes.iter()
+            .filter(|p| p.1.stderr().is_some())
+            .map(|p| p.1.stderr().as_ref().unwrap().path().to_owned())
+            .filter(|path| !seen.insert(path.clone()))
+            .collect::<HashSet<String>>();
+
+        if !duplicates.is_empty() {
+            return Err(Box::<dyn Error>::from(format!("Found duplicated stderr paths: {duplicates:?}")));
         }
 
         Ok(conf)

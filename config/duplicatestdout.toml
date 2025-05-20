@@ -1,0 +1,11 @@
+[processes.no]
+workingdir = "."
+cmd = "/usr/bin/ls"
+stdout = "asd"
+autostart = true
+
+[processes.always]
+workingdir = "."
+cmd = "/usr/bin/ls"
+stdout = "asd"
+autostart = true
