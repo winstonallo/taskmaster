@@ -28,7 +28,7 @@ The state machine operates on two dimensions:
 1. **Monitor States** - React to external events (process exits, timeouts, health check results)
 2. **Desired States** - Handle user commands and policy decisions
 This separation allows to handle complex scenarios like a user requesting a restart while a process is failing health checks by applying the same rules as for monitoring, making the state machine fully self-contained.
-This ensures we processes cannot enter invalid states and proviedes predictable behavior.
+This ensures we processes cannot enter invalid states and provides predictable behavior.
 
 ## Example Configuration
 ```toml
