@@ -26,9 +26,10 @@ The core of taskmaster is a finite state machine that models process lifecycles.
 ### Dual State Processing
 The state machine operates on two dimensions:
 1. **Monitor States** - React to external events (process exits, timeouts, health check results)
-2. **Desired States** - Handle user commands and policy decisions
-This separation allows to handle complex scenarios like a user requesting a restart while a process is failing health checks by applying the same rules as for monitoring, making the state machine fully self-contained.
-This ensures we processes cannot enter invalid states and provides predictable behavior.
+2. **Desired States** - Handle user commands and policy decisions.
+
+The separation allows to handle complex scenarios like a user requesting a restart while a process is failing health checks by applying the same rules as for monitoring, making the state machine fully self-contained.
+This makes sure processes cannot enter invalid states and provides predictable behavior.
 
 ## Example Configuration
 ```toml
